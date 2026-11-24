@@ -1307,9 +1307,25 @@ def scan_files_for_workflow(
                     f"(HTTP {response.status_code}): {response.text[:300]}"
                 )
 
+    # The signature recorded below covers the run's whole tree, but this call
+    # only scanned the collections it was handed. A --data-collection-tag
+    # ingest narrows those to a subset of the workflow's recursive
+    # collections, and a signature from such a scan would let the next full
+    # ingest skip runs for collections this one never looked at. A partial
+    # scan therefore still benefits from earlier signatures (unchanged runs
+    # are skipped as before) but records none of its own.
+    all_recursive_tags = {
+        dc.data_collection_tag
+        for dc in workflow.data_collections
+        if dc.config.scan and dc.config.scan.mode.lower() == "recursive"
+    }
+    covers_every_collection = all_recursive_tags <= {
+        dc.data_collection_tag for dc in data_collections
+    }
+
     # Only record state for work that actually reached the server. A dry run
     # must not convince the next invocation that these runs are up to date.
-    if state is not None and not dry_run:
+    if state is not None and not dry_run and covers_every_collection:
         for run in all_workflow_runs:
             signature = getattr(run, "_scan_signature", None)
             if not signature:

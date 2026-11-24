@@ -25,11 +25,13 @@ const AlwaysSelectedPicker: React.FC<{
 }> = ({ metadata, filters, onFilterChange }) => {
   // The same option list, in the same order, as the panel's Select
   // (`MultiSelectRenderer`): "the first option" is the one a reader sees first.
-  const { options: ordered, loading } = useScopeOptions(metadata);
+  const selected = ownFilterValues(filters, metadata.index);
+  // The selection counts as offered when the list was cut before it (#1418).
+  const { options: ordered, loading } = useScopeOptions(metadata, selected);
   const pick = autoPickValue({
     enabled: true,
     loading,
-    selected: ownFilterValues(filters, metadata.index),
+    selected,
     options: ordered,
     multiple: isMultipleAlwaysSelected(metadata),
   });

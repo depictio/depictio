@@ -43,11 +43,12 @@ import React, {
 import {
   fetchFunnelValues,
   fetchMultiQCSampleMappings,
-  fetchUniqueValues,
-  fetchUniqueValuesAt,
+  fetchUniqueValuePage,
+  fetchUniqueValuePageAt,
   InteractiveFilter,
   StoredMetadata,
 } from './api';
+import type { UniqueValuePage } from './api';
 import { dataPinBody, isDataVersionActive, useDataVersions } from './dataVersions';
 import { fetchSpecsCached, multiqcDcIds, specsHaveColumn } from './dcSpecs';
 import { filtersInScope, type FilterScopes } from './filterScope';
@@ -238,8 +239,8 @@ export const AvailableFilterValuesProvider: React.FC<
   const uniqueValuesFor = useCallback(
     (dcId: string, columnName: string) =>
       versioned
-        ? fetchUniqueValuesAt(versioned.dashboardId, dcId, columnName, versioned.pins)
-        : fetchUniqueValues(dcId, columnName),
+        ? fetchUniqueValuePageAt(versioned.dashboardId, dcId, columnName, versioned.pins)
+        : fetchUniqueValuePage(dcId, columnName),
     // `pinKey` is the content of `versioned.pins`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [versioned?.dashboardId, pinKey],
@@ -403,21 +404,34 @@ export const AvailableFilterValuesProvider: React.FC<
             return out;
           });
         }
+        // A list the server cut at its limit is an arbitrary subset: a value
+        // missing from it may well be in the collection, so intersecting it
+        // would grey out (and an always-selected filter re-pick) values that
+        // are there (#1418). Any cut list voids the narrowing for the column.
+        const asSet = (page: UniqueValuePage): Set<string> => {
+          if (page.truncated) throw new CutOptionList();
+          return new Set(page.values);
+        };
         if (entry.dcId === dcId) {
           // The filter's own source DC carries the column by construction.
-          return uniqueValuesFor(entry.dcId, columnName).then((values) => new Set(values));
+          return uniqueValuesFor(entry.dcId, columnName).then(asSet);
         }
         // Another delta DC: ask for its values only when its specs list the
         // column. Absent column (or no specs) = no constraint, no request.
         return fetchSpecsCached(entry.dcId).then((specs) =>
           specsHaveColumn(specs, columnName)
-            ? uniqueValuesFor(entry.dcId, columnName).then((values) => new Set(values))
+            ? uniqueValuesFor(entry.dcId, columnName).then(asSet)
             : new Set<string>(),
         );
       };
 
       Promise.allSettled(fetchTargets.map(fetchOne))
         .then((results) => {
+          if (results.some((r) => r.status === 'rejected' && r.reason instanceof CutOptionList)) {
+            setCache((prev) => ({ ...prev, [k]: null }));
+            inFlightRef.current.delete(k);
+            return;
+          }
           const sets: Set<string>[] = [];
           for (const r of results) {
             // Skip both rejections AND empty fulfilled sets — an empty
@@ -465,7 +479,9 @@ export const AvailableFilterValuesProvider: React.FC<
       if (funnelEnabled && ownIndex) {
         const st = funnelState?.targets[ownIndex];
         if (st) {
-          if (st.status === 'ok') return st.set;
+          // A set the server cut at its limit is a subset: a value missing
+          // from it may still lead somewhere, so it narrows nothing (#1418).
+          if (st.status === 'ok') return st.truncated ? null : st.set;
           if (st.status === 'unrestricted') return null;
           // unsupported / error → fall through to the static intersection.
         }
@@ -496,6 +512,9 @@ export const AvailableFilterValuesProvider: React.FC<
  *    - fewer than two DCs contribute data (nothing to intersect with), OR
  *    - the computation is still in flight.
  *  In all `null` cases the renderer should treat every option as available. */
+/** A collection's option list came back cut at the server's limit. */
+class CutOptionList extends Error {}
+
 export function useAvailableSet(
   dcId: string | undefined,
   columnName: string | undefined,

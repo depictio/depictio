@@ -7,7 +7,8 @@ borrows from its siblings. Each looked right and was wrong, the failure this
 feature cannot have:
 
 * ``POST /filter_options/{id}``: a select offering values the pinned data does
-  not hold, so picking one emptied every chart;
+  not hold, so picking one emptied every chart; and a list cut at its limit
+  (4,333 families, 1,000 listed) with no way to search past the cut (#1418);
 * ``POST /data_version_status/{id}``: "every value is from v3" over a
   collection added since, which reads live data;
 * ``GET /cross_tab_components/{id}?version_id=``: today's persistent sections
@@ -154,6 +155,7 @@ def env(tmp_path, monkeypatch):
         "client": TestClient(app),
         "versions": db["dashboard_versions"],
         "dashboards": db["dashboards"],
+        "deltatables": db["deltatables"],
         "cache": cache,
         "granted": granted,
     }
@@ -193,7 +195,7 @@ def test_unique_options_follow_the_pin(env):
     assert live.status_code == 200, live.text
     assert live.json()["values"] == ["a", "b", "c"]
     assert pinned.status_code == 200, pinned.text
-    assert pinned.json() == {"column": "variety", "values": ["a", "b"]}
+    assert pinned.json() == {"column": "variety", "values": ["a", "b"], "truncated": False}
 
 
 def test_unique_options_as_of_a_version(env):
@@ -221,6 +223,147 @@ def test_pinned_options_are_cached_apart_from_live(env):
     assert live.json()["values"] == ["a", "b", "c"]
     pinned_keys = [k for k in env["cache"].store if k.startswith("filter_options_")]
     assert pinned_keys and all(k.endswith("_dv0") for k in pinned_keys)
+    # The "v2" prefix: an entry cached before the unique list carried
+    # `truncated` (and dropped nulls before its limit) must never be served.
+    assert all(k.startswith("filter_options_v2_") for k in pinned_keys)
+
+
+def test_unique_options_search_the_column(env):
+    """A literal, case-insensitive match on both the live and the pinned path."""
+    live = _options(env, dc_id=str(DC), column="variety", kind="unique", search="A")
+    pinned = _options(
+        env, dc_id=str(DC), column="variety", kind="unique", search="A", data_versions={str(DC): 0}
+    )
+
+    assert live.json() == {"column": "variety", "values": ["a"], "truncated": False}
+    assert pinned.json() == {"column": "variety", "values": ["a"], "truncated": False}
+    # The search must not narrow another search's cached answer: the key
+    # carries it.
+    assert _options(
+        env, dc_id=str(DC), column="variety", kind="unique", search="b", data_versions={str(DC): 0}
+    ).json()["values"] == ["b"]
+
+
+def test_a_blank_search_is_no_search(env):
+    blank = _options(env, dc_id=str(DC), column="variety", kind="unique", search="   ")
+
+    assert blank.json()["values"] == ["a", "b", "c"]
+
+
+def test_a_capped_pinned_list_says_it_was_cut(env, tmp_path):
+    """A pinned list past the limit reports it, and a search reaches past it."""
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import _FILTER_OPTIONS_LIMIT
+
+    # A table wider than the option limit: 1,005 varieties, one commit (v0).
+    big = str(tmp_path / "big")
+    varieties = [f"v{i:05d}" for i in range(_FILTER_OPTIONS_LIMIT + 5)]
+    pl.DataFrame({"variety": varieties}).write_delta(big)
+    env["deltatables"].update_one(
+        {"data_collection_id": DC}, {"$set": {"delta_table_location": big}}
+    )
+
+    pinned = _options(
+        env, dc_id=str(DC), column="variety", kind="unique", data_versions={str(DC): 0}
+    )
+    body = pinned.json()
+    assert body["truncated"] is True
+    assert len(body["values"]) == _FILTER_OPTIONS_LIMIT
+
+    # The search applies before the limit, so it still sees every match: a
+    # broad one is cut again, a narrow one lists all it found.
+    broad = _options(
+        env, dc_id=str(DC), column="variety", kind="unique", search="v", data_versions={str(DC): 0}
+    ).json()
+    assert broad["truncated"] is True
+    assert len(broad["values"]) == _FILTER_OPTIONS_LIMIT
+    narrow = _options(
+        env,
+        dc_id=str(DC),
+        column="variety",
+        kind="unique",
+        search="0001",
+        data_versions={str(DC): 0},
+    ).json()
+    assert narrow == {
+        "column": "variety",
+        "values": sorted(v for v in varieties if "0001" in v),
+        "truncated": False,
+    }
+
+
+def test_a_null_does_not_take_a_limit_slot_of_a_pinned_list(env, tmp_path):
+    """A pinned unique list drops nulls before the limit counts.
+
+    A column holding exactly ``limit`` values plus a null is a complete list
+    (the null must not read as a value that cut it), and one value past
+    ``limit`` is cut, null or not.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import _computed_filter_options
+
+    # One commit: four varieties and a null row.
+    with_null = str(tmp_path / "with_null")
+    pl.DataFrame({"variety": ["a", "b", "c", "d", None]}).write_delta(with_null)
+    env["deltatables"].update_one(
+        {"data_collection_id": DC}, {"$set": {"delta_table_location": with_null}}
+    )
+
+    def pinned(limit):
+        return _computed_filter_options(
+            dc_id=str(DC),
+            dc_info={"dc_type": "table", "workflow_id": str(WF)},
+            column="variety",
+            kind="unique",
+            filter_expr=None,
+            limit=limit,
+            delta_version=0,
+        )
+
+    # Exactly as many values as the limit asks for: the null took no slot,
+    # so nothing was cut.
+    assert pinned(4) == {"column": "variety", "values": ["a", "b", "c", "d"], "truncated": False}
+    # One value past the limit: the list is cut, null or not.
+    cut = pinned(3)
+    assert cut["truncated"] is True
+    assert len(cut["values"]) == 3
+
+
+def test_multiqc_sample_options_say_when_the_list_was_cut(env, monkeypatch):
+    """A MultiQC sample filter unions every report's samples.
+
+    Past the limit it must say so (#1418), so a picker does not take the
+    first 1,000 samples as the whole set; within the limit it must not.
+    """
+    from depictio.api.v1 import db as db_module
+
+    reports = mongomock.MongoClient().db["multiqc"]
+    reports.insert_many(
+        [
+            {"data_collection_id": DC_MQC, "metadata": {"canonical_samples": ["s2", "s1"]}},
+            {"data_collection_id": DC_MQC, "metadata": {"canonical_samples": ["s3"]}},
+        ]
+    )
+    monkeypatch.setattr(db_module, "multiqc_collection", reports)
+
+    cut = env["client"].get(
+        f"/depictio/api/v1/deltatables/unique_values/{DC_MQC}",
+        params={"column": "sample", "limit": 2},
+    )
+    assert cut.status_code == 200, cut.text
+    assert cut.json() == {"column": "sample", "values": ["s1", "s2"], "truncated": True}
+
+    whole = env["client"].get(
+        f"/depictio/api/v1/deltatables/unique_values/{DC_MQC}",
+        params={"column": "sample", "limit": 3},
+    )
+    assert whole.json() == {"column": "sample", "values": ["s1", "s2", "s3"], "truncated": False}
+
+
+@pytest.mark.parametrize("search", [123, "x" * 201])
+def test_a_malformed_search_is_400(env, search):
+    assert (
+        _options(env, dc_id=str(DC), column="variety", kind="unique", search=search).status_code
+        == 400
+    )
 
 
 def test_a_collection_of_another_project_is_404(env):

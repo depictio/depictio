@@ -12,6 +12,10 @@ A refresh walks a workflow's run folders with ``rescan_folders`` and
 The synthetic runs of the single, url and manifest scans
 (``<tag>-single-file-scan`` and the like) are never written to the server, so
 there is nothing of theirs for a rescan to delete.
+
+The same module covers the scan-state cache of a partial scan: a
+``--data-collection-tag`` walk sees a run's whole tree but scans one
+collection of it, so it must not record the run as fully scanned.
 """
 
 from __future__ import annotations
@@ -22,12 +26,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from depictio.cli.cli.utils.scan import scan_files_for_workflow
+from depictio.cli.cli.utils.state import STATE_DIR_ENV_VAR, load_state
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import Permission, UserBase
 from depictio.models.models.workflows import Workflow, WorkflowRun
 
 NOW = "2026-10-08 12:00:00"
 OWNER = {"id": "507f1f77bcf86cd799439011", "email": "owner@example.org"}
+API_URL = "http://localhost:8058"
+PROJECT_ID = "6a63de3c7577b6bb68993a94"
+#: The command parameters that turn the state cache on in the tests below.
+STATE_ON = {"state_cache": True, "project_id": PROJECT_ID}
 
 
 @pytest.fixture
@@ -92,18 +101,29 @@ def _file(run: dict, location: str) -> dict:
     }
 
 
-def _rescan(workflow, runs: list[dict], files: list[dict]):
+def _rescan(
+    workflow, runs: list[dict], files: list[dict], data_collections=None, command_parameters=None
+):
     """A refresh's walk: ``rescan_folders`` and ``sync_files`` on, the API stubbed."""
     files_response = MagicMock(status_code=200)
     files_response.json.return_value = files
     runs_response = MagicMock(status_code=200)
     runs_response.json.return_value = runs
     cli_config = MagicMock()
+    cli_config.api_base_url = API_URL
     cli_config.user.model_dump.side_effect = lambda: {**OWNER, "token": None}
 
     def _deleted(ids, *_args, **_kwargs):
         # The batch deletes answer with how many the server removed.
         return len(ids)
+
+    params = {
+        "rescan_folders": True,
+        "sync_files": True,
+        "rich_tables": False,
+        "state_cache": False,
+    }
+    params.update(command_parameters or {})
 
     with (
         patch("depictio.cli.cli.utils.scan.api_get_files_by_dc_id", return_value=files_response),
@@ -119,14 +139,9 @@ def _rescan(workflow, runs: list[dict], files: list[dict]):
         upsert.return_value = MagicMock(status_code=200)
         result = scan_files_for_workflow(
             workflow=workflow,
-            data_collections=workflow.data_collections,
+            data_collections=data_collections or workflow.data_collections,
             CLI_config=cli_config,
-            command_parameters={
-                "rescan_folders": True,
-                "sync_files": True,
-                "rich_tables": False,
-                "state_cache": False,
-            },
+            command_parameters=params,
         )
     assert result["result"] == "success"
     deleted_files = {i for c in delete_files.call_args_list for i in c.args[0]}
@@ -190,3 +205,117 @@ def test_a_remote_run_whose_name_the_walk_registers_again_is_replaced(workflow, 
     walked = {run.run_tag: run for run in upsert.call_args.args[0]}
     assert walked["run_a"].run_location == str(root / "run_a")
     assert str(walked["run_a"].id) != str(remote["_id"])
+
+
+def _table_dc(tag: str, pattern: str) -> dict:
+    return {
+        "data_collection_tag": tag,
+        "config": {
+            "type": "Table",
+            "scan": {
+                "mode": "recursive",
+                "scan_parameters": {"regex_config": {"pattern": pattern}},
+            },
+            "dc_specific_properties": {
+                "format": "TSV",
+                "polars_kwargs": {"separator": "\t"},
+            },
+        },
+    }
+
+
+@pytest.fixture
+def two_dc_root(tmp_path):
+    """Two run folders, one file for each of two collections in every run."""
+    for name in ("run_a", "run_b"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "table.tsv").write_text("a\tb\n1\t2\n")
+        (tmp_path / name / "other.tsv").write_text("c\td\n3\t4\n")
+    return tmp_path
+
+
+@pytest.fixture
+def two_dc_workflow(two_dc_root):
+    return Workflow.model_validate(
+        {
+            "name": "wf",
+            "engine": {"name": "nextflow"},
+            "data_location": {
+                "structure": "sequencing-runs",
+                "locations": [str(two_dc_root)],
+                "runs_regex": "run_.*",
+            },
+            "config": {},
+            "data_collections": [
+                _table_dc("table", "table.tsv$"),
+                _table_dc("other", "other.tsv$"),
+            ],
+        }
+    )
+
+
+@pytest.fixture
+def state_dir(tmp_path, monkeypatch):
+    """An isolated scan-state cache, away from the operator's ~/.depictio."""
+    path = tmp_path / "state"
+    monkeypatch.setenv(STATE_DIR_ENV_VAR, str(path))
+    return path
+
+
+def _table_dc_of(workflow):
+    return next(dc for dc in workflow.data_collections if dc.data_collection_tag == "table")
+
+
+def test_a_tag_scoped_scan_records_no_run_state(two_dc_workflow, state_dir):
+    """A ``--data-collection-tag`` walk sees a run's whole tree but scans only
+    one collection of it. Recording the run would make the next full ingest
+    skip it for the collection this scan never looked at."""
+    _rescan(
+        two_dc_workflow,
+        [],
+        [],
+        data_collections=[_table_dc_of(two_dc_workflow)],
+        command_parameters=STATE_ON,
+    )
+
+    loaded = load_state(API_URL, PROJECT_ID)
+    recorded = [run for wf in (loaded.workflows if loaded else {}).values() for run in wf.runs]
+    assert recorded == []
+
+
+def test_a_full_scan_records_every_run_state(two_dc_workflow, state_dir):
+    _rescan(two_dc_workflow, [], [], command_parameters=STATE_ON)
+
+    loaded = load_state(API_URL, PROJECT_ID)
+    assert loaded is not None
+    for tag in ("run_a", "run_b"):
+        cached = loaded.run_state(str(two_dc_workflow.id), tag)
+        assert cached is not None
+        # The signature covers the whole tree, both collections' files.
+        assert cached.file_count == 2
+
+
+def test_a_full_scan_after_a_tag_scoped_one_still_scans_every_run(
+    two_dc_workflow, two_dc_root, state_dir
+):
+    """The bug this guards against: the tag-scoped scan recorded each run's
+    whole-tree signature, so the full ingest skipped every run and found no
+    files for the other collection."""
+    run_a = _run(two_dc_workflow, "run_a", str(two_dc_root / "run_a"))
+    run_b = _run(two_dc_workflow, "run_b", str(two_dc_root / "run_b"))
+
+    _rescan(
+        two_dc_workflow,
+        [],
+        [],
+        data_collections=[_table_dc_of(two_dc_workflow)],
+        command_parameters=STATE_ON,
+    )
+    # The runs are on the server now, so the full scan can only skip them
+    # through the state cache, which is exactly what must not happen.
+    _deleted_files, _deleted_runs, upsert = _rescan(
+        two_dc_workflow, [run_a, run_b], [], command_parameters=STATE_ON
+    )
+
+    walked = {run.run_tag for run in upsert.call_args.args[0]}
+    assert walked == {"run_a", "run_b"}

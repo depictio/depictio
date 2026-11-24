@@ -11,22 +11,39 @@ import type { StoredMetadata } from '../../api';
 import { useAvailableSet } from '../../availableValues';
 import { rankPickOptions } from './alwaysSelected';
 import { optionOrderOf, orderCategoricalOptions } from './categoricalOptions';
-import { useRankedValues, useUniqueValues } from './useInteractiveData';
+import { useRankedValues, useSearchedValues, useUniqueValues } from './useInteractiveData';
 
 export interface ScopeOption {
   value: string;
   disabled: boolean;
 }
 
-export function useScopeOptions(metadata: StoredMetadata): {
+const NONE: readonly string[] = [];
+
+export function useScopeOptions(
+  metadata: StoredMetadata,
+  /** The values held: listed even when a cut list leaves them out. */
+  held: readonly string[] = NONE,
+): {
   options: ScopeOption[];
   loading: boolean;
+  /** Search the server when the list was cut at its limit. */
+  onSearchChange: (query: string) => void;
 } {
-  const { data: values, loading } = useUniqueValues(
+  const { data: listed, truncated, loading } = useUniqueValues(
     metadata.dc_id,
     metadata.column_name,
     metadata.filter_expr,
     metadata.order_by,
+  );
+  const { values, onSearchChange } = useSearchedValues(
+    metadata.dc_id,
+    metadata.column_name,
+    metadata.filter_expr,
+    metadata.order_by,
+    listed,
+    truncated,
+    held,
   );
   const availableSet = useAvailableSet(metadata.dc_id, metadata.column_name, metadata.index);
   const { data: ranking, loading: rankLoading } = useRankedValues(
@@ -46,5 +63,5 @@ export function useScopeOptions(metadata: StoredMetadata): {
       ),
     [values, availableSet, ranking, metadata],
   );
-  return { options, loading: loading || rankLoading };
+  return { options, loading: loading || rankLoading, onSearchChange };
 }

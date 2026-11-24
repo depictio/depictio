@@ -749,6 +749,105 @@ class TestSelectionFilters:
         assert "of workflow" in unknown_filter_error(project, tag, "nope")
 
 
+class TestTagScopedIngestLeavesTheDashboardsToAFullOne:
+    """A tag-scoped ingest must not import the template's dashboards: the server
+    drops at creation every component whose collection has no data, and later
+    ingests keep the existing dashboard, so the components would never come
+    back. The next ingest of every collection imports them whole."""
+
+    def test_a_tag_scoped_ingest_does_not_import_dashboards(
+        self, app, runner, data_root, dashboard_file, make_harness
+    ):
+        harness = make_harness(data_root, remote_locations=[str(data_root)])
+        # A second collection the tag leaves out.
+        wf = harness.project.workflows[0]
+        wf.data_collections.append(
+            wf.data_collections[0].model_copy(update={"data_collection_tag": "taxonomy"})
+        )
+
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            _template(
+                data_root,
+                "--dashboard",
+                str(dashboard_file),
+                "--data-collection-tag",
+                "asv_table",
+            ),
+        )
+
+        assert result.exit_code == 0, result.output
+        harness.import_dashboards.assert_not_called()
+        output = normalize(result.output)
+        assert "dashboard import skipped" in output
+        assert "next ingest of every collection" in output
+
+    def test_a_tag_naming_the_only_collection_imports_the_dashboards(
+        self, app, runner, data_root, dashboard_file, make_harness
+    ):
+        # The tag covers every collection of the project: nothing is left out.
+        harness = make_harness(data_root, remote_locations=[str(data_root)])
+        wf = harness.project.workflows[0]
+        wf.data_collections = [
+            dc for dc in wf.data_collections if dc.data_collection_tag == "asv_table"
+        ]
+        harness.project.workflows = [wf]
+
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            _template(
+                data_root,
+                "--dashboard",
+                str(dashboard_file),
+                "--data-collection-tag",
+                "asv_table",
+            ),
+        )
+
+        assert result.exit_code == 0, result.output
+        harness.import_dashboards.assert_called_once()
+
+    def test_a_full_ingest_imports_the_dashboards(
+        self, app, runner, data_root, dashboard_file, make_harness
+    ):
+        harness = make_harness(data_root, remote_locations=[str(data_root)])
+
+        result = _invoke(
+            app, runner, harness, _template(data_root, "--dashboard", str(dashboard_file))
+        )
+
+        assert result.exit_code == 0, result.output
+        harness.import_dashboards.assert_called_once()
+
+    def test_reset_dashboards_with_a_tag_imports_them_anyway(
+        self, app, runner, data_root, dashboard_file, make_harness
+    ):
+        harness = make_harness(data_root, remote_locations=[str(data_root)])
+
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            _template(
+                data_root,
+                "--dashboard",
+                str(dashboard_file),
+                "--data-collection-tag",
+                "asv_table",
+                "--reset-dashboards",
+            ),
+        )
+
+        assert result.exit_code == 0, result.output
+        harness.import_dashboards.assert_called_once()
+        assert harness.import_dashboards.call_args.kwargs["reset"] is True
+        assert "dashboard import skipped" not in normalize(result.output)
+
+
 class TestServerCheckKeepsAReportedExit:
     def test_an_exit_from_the_config_load_is_not_reported_again(
         self, app, runner, data_root, make_harness

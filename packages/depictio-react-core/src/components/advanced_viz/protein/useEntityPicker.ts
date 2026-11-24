@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   fetchAdvancedVizData,
@@ -7,7 +7,17 @@ import {
   type InteractiveFilter,
 } from '../../../api';
 import { useSharedOpeningEntity } from '../../../highlight/openingEntity';
-import { entitiesByRowCount } from './rendererData';
+import {
+  chooseEntity,
+  compareEntityNames,
+  entitiesByRowCount,
+  heldEntities,
+  withoutFiltersOn,
+} from './rendererData';
+
+/** Distinct values the picker asks for: every family or protein of a table,
+ *  not the 1,000 a filter's option list stops at. The server caps it. */
+export const ENTITY_LIST_LIMIT = 100_000;
 
 export interface EntityPicker {
   /** Every entity the bound table holds, sorted; null while loading. */
@@ -57,6 +67,8 @@ export function useEntityPicker(
 ): EntityPicker {
   const [entities, setEntities] = useState<string[] | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
+  // Every entity the dashboard's filters leave, when the read was whole.
+  const [inScope, setInScope] = useState<ReadonlySet<string> | null>(null);
   const [failed, setFailed] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   const wfId = rows?.wfId ?? null;
@@ -72,11 +84,11 @@ export function useEntityPicker(
     }
     let cancelled = false;
     setEntities(null);
-    fetchUniqueValues(dcId, column)
+    fetchUniqueValues(dcId, column, null, null, ENTITY_LIST_LIMIT)
       .then((values) => {
         if (cancelled) return;
         const clean = Array.from(new Set(values.filter((v) => v != null && v !== '').map(String)));
-        clean.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        clean.sort(compareEntityNames);
         setEntities(clean);
         setFailed(false);
       })
@@ -110,23 +122,46 @@ export function useEntityPicker(
     };
   }, [dcId, column, refreshTick, wfId, vizKind, filtersKey]);
 
+  // Once the reader picks in the tile, the entities the dashboard's filters
+  // leave for that pick: the tile's fetch replaces any filter on its own
+  // column with the pick (`scopeToEntity`), so those filters are left out
+  // here too, and only the others (a family linked from another table) can
+  // exclude it. A pick they exclude would AND two entities into nothing.
   useEffect(() => {
-    if (followed && entities?.includes(followed)) setPicked(followed);
-  }, [followed, entities]);
+    if (!picked || !dcId || !column || !wfId || !vizKind) {
+      setInScope(null);
+      return;
+    }
+    // A scope read for an earlier pick says nothing about this one.
+    setInScope(null);
+    let cancelled = false;
+    const filters = withoutFiltersOn(JSON.parse(filtersKey) as InteractiveFilter[], [column]);
+    fetchAdvancedVizData({ wfId, dcId, columns: [column], filters, vizKind })
+      .then((res) => {
+        if (cancelled) return;
+        // A sampled read may miss entities: then nothing is known to be out.
+        const whole = !res.sampled && res.sampling?.exact !== false;
+        setInScope(whole ? new Set(entitiesByRowCount(res.rows?.[column] ?? [])) : null);
+      })
+      .catch(() => {
+        if (!cancelled) setInScope(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [picked, dcId, column, refreshTick, wfId, vizKind, filtersKey]);
+
+  // The listed entities plus the opening one, which the table holds even when
+  // a cut list leaves it out.
+  const held = useMemo(() => heldEntities(entities, opening), [entities, opening]);
+
+  useEffect(() => {
+    if (followed && held?.includes(followed)) setPicked(followed);
+  }, [followed, held]);
 
   // The dashboard's agreed opening when this table holds it, else its own.
-  const agreed = useSharedOpeningEntity(
-    column ? rows?.shareKey : null,
-    rows?.owner ?? '',
-    opening,
-    entities,
-  );
+  const agreed = useSharedOpeningEntity(column ? rows?.shareKey : null, rows?.owner ?? '', opening, held);
 
-  let entity: string | null = null;
-  if (column && entities && entities.length) {
-    if (picked && entities.includes(picked)) entity = picked;
-    else if (agreed && entities.includes(agreed)) entity = agreed;
-    else entity = entities[0];
-  }
-  return { entities, entity, setEntity: setPicked, failed };
+  const entity = column ? chooseEntity(held, picked, agreed, inScope) : null;
+  return { entities: held, entity, setEntity: setPicked, failed };
 }

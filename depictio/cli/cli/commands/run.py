@@ -2664,7 +2664,33 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
         _rec("joins", "skipped")
 
     # Step 8: Import dashboards (from the template, or from --dashboard)
-    if not skip_dashboard_import and template_dashboard_paths:
+    # A tag-scoped run covers a subset of the collections, so a dashboard
+    # imported now is created with the components of every other collection
+    # dropped (the server hides a component whose collection has no data),
+    # and later full ingests keep the existing dashboard, so they would never
+    # come back. The dashboards are left to the next ingest of every
+    # collection, unless --reset-dashboards asked for the import now. A tag
+    # naming the project's only collection covers everything: it imports.
+    other_collections = bool(data_collection_tag) and any(
+        dc.data_collection_tag != data_collection_tag
+        for wf in getattr(project_config, "workflows", None) or []
+        for dc in wf.data_collections
+    )
+    if (
+        not skip_dashboard_import
+        and template_dashboard_paths
+        and other_collections
+        and not reset_dashboards
+    ):
+        rich_print_checked_statement(
+            f"--data-collection-tag '{escape(data_collection_tag)}': dashboard import "
+            "skipped; the next ingest of every collection (no --data-collection-tag) "
+            "imports the dashboards the project lacks",
+            "info",
+        )
+        success_count += 1
+        _rec("dashboard_import", "skipped", "tag-scoped ingest")
+    elif not skip_dashboard_import and template_dashboard_paths:
         rich_print_section_separator(f"Step {total_steps}/{total_steps}: Importing dashboards")
         ingestion.start("dashboard_import")
         if reset_dashboards:
