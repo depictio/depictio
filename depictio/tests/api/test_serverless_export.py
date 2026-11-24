@@ -2871,3 +2871,24 @@ def test_the_export_omits_that_browser_with_the_real_reason(
         assert row.reason is TierReason.JBROWSE
         assert row.detail and "not in this project" in row.detail
         assert "genomic_tracks collection" not in row.detail
+
+
+def test_a_frozen_upset_compute_sends_the_dashboards_track_pins():
+    """The report's UpSet wears the same annotation colours as the dashboard:
+    its compute carries the pins of the track columns, as the renderer sends."""
+    comp = {
+        "component_type": "advanced_viz",
+        "viz_kind": "upset_plot",
+        "wf_id": "w",
+        "dc_id": "d",
+        "config": {"default_annotation_cols": ["Phylum"]},
+        producer_a._FOLD_COLORS_KEY: {
+            "Phylum": {"Bacillota": "#40c057", "*": "set1"},
+            "Habitat": {"Soil": "#fab005"},
+        },
+    }
+    task, payload = producer_a.celery_compute_request(comp)
+    assert task == "compute_upset"
+    assert payload["category_colors"] == {"Phylum": {"Bacillota": "#40c057"}}
+    comp.pop(producer_a._FOLD_COLORS_KEY)
+    assert "category_colors" not in producer_a.celery_compute_request(comp)[1]

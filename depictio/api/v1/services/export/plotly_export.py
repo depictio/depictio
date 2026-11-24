@@ -258,7 +258,11 @@ def _general_stats_spec(
 
 
 def _celery_advanced_viz_spec(
-    component: dict, filter_metadata: list[dict], kind: str, access_token: str | None
+    component: dict,
+    filter_metadata: list[dict],
+    kind: str,
+    access_token: str | None,
+    category_colors: dict[str, dict[str, str]] | None = None,
 ) -> Any:
     """Run an already-server-side advanced-viz compute inline and return its figure.
 
@@ -268,7 +272,7 @@ def _celery_advanced_viz_spec(
     """
     from depictio.api.v1.services.export.compute import run_compute
 
-    result = run_compute(kind, component, filter_metadata, access_token)
+    result = run_compute(kind, component, filter_metadata, access_token, category_colors)
     if not isinstance(result, dict) or "figure" not in result:
         raise HTTPException(
             status_code=500,
@@ -277,11 +281,10 @@ def _celery_advanced_viz_spec(
     return result["figure"]
 
 
-def _with_upset_set_colors(dashboard_id: Any, component: dict, spec: dict[str, Any]) -> dict:
-    """The UpSet spec with its sets in the dashboard's category colours.
+def _dashboard_category_colors(dashboard_id: Any) -> dict[str, dict[str, str]]:
+    """The dashboard's category colours (its own over its family's), or none.
 
-    Best effort: a dashboard that cannot be read, or one that pins no colour for
-    the sets, leaves the figure as the library drew it.
+    Best effort: a dashboard that cannot be read draws in the library's palette.
     """
     from bson import ObjectId
 
@@ -289,17 +292,25 @@ def _with_upset_set_colors(dashboard_id: Any, component: dict, spec: dict[str, A
     from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
         effective_category_colors,
     )
-    from depictio.api.v1.services.export.upset_colors import colour_upset_figure
 
     try:
         doc = dashboards_collection.find_one(
             {"dashboard_id": ObjectId(str(dashboard_id))},
             {"category_colors": 1, "parent_dashboard_id": 1},
         )
-        colors = effective_category_colors(doc or {})
+        return effective_category_colors(doc or {}) or {}
     except Exception as exc:  # noqa: BLE001 - the plain figure is the fallback
-        logger.info(f"export: upset set colours unavailable for {dashboard_id}: {exc}")
-        return spec
+        logger.info(f"export: category colours unavailable for {dashboard_id}: {exc}")
+        return {}
+
+
+def _with_upset_set_colors(
+    colors: dict[str, dict[str, str]], component: dict, spec: dict[str, Any]
+) -> dict:
+    """The UpSet spec with its sets in the dashboard's category colours, and
+    its legend laid out for a page."""
+    from depictio.api.v1.services.export.upset_colors import colour_upset_figure
+
     return _static_upset_legend(colour_upset_figure(spec, colors, component.get("config")))
 
 
@@ -492,13 +503,17 @@ async def build_plotly_export(
     elif component_type == "advanced_viz":
         source = component_json_source(component, controls)
         if source == "celery":
+            upset = str(viz_kind) == "upset_plot"
+            colors = _dashboard_category_colors(dashboard_id) if upset else None
             spec = _normalise_figure(
-                _celery_advanced_viz_spec(component, filter_metadata, str(viz_kind), access_token)
+                _celery_advanced_viz_spec(
+                    component, filter_metadata, str(viz_kind), access_token, colors
+                )
             )
-            if str(viz_kind) == "upset_plot":
+            if upset:
                 # The dashboard recolours the plain figure in the browser; a
                 # figure that never reaches that renderer gets the same pass.
-                spec = _with_upset_set_colors(dashboard_id, component, spec)
+                spec = _with_upset_set_colors(colors or {}, component, spec)
         else:
             spec = _python_advanced_viz_spec(
                 component, filter_metadata, current_user, access_token, controls, theme

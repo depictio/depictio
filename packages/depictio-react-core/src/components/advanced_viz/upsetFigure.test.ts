@@ -260,6 +260,20 @@ describe('upset responsive layout', () => {
     expect(upsetLegendRows(labels, 300, 10)).toBeGreaterThan(upsetLegendRows(labels, 900, 10));
   });
 
+  it('lays a grouped track legend out in rows, under the group title', () => {
+    // One legend group (an annotation track) would stack in a column down the
+    // plot even in a horizontal legend.
+    const grouped = Array.from({ length: 12 }, (_, i) => ({
+      type: 'bar',
+      name: `Phylum: P${i}`,
+      showlegend: true,
+      legendgroup: 'Phylum',
+      legendgrouptitle: { text: 'Phylum' },
+    }));
+    const legend = withUpsetResponsiveLayout(base, grouped, { width: 720 }).legend as Record<string, unknown>;
+    expect(legend.traceorder).toBe('normal');
+  });
+
   it('puts the legend above the plot, horizontal, anchored on its bottom edge', () => {
     const out = withUpsetResponsiveLayout(base, few, { width: 720 });
     const legend = out.legend as Record<string, unknown>;

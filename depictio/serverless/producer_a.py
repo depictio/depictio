@@ -225,6 +225,11 @@ def annotate_code_context(tabs: list["FamilyTab"]) -> None:
             colors = {}
         brand = tab.doc.get("brand_theme") or tab.doc.get("inherited_brand_theme")
         for comp in tab.components:
+            if comp.get("component_type") == "advanced_viz":
+                # An UpSet's annotation tracks wear the dashboard's pins, which
+                # its renderer sends with its compute (`pinsForColumns`).
+                comp[_FOLD_COLORS_KEY] = colors
+                continue
             if comp.get("component_type") != "figure":
                 continue
             comp[_FOLD_COLORS_KEY] = colors
@@ -1751,11 +1756,21 @@ def celery_compute_request(
 
     if kind in ("upset", "upset_plot"):
         min_size = config.get("min_size")
+        annotation_cols = list(config.get("default_annotation_cols") or [])
+        # The dashboard's pins for the tracks (`pinsForColumns`), sent only
+        # when there are some, as the renderer does.
+        colors = comp.get(_FOLD_COLORS_KEY) or {}
+        pins = {
+            c: {v: k for v, k in (colors.get(c) or {}).items() if v != "*" and k}
+            for c in annotation_cols
+        }
+        pins = {c: m for c, m in pins.items() if m}
         return "compute_upset", {
             **base,
             "set_columns": config.get("set_columns") or None,
             "set_colors": config.get("set_colors") or None,
-            "annotation_cols": list(config.get("default_annotation_cols") or []) or None,
+            "annotation_cols": annotation_cols or None,
+            **({"category_colors": pins} if pins else {}),
             "sort_by": config.get("sort_by") or "cardinality",
             "sort_order": config.get("sort_order") or "descending",
             "min_size": 1 if min_size is None else int(min_size),

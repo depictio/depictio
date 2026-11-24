@@ -89,6 +89,14 @@ def test_the_annotation_tracks_come_with_the_config_default_columns():
     assert off["annotation_cols"] is None
     assert off["show_set_sizes"] is False
     assert _upset_payload({}, base)["annotation_cols"] is None
+    # The tracks wear the dashboard's pins, as the renderer sends them.
+    pinned = _upset_payload(
+        config,
+        base,
+        {"Phylum": {"Bacillota": "#40c057", "*": "set1"}, "Habitat": {"Soil": "#fab005"}},
+    )
+    assert pinned["category_colors"] == {"Phylum": {"Bacillota": "#40c057"}}
+    assert "category_colors" not in payload
 
 
 def test_a_long_static_legend_goes_under_the_figure():
