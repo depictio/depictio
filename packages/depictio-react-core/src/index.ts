@@ -1466,6 +1466,7 @@ export type {
   ReportTile,
   ReportTab,
   ReportLayer,
+  ReportSettings,
   ReportOutlineEntry,
   ReportOutlineTab,
   ReportOutline,

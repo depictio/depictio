@@ -309,4 +309,31 @@ test.describe("Report editor", () => {
     await sync.click();
     await expect(sync).toHaveAttribute("aria-pressed", "true");
   });
+
+  test("report settings are saved with the layer", async ({ loginAsAdmin, page, request }) => {
+    await loginAsAdmin();
+    const { access_token: token } = await apiOnlyToken(request, "adminUser");
+    await openEditor(page);
+    await page.locator("[data-testid='report-settings-open']").click();
+    const modal = page.locator("[data-testid='report-settings']");
+    const toc = modal.locator("[data-testid='report-setting-toc']");
+    // Mantine draws the switch over a hidden input: the label takes the click.
+    const tocLabel = modal.getByText("Table of contents", { exact: true });
+    await expect(toc).toBeChecked();
+    await tocLabel.click();
+
+    const stored = async (): Promise<boolean | undefined> => {
+      const res = await request.get(
+        `${API_URL}${API_PREFIX}/dashboards/report_layer/${IRIS_DASHBOARD_ID}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok()) return undefined;
+      return ((await res.json()) as { settings?: { toc?: boolean } }).settings?.toc;
+    };
+    await expect.poll(stored, { timeout: 15_000 }).toBe(false);
+
+    // Back where it started, so the other tests see the default report.
+    await tocLabel.click();
+    await expect.poll(stored, { timeout: 15_000 }).toBe(true);
+  });
 });

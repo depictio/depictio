@@ -141,6 +141,7 @@ const TabBlock: React.FC<TabBlockProps> = ({
             <TileInspector
               view={view}
               sections={tab.sections}
+              widthLocked={tab.allFullWidth}
               canMoveUp={i > 0}
               canMoveDown={i < tab.tiles.length - 1}
               onPatch={(patch) => onEdit((l) => patchTile(l, view.entry, patch))}

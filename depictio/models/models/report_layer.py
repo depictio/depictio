@@ -53,6 +53,42 @@ ReportOrientation = Literal["auto", "portrait", "landscape"]
 ReportPlacement = Literal["body", "appendix"]
 
 
+#: The PDF's paper.
+ReportPaper = Literal["a4", "letter"]
+
+#: How wide the report's tiles are by default: the dashboard's rows, or each
+#: tile across the page.
+ReportTileWidth = Literal["row", "full"]
+
+#: Where an advanced visualisation draws its controls in the report.
+ReportVizControls = Literal["popover", "rail", "header"]
+
+
+class ReportSettings(BaseModel):
+    """The report's own options, for the whole document. Every default is the
+    report as it was before these existed, so a stored layer without them
+    exports unchanged."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # PDF
+    paper: ReportPaper = "a4"
+    # The PDF's page; a tile's own orientation still turns its page.
+    landscape: bool = False
+    # Layout
+    tile_width: ReportTileWidth = "row"
+    viz_controls: ReportVizControls = "popover"
+    # Parts of the document
+    toc: bool = True
+    export_details: bool = True
+    how_to_run: bool = True
+    methods: bool = True
+    code: bool = True
+    # Captions
+    numbering: bool = True
+    provenance: bool = True
+
+
 class ReportCover(BaseModel):
     """The title block. ``None`` values fall back to the export's own defaults
     (dashboard title, project name, the project's owners, the export day)."""
@@ -120,6 +156,7 @@ class ReportLayer(BaseModel):
     # Bumped by every write; the editor's optimistic-concurrency token.
     revision: int = 0
     style: ReportStyle | None = None
+    settings: ReportSettings = Field(default_factory=ReportSettings)
     tiles: list[ReportTile] = Field(default_factory=list)
     tabs: list[ReportTab] = Field(default_factory=list)
     # The GET seeded this layer's intro from the dashboard's notes; nothing

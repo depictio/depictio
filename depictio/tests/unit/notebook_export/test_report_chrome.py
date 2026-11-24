@@ -757,3 +757,76 @@ def test_a_failed_tiles_caption_does_not_claim_data(ampliseq_tabs):
     html_only = _body(generate_qmd(_plan(ampliseq_tabs)))
     assert "dpx-asof(" not in html_only and TYPST_TILE_DONE not in html_only
     assert '<span class="dpx-asof">Data: ' in html_only
+
+
+# ── Report settings ─────────────────────────────────────────────────────────
+
+
+def _with_settings(tabs, **settings) -> str:
+    layer = ReportLayer.model_validate({"settings": settings})
+    return generate_qmd(_plan(tabs, report_layer=layer, pdf=True))
+
+
+def test_report_settings_default_to_the_report_as_it_was(ampliseq_tabs):
+    """A layer with every setting at its default exports what no layer does."""
+    assert _with_settings(ampliseq_tabs) == generate_qmd(
+        _plan(ampliseq_tabs, report_layer=ReportLayer().model_dump(), pdf=True)
+    )
+    src = _with_settings(ampliseq_tabs)
+    front = _front(src)
+    assert front["format"]["html"]["toc"] is True
+    assert front["format"]["html"]["code-tools"] is True
+    assert front["format"]["typst"]["papersize"] == "a4"
+    for part in ("Export details", "How to run", "Methods and citations", "dpx-asof", "Contents"):
+        assert part in src
+    assert "#set figure(numbering: none)" not in src
+    assert "#set page(flipped: true)" not in src
+    assert 'data-viz-controls="popover"' in front["format"]["html"]["include-before-body"]["text"]
+
+
+def test_report_settings_take_parts_out(ampliseq_tabs):
+    src = _with_settings(
+        ampliseq_tabs,
+        toc=False,
+        code=False,
+        export_details=False,
+        how_to_run=False,
+        methods=False,
+        provenance=False,
+    )
+    front = _front(src)
+    assert front["format"]["html"]["toc"] is False
+    assert front["format"]["html"]["code-tools"] is False
+    assert "references" not in front
+    body = _body(src)
+    # The typst preamble still defines ``dpx-asof``; no tile calls it.
+    for part in (
+        "Export details",
+        "How to run",
+        "Methods and citations",
+        'class="dpx-asof"',
+        "`#dpx-asof(",
+        "[Contents]",
+    ):
+        assert part not in body, part
+
+
+def test_report_settings_shape_the_pdf_and_the_captions(ampliseq_tabs):
+    src = _with_settings(
+        ampliseq_tabs, paper="letter", landscape=True, numbering=False, viz_controls="rail"
+    )
+    front = _front(src)
+    assert front["format"]["typst"]["papersize"] == "us-letter"
+    assert "#set page(flipped: true)" in src
+    assert "#set figure(numbering: none)" in src
+    assert "(?:Figure|Table)" in front["format"]["html"]["include-after-body"]["text"]
+    assert 'data-viz-controls="rail"' in front["format"]["html"]["include-before-body"]["text"]
+
+
+def test_every_tile_full_width_breaks_every_row(ampliseq_tabs):
+    before = _body(generate_qmd(_plan(ampliseq_tabs)))
+    assert 'layout="[5,3]"' in before
+    src = _body(_with_settings(ampliseq_tabs, tile_width="full"))
+    assert 'layout="[5,3]"' not in src
+    # Cards keep their strip.
+    assert "card_row([viz_samples, viz_phyla, viz_shannon_diversity, viz_reads_kept])" in src

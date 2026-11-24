@@ -46,6 +46,7 @@ import {
   Moon,
   RefreshCw,
   ScrollText,
+  Settings2,
   Signature,
   Sun,
   TriangleAlert,
@@ -62,6 +63,7 @@ import CollapsiblePanel from './CollapsiblePanel';
 import CoverForm from './CoverForm';
 import EditorSection from './EditorSection';
 import PreviewPane from './PreviewPane';
+import ReportSettingsModal, { settingsOf } from './ReportSettingsModal';
 import RichDocField from './RichDocField';
 import { SnapshotContext } from './SnapshotContext';
 import StructurePanel from './StructurePanel';
@@ -159,7 +161,13 @@ const ReportEditorApp: React.FC = () => {
     ? outline.preview_unavailable_reason || 'Reports cannot be rendered on this deployment.'
     : null;
   const ready = Boolean(enabled && layer && outline && !api.loadError && !unavailable);
-  const stateKey = useMemo(() => JSON.stringify(layer?.state ?? null), [layer?.state]);
+  // The preview renders again when the state changes, and when the report's
+  // settings do: those change the document, not one tile the frame can patch.
+  const stateKey = useMemo(
+    () => JSON.stringify({ state: layer?.state ?? null, settings: layer ? settingsOf(layer) : null }),
+    [layer],
+  );
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const job = usePreviewJob(dashboardId, ready, stateKey, api.flush);
 
   // Scroll sync: the bridge hands the frame's "visible" tile to the column
@@ -259,6 +267,24 @@ const ReportEditorApp: React.FC = () => {
           >
             Reload
           </Button>
+        )}
+        <Button
+          size="sm"
+          variant="default"
+          leftSection={<Settings2 size={17} strokeWidth={STROKE} />}
+          disabled={!layer}
+          onClick={() => setSettingsOpen(true)}
+          data-testid="report-settings-open"
+        >
+          Report settings
+        </Button>
+        {layer && (
+          <ReportSettingsModal
+            opened={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            layer={layer}
+            onEdit={api.edit}
+          />
         )}
         <Tooltip label={unavailable ?? 'The full render, with its PDF'} withArrow multiline maw={320}>
           <span>

@@ -131,6 +131,9 @@ def typst_preamble(
     heading_icons: dict[str, str] | None = None,
     statement: str | None = None,
     tab_level: int = TAB_LEVEL,
+    contents: bool = True,
+    landscape: bool = False,
+    numbering: bool = True,
 ) -> str:
     """The raw typst block the PDF opens with (see the module docstring).
 
@@ -272,11 +275,19 @@ def typst_preamble(
     )
     # Page 2: the contents, alone, in the text colour (the headings carry the
     # tabs' colours; a contents page of a dozen hues reads as noise).
-    add('#show outline.entry.where(level: 1): set text(weight: "semibold")')
-    add(
-        "#page(header: none, footer: none, numbering: none)["
-        f"#outline(title: text(size: 17pt)[Contents], depth: {CONTENTS_DEPTH}, indent: 1.1em)]"
-    )
+    if contents:
+        add('#show outline.entry.where(level: 1): set text(weight: "semibold")')
+        add(
+            "#page(header: none, footer: none, numbering: none)["
+            f"#outline(title: text(size: 17pt)[Contents], depth: {CONTENTS_DEPTH}, indent: 1.1em)]"
+        )
+    # The report's settings: figures and tables without a number (their
+    # caption alone), and the body on landscape pages (a tile's own
+    # orientation still turns its page).
+    if not numbering:
+        add("#set figure(numbering: none)")
+    if landscape:
+        add("#set page(flipped: true)")
     # The body: a running header and footer on every page. The header says
     # what the file is, the footer who made it.
     add(

@@ -79,16 +79,29 @@ const TILE_HEIGHT: Record<string, number> = {
 
 const placed = new WeakMap<object, StoredMetadata>();
 
+/** Where the report's settings place an advanced viz's controls: the element
+ *  the export writes for its runtime (`SETTINGS_MARKER_ID` in the generator),
+ *  absent from reports exported before it. */
+function reportVizControls(): unknown {
+  if (typeof document === 'undefined') return undefined;
+  return document.getElementById('depictio-report-settings')?.dataset.vizControls;
+}
+
 /** An advanced viz in a report keeps its controls closed, behind the settings
- *  icon, unless its author placed them (on the tile, or for the dashboard):
- *  a reader opens them when they want them, and docked controls took the
- *  room of the plot. The same object comes back for the same tile, so a
- *  render does not hand the renderer new metadata. */
+ *  icon, unless something placed them: the tile itself, then the report's
+ *  settings, then the dashboard. Docked controls took the room of the plot.
+ *  The same object comes back for the same tile, so a render does not hand
+ *  the renderer new metadata. */
 function withReportControls(m: StoredMetadata, dashboardDefault: unknown): StoredMetadata {
   if (m.component_type !== 'advanced_viz' || isControlsPlacement(m.controls_placement)) return m;
   let out = placed.get(m);
   if (!out) {
-    const placement = isControlsPlacement(dashboardDefault) ? dashboardDefault : 'popover';
+    const report = reportVizControls();
+    const placement = isControlsPlacement(report)
+      ? report
+      : isControlsPlacement(dashboardDefault)
+        ? dashboardDefault
+        : 'popover';
     out = { ...m, controls_placement: placement } as StoredMetadata;
     placed.set(m, out);
   }

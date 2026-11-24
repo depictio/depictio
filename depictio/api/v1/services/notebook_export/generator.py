@@ -23,7 +23,7 @@ from depictio.models.models.analysis_state import (
     NotebookPreflightDC,
     NotebookPreflightStage,
 )
-from depictio.models.models.report_layer import ReportLayer, ReportTile
+from depictio.models.models.report_layer import ReportLayer, ReportSettings, ReportTile
 from depictio.notebook.components import readable_name
 from depictio.notebook.qmd_safe import comment as _qmd_comment
 from depictio.notebook.qmd_safe import defuse, defuse_code, one_line
@@ -295,6 +295,19 @@ def _cover_owner_names(project: dict[str, Any] | None) -> list[str]:
 
 # The closing part: what produced the data and the report, and what to cite.
 METHODS_HEADING = "Methods and citations"
+
+#: The element whose attributes carry the report's settings to its runtime.
+SETTINGS_MARKER_ID = "depictio-report-settings"
+
+#: Figures and tables without their number, when the report's settings say
+#: so: Quarto numbers every float and has no option to stop, so the page takes
+#: the "Figure 3: " off each caption once it has loaded (the PDF sets typst's
+#: own ``numbering: none``).
+UNNUMBER_SCRIPT = (
+    "<script>document.querySelectorAll('.quarto-float figcaption').forEach(function(c){"
+    "var n=c.firstChild;if(n&&n.nodeType===3)n.nodeValue=n.nodeValue.replace("
+    "/^\\s*(?:Figure|Table)[\\s\\u00a0]+\\d+[:.]?\\s*/,'')});</script>"
+)
 METHODS_ICON = "mdi:book-open-variant"
 
 # ``activeFilters.ts``: what the panel's summary prints for a filter's value.
@@ -585,6 +598,9 @@ class NotebookBuilder:
     def __init__(self, plan: ExportPlan) -> None:
         self.plan = plan
         self.layer = self._resolve_layer()
+        # The report's own options (Report settings in the editor); their
+        # defaults are the report as it was without them.
+        self.settings: ReportSettings = self.layer.settings if self.layer else ReportSettings()
         self._tiles_by_ref: dict[tuple[str, str], ReportTile] = (
             {(t.tab_id, t.component_id): t for t in self.layer.tiles} if self.layer else {}
         )
@@ -1047,7 +1063,7 @@ class NotebookBuilder:
         cells.append(md_cell(part_div("appendix")))
         cells.extend(self._appendix_cells())
         cells.append(md_cell(PART_FENCE))
-        methods_md = self._methods()[0]
+        methods_md = self._methods()[0] if self.settings.methods else ""
         if methods_md:
             cells.append(md_cell(methods_md))
         if self.plan.pdf:
@@ -1226,6 +1242,9 @@ class NotebookBuilder:
             heading_colors=colors,
             heading_icons=icons,
             statement=self._cover_statement(),
+            contents=self.settings.toc,
+            landscape=self.settings.landscape,
+            numbering=self.settings.numbering,
         )
 
     def _dashboard_url(self) -> str:
@@ -1233,6 +1252,14 @@ class NotebookBuilder:
 
     def _accent(self) -> str:
         return palette_hex((self.plan.brand or {}).get("primary"), "#228be6")
+
+    def _settings_marker(self) -> str:
+        """The settings the report's runtime reads in the page: where an
+        advanced viz draws its controls (``ReportRuntime``)."""
+        return (
+            f'<div id="{SETTINGS_MARKER_ID}" hidden '
+            f'data-viz-controls="{_esc(self.settings.viz_controls, quote=True)}"></div>'
+        )
 
     def _appbar(self) -> str:
         """The header bar: the dashboard's mark and "Powered by" Depictio.
@@ -1333,13 +1360,20 @@ class NotebookBuilder:
             # files are served beside it (``report_files/``, the editor's
             # iframe), which keeps the render and the frame light.
             embed_resources=not plan.preview,
+            toc=self.settings.toc,
+            code_tools=self.settings.code,
+            papersize="us-letter" if self.settings.paper == "letter" else "a4",
             # The dashboard's own mark on the browser tab when it has one (the
             # nf-core apple), the app's otherwise.
             favicon_data_uri=plan.dashboard_logo or plan.favicon_data_uri,
-            before_body=self._appbar(),
-            after_body=self._footer(),
+            before_body=self._appbar() + self._settings_marker(),
+            after_body=self._footer() + ("" if self.settings.numbering else UNNUMBER_SCRIPT),
             pdf=self.plan.pdf,
-            extra={"references": refs} if (refs := self._methods()[1]) else {},
+            extra=(
+                {"references": refs}
+                if self.settings.methods and (refs := self._methods()[1])
+                else {}
+            ),
             brand=(
                 paper_brand(
                     primary=self._primary()[0],
@@ -1561,9 +1595,10 @@ def card_row(cards):
                 state_version=self.plan.state.version,
                 warnings=self.plan.warnings,
                 params_icon=self.plan.icons.get(PROVENANCE_ICON, ""),
-                details_rows=self._export_details(),
+                details_rows=self._export_details() if self.settings.export_details else None,
                 details_icon=self.plan.icons.get(EXPORT_DETAILS_ICON, ""),
                 run_icon=self.plan.icons.get(RUN_ICON, ""),
+                how_to_run=self.settings.how_to_run,
             )
         )
 
@@ -2474,8 +2509,12 @@ def card_row(cards):
     def _full_width(self, entry: ComponentEntry) -> bool:
         """The layer asks for this tile across the whole page (cards excepted:
         a card stays in its strip)."""
+        if self._is_card(entry):
+            return False
+        if self.settings.tile_width == "full":
+            return True
         cfg = self._layer_tile(entry)
-        return bool(cfg is not None and cfg.full_width and not self._is_card(entry))
+        return bool(cfg is not None and cfg.full_width)
 
     @staticmethod
     def _is_card(entry: ComponentEntry) -> bool:
@@ -2575,6 +2614,8 @@ def card_row(cards):
     def _data_badge(self, meta: dict[str, Any]) -> str:
         """Where the tile's data came from: its collection, the rows it read,
         and as of when (the pinned commit, else the export)."""
+        if not self.settings.provenance:
+            return ""
         text = self._data_badge_text(meta)
         return f'<span class="dpx-asof">{_esc(text)}</span>' if text else ""
 

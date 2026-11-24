@@ -51,6 +51,8 @@ export interface TabView {
   sections: string[];
   /** Each section's own look, by title, as the dashboard draws its header. */
   sectionLooks: Record<string, SectionLook>;
+  /** The report's settings put every tile across the page. */
+  allFullWidth: boolean;
   tiles: TileView[];
 }
 
@@ -115,6 +117,7 @@ export function buildTabViews(tabs: ReportOutlineTab[], layer: ReportLayer): Tab
         isMain: tabIdx === 0,
         sections,
         sectionLooks,
+        allFullWidth: layer.settings?.tile_width === 'full',
         tiles: rows.map((r) => r.view),
       } satisfies TabView,
     };

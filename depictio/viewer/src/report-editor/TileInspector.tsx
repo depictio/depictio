@@ -18,6 +18,8 @@ interface TileInspectorProps {
   view: TileView;
   /** Section titles of the tile's tab. */
   sections: string[];
+  /** The report's settings put every tile across the page. */
+  widthLocked?: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
   onPatch: (patch: Partial<ReportTile>) => void;
@@ -34,6 +36,7 @@ const WIDTHS = [
 const TileInspector: React.FC<TileInspectorProps> = ({
   view,
   sections,
+  widthLocked = false,
   canMoveUp,
   canMoveDown,
   onPatch,
@@ -76,12 +79,15 @@ const TileInspector: React.FC<TileInspectorProps> = ({
               size="xs"
               fullWidth
               data={WIDTHS}
-              value={view.fullWidth ? 'full' : 'row'}
+              value={widthLocked || view.fullWidth ? 'full' : 'row'}
+              disabled={widthLocked}
               onChange={(v) => onPatch({ full_width: v === 'full' })}
               data-testid="report-tile-width"
             />
             <Text size="xs" c="dimmed">
-              {view.fullWidth
+              {widthLocked
+                ? 'Every tile is full width (Report settings).'
+                : view.fullWidth
                 ? 'Takes the whole page width; the rest of its dashboard row keeps sharing it.'
                 : 'Shares its row with the tiles beside it in the dashboard.'}
             </Text>

@@ -38,6 +38,8 @@ class QuartoFrontMatter:
     # text to an unreadable line length; a wider fixed column keeps both
     # legible. The margin grows with it so the contents stop wrapping every
     # section title onto two lines.
+    # The PDF's paper, as typst names it.
+    papersize: str = "a4"
     body_width: str = "1100px"
     margin_width: str = "300px"
     # The report's theme, as Quarto's brand (``paper_brand``), inline in the
@@ -116,7 +118,7 @@ class QuartoFrontMatter:
                 # The document's parts are h2 (no h1: the title is the page's),
                 # typst's are level 1: the results, a tab at 2, a section at 3.
                 "shift-heading-level-by": -1,
-                "papersize": "a4",
+                "papersize": self.papersize,
                 "margin": {"x": "1.9cm", "top": "2.3cm", "bottom": "2.1cm"},
                 "fig-format": "png",
                 # The references are inline CSL (``references:``), which

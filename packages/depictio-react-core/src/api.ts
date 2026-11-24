@@ -1555,6 +1555,21 @@ export interface ReportTab {
 
 /** The layer stored on a dashboard: the prose, cover and per-tile choices the
  *  report adds around what the dashboard already is. */
+/** The report's own options, for the whole document (Report settings). */
+export interface ReportSettings {
+  paper: 'a4' | 'letter';
+  landscape: boolean;
+  tile_width: 'row' | 'full';
+  viz_controls: 'popover' | 'rail' | 'header';
+  toc: boolean;
+  export_details: boolean;
+  how_to_run: boolean;
+  methods: boolean;
+  code: boolean;
+  numbering: boolean;
+  provenance: boolean;
+}
+
 export interface ReportLayer {
   intro: ReportDoc | null;
   conclusion: ReportDoc | null;
@@ -1562,6 +1577,8 @@ export interface ReportLayer {
   state: AnalysisState | null;
   revision: number;
   style: 'colour' | 'mono' | null;
+  /** Absent from a layer written before the settings existed. */
+  settings?: ReportSettings;
   tiles: ReportTile[];
   tabs: ReportTab[];
   /** The intro was drafted from the dashboard notes, not written here. */
