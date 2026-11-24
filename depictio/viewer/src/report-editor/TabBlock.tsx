@@ -5,7 +5,6 @@ import { ArrowDown, ArrowUp, ChevronRight, GripVertical, Pin } from 'lucide-reac
 import type { ReportLayer, ReportTabPlacement } from 'depictio-react-core';
 
 import { STROKE } from '../chrome/variants/glass/icons';
-import InspectorSlot from './InspectorSlot';
 import { patchTile, relocateTile, setTabPlacement } from './model';
 import type { TabView, TileView } from './model';
 import SectionBlock from './SectionBlock';
@@ -107,6 +106,9 @@ const TabBlock: React.FC<TabBlockProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedKey]);
 
+  // The tile whose settings popover is open, if any (one at a time).
+  const [settingsKey, setSettingsKey] = useState<string | null>(null);
+
   const endTileDrag = () => {
     setDragId(null);
     setOver(null);
@@ -129,6 +131,24 @@ const TabBlock: React.FC<TabBlockProps> = ({
         <TileCard
           view={view}
           selected={selected}
+          settingsOpen={settingsKey === key}
+          onSettingsChange={(open) => {
+            setSettingsKey(open ? key : null);
+            // Opening a tile's settings selects it, so the preview shows which.
+            if (open && !selected) onSelect(view.tabId, view.componentId);
+          }}
+          settings={
+            <TileInspector
+              view={view}
+              sections={tab.sections}
+              canMoveUp={i > 0}
+              canMoveDown={i < tab.tiles.length - 1}
+              onPatch={(patch) => onEdit((l) => patchTile(l, view.entry, patch))}
+              onMove={(dir) =>
+                onEdit((l) => relocateTile(l, tab, i, i + dir, tab.tiles[i + dir].section))
+              }
+            />
+          }
           thumbnail={thumbs[key]}
           dragging={dragId === view.componentId}
           dropIndicator={over?.id === view.componentId ? over.position : null}
@@ -166,18 +186,6 @@ const TabBlock: React.FC<TabBlockProps> = ({
           }}
           onDragEnd={endTileDrag}
         />
-        <InspectorSlot open={selected}>
-          <TileInspector
-            view={view}
-            sections={tab.sections}
-            canMoveUp={i > 0}
-            canMoveDown={i < tab.tiles.length - 1}
-            onPatch={(patch) => onEdit((l) => patchTile(l, view.entry, patch))}
-            onMove={(dir) =>
-              onEdit((l) => relocateTile(l, tab, i, i + dir, tab.tiles[i + dir].section))
-            }
-          />
-        </InspectorSlot>
       </React.Fragment>
     );
   };

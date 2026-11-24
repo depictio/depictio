@@ -121,6 +121,9 @@ const TileInspector: React.FC<TileInspectorProps> = ({
           data={sectionData}
           value={view.sectionOverride || OWN_SECTION}
           onChange={(v) => onPatch({ section: !v || v === OWN_SECTION ? null : v })}
+          // In the settings popover: a list portalled out of it would count
+          // as a click outside and close it.
+          comboboxProps={{ withinPortal: false }}
         />
         <Group gap="xs">
           <Button

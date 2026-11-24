@@ -373,13 +373,9 @@
 
 /* ------------------------------------------------------------- inspector */
 
+/* Drawn in the tile's settings popover, which gives it its surface. */
 .re-inspector {
-  margin-left: 16px;
-  padding: 12px 14px 14px;
-  border-radius: var(--re-radius-key);
-  border: 1px solid var(--re-line);
-  background: var(--re-surface);
-  box-shadow: var(--re-card-shadow);
+  padding: 2px;
 }
 .re-inspector-head {
   display: flex;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Badge, Box, Checkbox, Group, Paper, Text, UnstyledButton } from '@mantine/core';
+import { ActionIcon, Badge, Box, Checkbox, Group, Paper, Popover, Text, Tooltip, UnstyledButton } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { TileView } from './model';
@@ -17,6 +17,10 @@ interface TileCardProps {
   /** Where a dragged tile would land relative to this card. */
   dropIndicator: DropPosition | null;
   onSelect: () => void;
+  /** The tile's settings, shown in a popover from the card's footer. */
+  settings: React.ReactNode;
+  settingsOpen: boolean;
+  onSettingsChange: (open: boolean) => void;
   onToggleInReport: (on: boolean) => void;
   onDragStart: (event: React.DragEvent) => void;
   onDragOver: (event: React.DragEvent, position: DropPosition) => void;
@@ -45,6 +49,9 @@ const TileCard: React.FC<TileCardProps> = ({
   dragging,
   dropIndicator,
   onSelect,
+  settings,
+  settingsOpen,
+  onSettingsChange,
   onToggleInReport,
   onDragStart,
   onDragOver,
@@ -111,17 +118,15 @@ const TileCard: React.FC<TileCardProps> = ({
           data-testid="report-include-toggle"
         />
         <Icon icon={visual.icon} width={14} color={visual.color} style={{ flex: 'none' }} />
-        {/* The keyboard way to the tile's settings: the card's own click is the
-            mouse's, and the thumbnail's keys enlarge it. */}
+        {/* The title opens the tile's settings too: the keyboard way to them
+            (the card's own click selects it, the thumbnail's keys enlarge it). */}
         <UnstyledButton
           onClick={(e) => {
             e.stopPropagation();
-            onSelect();
+            onSettingsChange(!settingsOpen);
           }}
-          aria-expanded={selected}
           aria-label={`Settings for ${view.entry.title}`}
           style={{ flex: 1, minWidth: 0, display: 'flex' }}
-          data-testid="report-tile-settings"
         >
           <Text size="xs" fw={500} truncate title={view.entry.title}>
             {view.entry.title}
@@ -137,6 +142,38 @@ const TileCard: React.FC<TileCardProps> = ({
             {b}
           </Badge>
         ))}
+        <Popover
+          opened={settingsOpen}
+          onChange={onSettingsChange}
+          position="bottom-end"
+          width={380}
+          shadow="md"
+          withArrow
+          trapFocus
+          // Inside the editor's root, whose variables the settings are drawn with.
+          portalProps={{ target: '.re-root' }}
+        >
+          <Popover.Target>
+            <Tooltip label="Tile settings" withArrow openDelay={300} disabled={settingsOpen}>
+              <ActionIcon
+                size="sm"
+                variant={settingsOpen ? 'light' : 'subtle'}
+                color="gray"
+                style={{ flex: 'none' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSettingsChange(!settingsOpen);
+                }}
+                aria-label={`Settings for ${view.entry.title}`}
+                aria-expanded={settingsOpen}
+                data-testid="report-tile-settings"
+              >
+                <Icon icon="mdi:tune-variant" width={15} />
+              </ActionIcon>
+            </Tooltip>
+          </Popover.Target>
+          <Popover.Dropdown onClick={(e) => e.stopPropagation()}>{settings}</Popover.Dropdown>
+        </Popover>
       </Group>
     </Paper>
   );
