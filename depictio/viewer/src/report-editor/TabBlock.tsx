@@ -305,6 +305,7 @@ const TabBlock: React.FC<TabBlockProps> = ({
                 key={`run-${r}`}
                 tabId={tab.tabId}
                 title={name}
+                look={tab.sectionLooks[name]}
                 total={run.rows.length}
                 included={included}
                 open={isSectionOpen(name)}

@@ -75,7 +75,14 @@ def _dashboard_doc() -> dict:
         "subtitle": "Where the samples came from",
         "is_main_tab": True,
         "tab_order": 0,
-        "grid_sections": [{"name": "Overview"}],
+        "grid_sections": [
+            {
+                "name": "Overview",
+                "icon": "mdi:chart-box",
+                "color": "teal",
+                "description": "What the cohort looks like.",
+            }
+        ],
         "stored_metadata": [
             _component(
                 "fig-1",
@@ -283,6 +290,12 @@ def test_the_outline_lists_an_excluded_tile_with_its_real_settings(ctx) -> None:
     assert [e.kind for e in tab.entries] == ["section", "component", "component"]
     section, fig1, fig2 = tab.entries
     assert section.title == "Overview" and section.level is not None
+    # The section's own look, so the editor draws its header as the dashboard does.
+    assert (section.icon, section.color, section.description) == (
+        "mdi:chart-box",
+        "teal",
+        "What the cohort looks like.",
+    )
 
     assert (fig1.component_id, fig2.component_id) == ("fig-1", "fig-2")
     assert fig1.in_report is True

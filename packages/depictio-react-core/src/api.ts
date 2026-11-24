@@ -1582,6 +1582,11 @@ export interface ReportOutlineEntry {
   section: string | null;
   page_break_before: boolean;
   order: number | null;
+  /** A section's own look, as the dashboard draws its header: an Iconify id,
+   *  a Mantine palette name and the line under its title. Sections only. */
+  icon?: string | null;
+  color?: string | null;
+  description?: string | null;
 }
 
 export interface ReportOutlineTab {

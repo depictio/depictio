@@ -187,6 +187,11 @@ class ReportOutlineEntry(BaseModel):
     section: str | None = None
     page_break_before: bool = False
     order: int | None = None
+    # A section's own look, as the dashboard draws its header: an Iconify id,
+    # a Mantine palette name and the line under its title. Sections only.
+    icon: str | None = None
+    color: str | None = None
+    description: str | None = None
 
 
 class ReportOutlineTab(BaseModel):

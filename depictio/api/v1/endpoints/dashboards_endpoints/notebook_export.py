@@ -1312,6 +1312,9 @@ def notebook_export_outline(
                         tab_id=current.tab_id,
                         title=entry.text,
                         level=entry.level,
+                        icon=entry.icon,
+                        color=entry.color,
+                        description=entry.description,
                     )
                 )
             continue

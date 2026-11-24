@@ -47,7 +47,16 @@ export interface TabView {
   isMain: boolean;
   /** Section titles available to "Move to section". */
   sections: string[];
+  /** Each section's own look, by title, as the dashboard draws its header. */
+  sectionLooks: Record<string, SectionLook>;
   tiles: TileView[];
+}
+
+/** How a section's header looks: its icon, its palette name, its subtitle. */
+export interface SectionLook {
+  icon: string | null;
+  color: string | null;
+  description: string | null;
 }
 
 export function findTile(layer: ReportLayer, tabId: string, componentId: string): ReportTile | null {
@@ -79,7 +88,16 @@ export function buildTabViews(tabs: ReportOutlineTab[], layer: ReportLayer): Tab
   const views = tabs.map((tab, tabIdx) => {
     const placement = layer.tabs.find((t) => t.tab_id === tab.tab_id)?.placement ?? tab.placement;
     const order = layer.tabs.find((t) => t.tab_id === tab.tab_id)?.order ?? tab.order;
-    const sections = tab.entries.filter((e) => e.kind === 'section').map((e) => e.title);
+    const sectionEntries = tab.entries.filter((e) => e.kind === 'section');
+    const sections = sectionEntries.map((e) => e.title);
+    const sectionLooks: Record<string, SectionLook> = {};
+    for (const e of sectionEntries) {
+      sectionLooks[e.title] = {
+        icon: e.icon ?? null,
+        color: e.color ?? null,
+        description: e.description ?? null,
+      };
+    }
     const rows = tab.entries
       .filter((e) => e.kind === 'component' && e.component_id)
       .map((e, i) => ({ view: tileView(e, layer), i }));
@@ -93,6 +111,7 @@ export function buildTabViews(tabs: ReportOutlineTab[], layer: ReportLayer): Tab
         placement,
         isMain: tabIdx === 0,
         sections,
+        sectionLooks,
         tiles: rows.map((r) => r.view),
       } satisfies TabView,
     };
