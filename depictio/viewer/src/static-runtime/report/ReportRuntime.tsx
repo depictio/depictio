@@ -409,7 +409,9 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
     // A highlight draws its source as the dashboard does (highlightTile.ts):
     // under its own title, in the minimal style, not the source tab's full tile.
     const highlight = host ? highlightOf(host) : null;
-    const own = highlight ? highlightMetadata(highlight, source) : source;
+    // The bundle keys what it froze for a component (figure payload, bound
+    // data, compute) by the source's index, so the copy keeps that index.
+    const own = highlight ? { ...highlightMetadata(highlight, source), index: source.index } : source;
     const m = withReportControls(
       own,
       (tabDoc(manifest, ref.tabId) as { advanced_viz_controls?: unknown } | null)
