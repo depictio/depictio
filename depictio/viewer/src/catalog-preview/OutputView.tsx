@@ -61,6 +61,7 @@ import { ensureOutputLoaded, isLazy, isOutputLoaded } from './lazyOutput';
 import CatalogHeader from './CatalogHeader';
 import { figureHasMarks, setPreviewMarks, usePreviewMarks } from '../offline/previewMarks';
 import VersionChip from './VersionChip';
+import { firstRender, groupRenders } from './renderGroups';
 
 
 /** The colours the output's figures give a card's breakdown values (`_category_colors`,
@@ -301,7 +302,10 @@ const OutputView: React.FC<{
   const fixture = entry.fixturePreview;
   const renders = entry.renders as unknown as StoredMetadata[];
   const { paper, tone } = useCatalogPaper();
-  const [selectedIdx, setSelectedIdx] = useState(0);
+  // Opens on the first plot, whatever the authored order put first.
+  const [selectedIdx, setSelectedIdx] = useState(() =>
+    firstRender(renders.map((m) => String(m.component_type))),
+  );
   const [cardValues, setCardValues] = useState<Record<string, unknown>>({});
   const [cardSecondary, setCardSecondary] = useState<Record<string, Record<string, unknown>>>({});
   const marksOn = usePreviewMarks();
@@ -572,38 +576,57 @@ const OutputView: React.FC<{
         className="cp-switch"
         style={{ borderBottom: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}
       >
-        {renders.map((m, i) => {
-          const meta = metaFor(m.component_type);
-          const rec = m as Record<string, unknown>;
-          const variantLabel = (rec._variant as string) || meta.name;
-          const isActive = i === selectedIdx;
-          return (
-            <Button
-              key={m.index}
-              size="xs"
-              variant={isActive ? 'light' : 'subtle'}
-              // Paper: one neutral row of pills, the open render lit with the
-              // accent; the type keeps its hue on its icon only.
-              color={paper ? (isActive ? tone : 'gray') : meta.color}
-              radius={paper ? 'xl' : undefined}
-              data-active={isActive || undefined}
-              leftSection={
-                <Icon
-                  icon={meta.icon}
-                  width={13}
-                  color={paper ? `var(--mantine-color-${meta.color}-6)` : undefined}
-                />
-              }
-              onClick={() => setSelectedIdx(i)}
-              styles={{
-                root: { fontWeight: isActive ? 600 : 400, flexShrink: 0 },
-                label: { lineHeight: 1.5, overflow: 'visible' },
-              }}
-            >
-              {variantLabel}
-            </Button>
-          );
-        })}
+        {groupRenders(renders.map((m) => String(m.component_type))).map((group, gi, groups) => (
+          <React.Fragment key={group.key}>
+            {groups.length > 1 ? (
+              <Text
+                component="span"
+                size="xs"
+                c="dimmed"
+                fw={500}
+                className="cp-switch-group"
+                ml={gi === 0 ? 0 : 'xs'}
+                mr={2}
+              >
+                {group.label}
+              </Text>
+            ) : null}
+            {group.indices.map((i) => {
+              const m = renders[i];
+              const meta = metaFor(m.component_type);
+              const rec = m as Record<string, unknown>;
+              const variantLabel = (rec._variant as string) || meta.name;
+              const isActive = i === selectedIdx;
+              return (
+                <Button
+                  key={m.index}
+                  size="xs"
+                  variant={isActive ? 'light' : 'subtle'}
+                  // Paper: one neutral row of pills, the open render lit with the
+                  // accent; the type keeps its hue on its icon only.
+                  color={paper ? (isActive ? tone : 'gray') : meta.color}
+                  radius={paper ? 'xl' : undefined}
+                  data-active={isActive || undefined}
+                  data-render-index={i}
+                  leftSection={
+                    <Icon
+                      icon={meta.icon}
+                      width={13}
+                      color={paper ? `var(--mantine-color-${meta.color}-6)` : undefined}
+                    />
+                  }
+                  onClick={() => setSelectedIdx(i)}
+                  styles={{
+                    root: { fontWeight: isActive ? 600 : 400, flexShrink: 0 },
+                    label: { lineHeight: 1.5, overflow: 'visible' },
+                  }}
+                >
+                  {variantLabel}
+                </Button>
+              );
+            })}
+          </React.Fragment>
+        ))}
       </Group>
 
       {/* Preview */}
