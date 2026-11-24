@@ -17,6 +17,7 @@ import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 import { demandForItems } from './contentDemand';
 import { contrastLabel, contrastSides, resolveEffectLabel } from './deViews';
+import { barRowKeys } from './barRowKeys';
 
 /** Bar labels and axis text; the default 12 was small beside the tile's title. */
 const BAR_FONT_SIZE = 14;
@@ -309,7 +310,9 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
           type: 'bar' as const,
           orientation: 'h' as const,
           x: ranked.map((r) => r.lfc),
-          y: ranked.map((r) => r.label),
+          // Positioned on the feature, one row per bar: the label (shown as the
+          // bar's text) may repeat, and bars sharing a category overlap.
+          y: barRowKeys(ranked.map((r) => r.feat)),
           // Long names are cut here (the hover has the whole name): the text sits
           // outside the bar, in a margin of fixed width.
           text: ranked.map((r) => (r.label.length > 24 ? `${r.label.slice(0, 23)}…` : r.label)),

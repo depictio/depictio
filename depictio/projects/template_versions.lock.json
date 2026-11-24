@@ -7,8 +7,8 @@
       "content_hash": "369ff13f44f44a779cb07e3f46149b97861d9b659b4b1aebde3af1d40c51695c"
     },
     "init/catalog_conformance": {
-      "version": "3.0.4",
-      "content_hash": "28eec6a4d0d4a9127a48c93fe301c76f33274544230aab2fb07e773e473267e3",
+      "version": "3.0.5",
+      "content_hash": "8704ff93a094cbfdba2859c6c003fac6d07005345a2298a496ca2c49acb5782e",
       "catalog": {
         "adapterremoval": "1.1.0",
         "agat": "1.1.1",
@@ -57,7 +57,7 @@
         "fusioninspector": "1.1.0",
         "fusionreport": "1.1.0",
         "genomescope": "1.1.1",
-        "gsea": "1.1.0",
+        "gsea": "1.1.1",
         "gtdbtk": "1.1.0",
         "gtf": "1.1.1",
         "hamronization": "1.1.1",
@@ -303,11 +303,11 @@
       }
     },
     "nf-core/differentialabundance/2.0.0": {
-      "version": "1.3.1",
-      "content_hash": "3974f929c3270f36cb0fcba55870ce1286c581cf18432cf0b649c757d3cab705",
+      "version": "1.3.2",
+      "content_hash": "7a75b7fdaa8fa17e92e9f91605fbafa6e4acbb7278c45eb356126141a764b988",
       "catalog": {
         "deseq2": "1.1.1",
-        "gsea": "1.1.0"
+        "gsea": "1.1.1"
       }
     },
     "nf-core/drop/1.0.0": {
