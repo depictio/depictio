@@ -335,6 +335,11 @@ class UserBaseUI(UserBase):
     # Set when an admin created the account with a password the person did not
     # choose; cleared by the first password change.
     must_change_password: bool = False
+    # True once someone chose this account's credentials: seeded from
+    # DEPICTIO_BOOTSTRAP_ADMIN_*, or claimed in single-user mode. The
+    # zero-config default admin (admin@example.com, random password) starts
+    # False, so its owner can claim it once without a current password.
+    credentials_claimed: bool = False
 
 
 class User(UserBaseUI):
@@ -379,6 +384,7 @@ class User(UserBaseUI):
             display_name=self.display_name,
             sso_provider=self.sso_provider,
             must_change_password=self.must_change_password,
+            credentials_claimed=self.credentials_claimed,
         )
         return userbaseui
 
@@ -556,6 +562,31 @@ class RequestAdminCreateUser(BaseModel):
     def reject_hashed_password(cls, v):
         if v.startswith("$2b$"):
             raise ValueError("Password must be sent in plaintext, not pre-hashed")
+        return v
+
+
+class RequestAdminCredentials(BaseModel):
+    """Single-user mode: the owner names the default admin's email and password.
+
+    ``current_password`` is only needed once the credentials were claimed: the
+    zero-config admin's password is random, so nobody could supply it.
+    """
+
+    email: EmailStr
+    new_password: str = Field(min_length=8)
+    current_password: str | None = Field(default=None, max_length=128)
+
+    @field_validator("new_password", "current_password")
+    def reject_hashed_password(cls, v):
+        if v is not None and v.startswith("$2b$"):
+            raise ValueError("Password must be sent in plaintext, not pre-hashed")
+        return v
+
+    @field_validator("new_password")
+    def fits_bcrypt(cls, v):
+        # bcrypt refuses more than 72 bytes; counted in bytes, not characters.
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("Password must be at most 72 bytes long")
         return v
 
 

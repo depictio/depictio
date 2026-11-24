@@ -290,6 +290,7 @@ class TestLogin:
         user = _user()
         mock_settings = MagicMock()
         mock_settings.auth.is_single_user_mode = False
+        mock_settings.auth.is_public_mode = False
         mock_settings.auth.is_password_login_disabled = False
 
         with (
@@ -317,6 +318,7 @@ class TestLogin:
         user = _user()
         mock_settings = MagicMock()
         mock_settings.auth.is_single_user_mode = False
+        mock_settings.auth.is_public_mode = False
         mock_settings.auth.is_password_login_disabled = False
 
         with (

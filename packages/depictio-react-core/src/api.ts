@@ -4837,6 +4837,10 @@ export interface AuthStatusResponse {
      *  choose. The SPA sends them to their profile to replace it. Older
      *  backends omit it, which reads as "no". */
     must_change_password?: boolean;
+    /** Someone chose this account's credentials. In single-user mode, false
+     *  means the default admin still has its random password and the SPA
+     *  offers to set one. Older backends omit it, which reads as "no". */
+    credentials_claimed?: boolean;
   } | null;
   is_public_mode: boolean;
   is_single_user_mode: boolean;
@@ -4859,6 +4863,10 @@ export interface AuthStatusResponse {
    *  temporary session, ask for the code first. Older backends omit this —
    *  treat absent as `false`. */
   public_access_code_required?: boolean;
+  /** Public mode: offer guests an "Admin sign-in" link to the password form,
+   *  even without a single sign-on provider. Older backends omit this — treat
+   *  absent as `false`. */
+  public_admin_sign_in?: boolean;
   /** Enabled OpenID Connect providers, in display order. Older backends omit
    *  this — treat absent as `[]`. */
   sso_providers?: SsoProvider[];
@@ -9862,6 +9870,27 @@ export async function editPassword(oldPassword: string, newPassword: string): Pr
     body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Password update failed');
+}
+
+/** Single-user mode: set the default admin's email and password, the
+ *  credentials the password form accepts if the instance goes public.
+ *  `currentPassword` is needed once they were set before. Throws
+ *  Error(<detail>) on non-200. */
+export async function setAdminCredentials(
+  email: string,
+  newPassword: string,
+  currentPassword?: string,
+): Promise<{ email: string }> {
+  const res = await authFetch(`${API_BASE}/auth/me/admin_credentials`, {
+    method: 'POST',
+    body: JSON.stringify({
+      email,
+      new_password: newPassword,
+      current_password: currentPassword || null,
+    }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Could not save the admin credentials');
+  return (await res.json()) as { email: string };
 }
 
 // ---- Profile picture -------------------------------------------------------

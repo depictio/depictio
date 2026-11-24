@@ -11,6 +11,7 @@ from depictio.cli.cli.utils.api_calls import (
 )
 from depictio.cli.cli.utils.common import (
     describe_api_target,
+    generate_api_headers,
     load_depictio_config,
     report_login_failure,
     report_unreachable,
@@ -482,3 +483,55 @@ def sync(
             "error",
         )
         raise typer.Exit(code=2)
+
+
+@app.command("set-admin-credentials")
+def set_admin_credentials(
+    email: Annotated[str, typer.Option("--email", help="The admin's email address.")],
+    ask_current: Annotated[
+        bool,
+        typer.Option(
+            "--ask-current",
+            help="Ask for the current password: needed once the credentials were set before.",
+        ),
+    ] = False,
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
+):
+    """
+    Choose the email and password of a single-user server's admin.
+
+    A single-user server signs everyone in as its admin, whose password nobody
+    knows at first. These are the credentials its sign-in form accepts if the
+    server is switched to public mode. The password is asked for, never passed
+    on the command line.
+    """
+    rich_print_command_usage("config set-admin-credentials")
+    config_path = resolve_server(server, CLI_config_path)
+    cli_config = load_depictio_config(yaml_config_path=config_path, quiet=True)
+    current = typer.prompt("Current password", hide_input=True) if ask_current else None
+    new_password = typer.prompt("New password", hide_input=True, confirmation_prompt=True)
+    try:
+        response = httpx.post(
+            f"{cli_config.api_base_url}/depictio/api/v1/auth/me/admin_credentials",
+            headers=generate_api_headers(cli_config),
+            json={"email": email, "new_password": new_password, "current_password": current},
+            timeout=30,
+        )
+    except httpx.HTTPError as exc:
+        report_unreachable(config_path, exc)
+        raise typer.Exit(code=1) from exc
+    if response.status_code != 200:
+        try:
+            detail = response.json().get("detail")
+        except ValueError:
+            detail = response.text
+        rich_print_checked_statement(f"Not saved: {detail}", "error")
+        if response.status_code == 400 and not ask_current:
+            rich_print_checked_statement(
+                "If these credentials were set before, run again with --ask-current", "info"
+            )
+        raise typer.Exit(code=1)
+    rich_print_checked_statement(
+        f"Admin credentials saved for {response.json().get('email', email)}", "success"
+    )

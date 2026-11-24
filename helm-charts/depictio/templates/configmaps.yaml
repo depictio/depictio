@@ -55,6 +55,10 @@ data:
   # fully configured, so a half-done configuration cannot lock every user out. Not a secret, so it
   # belongs here; the public-mode access code does not (see secrets.yaml).
   DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED: {{ .Values.backend.env.DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED | default "false" | quote }}
+  # Public mode: offer guests an "Admin sign-in" link to the password form. On
+  # unless set; `default` would read an unquoted false as unset, hence kindIs.
+  {{- $adminSignIn := .Values.backend.env.DEPICTIO_AUTH_PUBLIC_ADMIN_SIGN_IN }}
+  DEPICTIO_AUTH_PUBLIC_ADMIN_SIGN_IN: {{ if kindIs "invalid" $adminSignIn }}"true"{{ else }}{{ $adminSignIn | toString | quote }}{{ end }}
   DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: {{ .Values.backend.env.DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL | default "anonymous@example.com" | quote }}
   DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: {{ .Values.backend.env.DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS | default "24" | quote }}
 

@@ -15,7 +15,10 @@ from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import (
     _generate_agent_config,
     export_agent_config,
 )
-from depictio.api.v1.endpoints.user_endpoints.core_functions import _create_user_in_db
+from depictio.api.v1.endpoints.user_endpoints.core_functions import (
+    _create_user_in_db,
+    _default_admin,
+)
 from depictio.api.v1.endpoints.user_endpoints.token_utils import create_default_token
 from depictio.api.v1.endpoints.user_endpoints.utils import (
     _ensure_mongodb_connection,
@@ -800,6 +803,30 @@ async def _resolve_existing_admin_token(
     }
 
 
+async def _backfill_credentials_claimed(admin_user: UserBeanie) -> None:
+    """Give an admin stored before ``credentials_claimed`` existed its real value.
+
+    A missing field reads as ``False`` (claimable without a password), which is
+    right only for the zero-config admin: ``admin@example.com`` with a random
+    password nobody knows (or the old public ``changeme``). Any other admin, or
+    one an operator still declares through ``DEPICTIO_BOOTSTRAP_ADMIN_*``, has a
+    password somebody chose, and a free claim would let anyone replace it.
+    """
+    if await UserBeanie.find_one({"_id": admin_user.id, "credentials_claimed": {"$exists": True}}):
+        return
+    declared = bool(
+        settings.bootstrap.admin_email.strip()
+        and settings.bootstrap.admin_password.get_secret_value()
+        and not settings.bootstrap.admin_password_generated
+    )
+    admin_user.credentials_claimed = declared or admin_user.email != "admin@example.com"
+    await admin_user.save()
+    logger.info(
+        "Admin stored before credentials_claimed existed: set to %s.",
+        admin_user.credentials_claimed,
+    )
+
+
 async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | None]:
     """Seed the admin (and optional CI test user) from env-driven bootstrap.
 
@@ -811,11 +838,17 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
     """
     # Look up any non-anonymous admin; if one is in the DB we never touch
     # their password, so operator-set rotations survive container restarts.
-    admin_user = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
+    admin_user = await _default_admin()
 
     if admin_user is None:
         admin_email = settings.bootstrap.admin_email.strip()
         admin_password = settings.bootstrap.admin_password.get_secret_value()
+        # An operator who set both env vars chose these credentials; every
+        # fallback below makes up a password nobody knows, which the owner
+        # claims later (POST /auth/me/admin_credentials, single-user mode).
+        credentials_claimed = bool(
+            admin_email and admin_password and not settings.bootstrap.admin_password_generated
+        )
         if not admin_email or not admin_password:
             if settings.auth.is_single_user_mode or settings.auth.is_public_mode:
                 # Single-user mode has no login UI — the anonymous auto-login
@@ -869,13 +902,12 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
             email=admin_email,
             password=admin_password,
             is_admin=True,
+            credentials_claimed=credentials_claimed,
         )
         if not payload or not payload.get("success"):
             # Race: another worker won the create_user. Fall back to the
             # already-stored admin and continue.
-            admin_user = await UserBeanie.find_one(
-                {"is_admin": True, "is_anonymous": {"$ne": True}}
-            )
+            admin_user = await _default_admin()
             if admin_user is None:
                 raise RuntimeError(
                     f"Failed to seed bootstrap admin: {payload.get('message') if payload else 'unknown'}"
@@ -888,6 +920,7 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
             "Existing admin user found in MongoDB — skipping bootstrap seed: %s",
             admin_user.email,
         )
+        await _backfill_credentials_claimed(admin_user)
 
     # Optional: seed the CI / Cypress fixture user. Off by default; production
     # values files leave seed_test_user=false so no known-credentials account

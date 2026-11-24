@@ -17,10 +17,12 @@ Design notes:
 
 from __future__ import annotations
 
+import hashlib
 import time
 from typing import Any
 
 from fastapi import HTTPException, Request
+from pydantic import EmailStr, TypeAdapter, ValidationError
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.services.redis_client import get_shared_redis_client
@@ -66,21 +68,39 @@ def _window_key(endpoint: str, scope: str) -> str:
     return f"depictio:ratelimit:{endpoint}:{scope}:{window_id}"
 
 
+_LIMITER_UNAVAILABLE = "Sign-in is temporarily unavailable; please retry in a moment."
+
+
+def _limiter_down(error: Exception | None, *, fail_closed: bool) -> None:
+    """Redis is unreachable: let the request through, or refuse it (503)."""
+    if fail_closed:
+        logger.error(f"Auth rate limiter unavailable ({error}); refusing request (fail-closed).")
+        raise HTTPException(status_code=503, detail=_LIMITER_UNAVAILABLE)
+    logger.warning(f"Auth rate limiter Redis error ({error}); allowing request (fail-open).")
+
+
 def enforce_rate_limit(
-    request: Request, endpoint: str, *, max_calls: int = _RATE_MAX_CALLS
+    request: Request,
+    endpoint: str,
+    *,
+    max_calls: int = _RATE_MAX_CALLS,
+    fail_closed: bool = False,
 ) -> None:
     """Rate-limit ``endpoint`` per client IP using a Redis fixed window.
 
     Allows up to ``max_calls`` calls per ``_RATE_WINDOW_SECS`` window per
     ``(client_ip, endpoint)``. Raises HTTP 429 when exceeded.
 
-    FAIL-OPEN: any Redis error (unreachable, timeout) allows the request through
-    so an outage cannot lock everyone out of auth.
+    FAIL-OPEN by default: any Redis error (unreachable, timeout) allows the
+    request through so an outage cannot lock everyone out of auth. With
+    ``fail_closed`` it is a 503 instead: for a door the whole internet can
+    reach (password sign-in on a public instance), unlimited guessing during an
+    outage is worse than a sign-in that waits for Redis.
     """
     client_ip = _client_ip(request)
     client = _get_redis_client()
     if client is None:
-        # Fail open — Redis unavailable.
+        _limiter_down(None, fail_closed=fail_closed)
         return
 
     # Bucket the window so the key naturally rolls over; INCR then EXPIRE makes
@@ -93,8 +113,8 @@ def enforce_rate_limit(
             # First hit in this window — set expiry so the counter self-cleans.
             client.expire(key, _RATE_WINDOW_SECS)
     except Exception as e:
-        # FAIL-OPEN on any Redis error during the check itself.
-        logger.warning(f"Auth rate limiter Redis error ({e}); allowing request (fail-open).")
+        # Redis error during the check itself: open, unless asked to close.
+        _limiter_down(e, fail_closed=fail_closed)
         return
 
     if int(count) > max_calls:
@@ -160,3 +180,80 @@ def record_failure(request: Request, endpoint: str) -> None:
                 client.expire(key, _RATE_WINDOW_SECS)
     except Exception as e:
         logger.warning(f"Auth rate limiter Redis error ({e}); failure not counted.")
+
+
+# ---------------------------------------------------------------------------
+# Per-account lockout, for password sign-in on a public instance.
+#
+# The per-IP limit above does not stop a guesser spread over many addresses
+# from working on one known email (the admin's). This counts wrong passwords
+# per account, whatever the address: after ``_LOCKOUT_MAX_FAILURES`` within
+# ``_LOCKOUT_WINDOW_SECS`` that account's password sign-in is refused until the
+# window ends. Someone can therefore lock an admin out for a window by failing
+# on purpose; single sign-on is not affected. The email is hashed so keys never
+# hold an address.
+# ---------------------------------------------------------------------------
+
+_LOCKOUT_WINDOW_SECS = 15 * 60
+_LOCKOUT_MAX_FAILURES = 5
+
+
+_EMAIL = TypeAdapter(EmailStr)
+
+
+def _lockout_key(email: str) -> str:
+    # Normalised as the account lookup normalises it (`EmailStr`: Unicode NFKC,
+    # IDNA domain), or every spelling that reaches the same account, such as a
+    # fullwidth domain, would get a counter of its own. A string that is no
+    # email reaches no account; its own bucket is harmless.
+    try:
+        normalised = str(_EMAIL.validate_python(email.strip()))
+    except ValidationError:
+        normalised = email.strip()
+    digest = hashlib.sha256(normalised.lower().encode()).hexdigest()
+    return f"depictio:lockout:login:{digest}"
+
+
+def enforce_account_lockout(email: str, *, fail_closed: bool = False) -> None:
+    """Refuse (401, as a wrong password would) while this account is locked."""
+    client = _get_redis_client()
+    if client is None:
+        _limiter_down(None, fail_closed=fail_closed)
+        return
+    try:
+        failures = int(client.get(_lockout_key(email)) or 0)
+    except Exception as e:
+        _limiter_down(e, fail_closed=fail_closed)
+        return
+    if failures >= _LOCKOUT_MAX_FAILURES:
+        logger.warning("Password sign-in refused: account locked after repeated failures.")
+        # Same answer as a wrong password: a distinct one would confirm that the
+        # email has an account.
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+
+def record_account_failure(email: str) -> None:
+    """Count one wrong password for this account."""
+    client = _get_redis_client()
+    if client is None:
+        return
+    try:
+        key = _lockout_key(email)
+        # The window is set before the count: INCR keeps a TTL, so no crash or
+        # error between two calls can leave a counter that never expires (an
+        # account locked for good).
+        client.set(key, 0, ex=_LOCKOUT_WINDOW_SECS, nx=True)
+        client.incr(key)
+    except Exception as e:
+        logger.warning(f"Auth rate limiter Redis error ({e}); failure not counted.")
+
+
+def clear_account_failures(email: str) -> None:
+    """A successful sign-in starts the count again."""
+    client = _get_redis_client()
+    if client is None:
+        return
+    try:
+        client.delete(_lockout_key(email))
+    except Exception as e:
+        logger.warning(f"Auth rate limiter Redis error ({e}); failures not cleared.")

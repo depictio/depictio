@@ -482,8 +482,13 @@ def resolve_user(user: Any = None) -> ExportUser:
             is_anonymous=bool(getattr(user, "is_anonymous", False)),
         )
 
-    query: dict[str, Any] = {"email": user} if isinstance(user, str) else {"is_admin": True}
-    doc = _db().users_collection.find_one(query)
+    # No email: the default admin, as `_default_admin()` resolves it (oldest by _id).
+    query: dict[str, Any] = (
+        {"email": user}
+        if isinstance(user, str)
+        else {"is_admin": True, "is_anonymous": {"$ne": True}}
+    )
+    doc = _db().users_collection.find_one(query, sort=[("_id", 1)])
     if not doc:
         target = f"user {user!r}" if isinstance(user, str) else "an admin user"
         raise ProducerAError(f"cannot resolve {target} in users_collection")

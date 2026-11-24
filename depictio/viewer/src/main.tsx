@@ -103,6 +103,7 @@ import { initGoogleAnalytics } from './googleAnalytics';
 import { trackPageView } from './usageBeacon';
 import { CoachHost } from './coach';
 import { MigrationPushHost } from './projects/MigrationPushHost';
+import AdminCredentialsNotice from './profile/AdminCredentialsNotice';
 
 /** Served by `depictio project-builder <dir>` (or `vite dev` with
  *  VITE_PROJECT_BUILDER_STANDALONE=1): every route is the builder, and none
@@ -269,6 +270,7 @@ function ThemeRoot({
               <>
                 <CoachHost />
                 <MigrationPushHost />
+                <AdminCredentialsNotice />
               </>
             )}
           </DatesProvider>

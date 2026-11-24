@@ -777,6 +777,9 @@ def server_env(
             "DEPICTIO_AUTH_CLI_CONFIG_DIR": str(paths.home / "cli"),
             "DEPICTIO_BOOTSTRAP_ADMIN_EMAIL": ADMIN_EMAIL,
             "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD": secret_values["admin_password"],
+            # Made up here and kept in secrets.json, never shown: the owner
+            # still chooses the admin's credentials (Account settings).
+            "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD_GENERATED": "true",
             "DEPICTIO_MONGODB_SERVICE_NAME": host,
             "DEPICTIO_MONGODB_SERVICE_PORT": str(ports["mongo"]),
             "DEPICTIO_MONGODB_EXTERNAL_PORT": str(ports["mongo"]),

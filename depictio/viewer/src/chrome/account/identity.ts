@@ -1,4 +1,4 @@
-import { canGuestSignIn } from '../../auth/guestSignIn';
+import { ADMIN_SIGN_IN_LABEL, canAdminSignIn, canGuestSignIn } from '../../auth/guestSignIn';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { useMyAvatar } from './avatar';
 
@@ -22,6 +22,9 @@ export interface AccountIdentity {
   /** Anonymous on an instance that has a login, or a guest on a public one
    *  that has an identity provider: offer Sign in instead. */
   signIn: boolean;
+  /** The words on that entry: "Sign in", or "Admin sign-in" on a public
+   *  instance whose password form only admits its admins. */
+  signInLabel: string;
   /** The line that names the reader: the email, or the mode they run in. */
   name: string;
   /** Initials for an avatar, or null when there is no one to initial. */
@@ -34,15 +37,18 @@ export function useAccountIdentity(): AccountIdentity {
   const me = useCurrentUser();
   const { user, authMode, isPublicMode, isDemoMode, loading } = me;
   const avatarUrl = useMyAvatar();
+  const guest = {
+    loading,
+    isPublicMode,
+    isDemoMode,
+    isGuest: Boolean(user?.is_temporary),
+    providers: me.ssoProviders,
+  };
+  const adminOnly = canAdminSignIn({ ...guest, adminSignIn: me.publicAdminSignIn });
   const signIn =
     (!loading && !user && authMode === 'standard' && !isPublicMode && !isDemoMode) ||
-    canGuestSignIn({
-      loading,
-      isPublicMode,
-      isDemoMode,
-      isGuest: Boolean(user?.is_temporary),
-      providers: me.ssoProviders,
-    });
+    canGuestSignIn(guest) ||
+    adminOnly;
   const name =
     authMode === 'single_user'
       ? 'Single user mode'
@@ -52,6 +58,7 @@ export function useAccountIdentity(): AccountIdentity {
   return {
     loading,
     signIn,
+    signInLabel: adminOnly ? ADMIN_SIGN_IN_LABEL : 'Sign in',
     name,
     mono: user && authMode === 'standard' ? initialsOf(user.email) : null,
     avatarUrl: user ? avatarUrl : null,

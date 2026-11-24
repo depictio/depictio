@@ -119,6 +119,8 @@ def test_no_secret_value_reaches_the_debug_log(paths, debug, monkeypatch, answer
     assert envs["s3"]["AWS_SECRET_ACCESS_KEY"] == secret_values["s3_password"]
     assert envs["api"]["DEPICTIO_S3_ROOT_PASSWORD"] == secret_values["s3_password"]
     assert envs["api"]["DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD"] == secret_values["admin_password"]
+    # Machine-made: the owner still claims the admin in Account settings.
+    assert envs["api"]["DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD_GENERATED"] == "true"
     logged = debug.text
     for secret in [
         *secret_values.values(),

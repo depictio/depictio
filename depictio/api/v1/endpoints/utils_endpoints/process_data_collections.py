@@ -85,7 +85,10 @@ def sync_process_initial_data_collections() -> dict[str, Any]:
     projects_collection = db["projects"]
 
     # Get the admin user
-    admin_user = users_collection.find_one({"is_admin": True})
+    # The default admin, as `_default_admin()` resolves it (oldest by _id).
+    admin_user = users_collection.find_one(
+        {"is_admin": True, "is_anonymous": {"$ne": True}}, sort=[("_id", 1)]
+    )
     if not admin_user:
         logger.error("No admin user found in the database")
         return {"success": False, "message": "No admin user found in the database"}
