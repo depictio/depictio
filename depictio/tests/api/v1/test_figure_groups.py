@@ -636,3 +636,51 @@ class TestFacetTidy:
         fig.add_annotation(text="author's own note", x=0.5, y=0.5)
         tidy_facet_layout(fig)
         assert [a.text for a in fig.layout.annotations] == ["author's own note"]
+
+
+class TestSplitTook:
+    """Whether a figure was really cut by the split column (#1476): the viewer
+    draws the figure once per group when it was not."""
+
+    def _frame(self):
+        import pandas as pd
+
+        return pd.DataFrame(
+            {"x": ["a", "b", "a", "b"], "y": [1, 2, 3, 4], GROUP_COLUMN: ["A", "A", "B", "B"]}
+        )
+
+    def test_a_faceted_figure_is_split(self):
+        import plotly.express as px
+
+        from depictio.api.v1.services.figure.groups import split_took
+
+        fig = px.bar(self._frame(), x="x", y="y", facet_col=GROUP_COLUMN)
+        assert split_took(fig, GROUP_COLUMN) is True
+
+    def test_a_chart_type_without_facets_is_not(self):
+        import plotly.express as px
+
+        from depictio.api.v1.services.figure.groups import split_took
+
+        # px.pie takes no facet_col: the kwargs filter drops it, the figure is whole.
+        fig = px.pie(self._frame(), names="x", values="y", color=GROUP_COLUMN)
+        assert split_took(fig, GROUP_COLUMN) is False
+
+    def test_a_figure_faceted_on_another_column_is_not(self):
+        import plotly.express as px
+
+        from depictio.api.v1.services.figure.groups import split_took
+
+        fig = px.bar(self._frame(), x="x", y="y", facet_col="x")
+        assert split_took(fig, GROUP_COLUMN) is False
+
+    def test_read_after_the_facet_labels_are_tidied(self):
+        import plotly.express as px
+
+        from depictio.api.v1.services.figure.groups import split_took, tidy_facet_layout
+
+        fig = px.bar(self._frame(), x="x", y="y", facet_col=GROUP_COLUMN)
+        assert split_took(fig, GROUP_COLUMN) is True
+        tidy_facet_layout(fig)
+        # Tidying strips the "column=" prefix, so the check runs before it.
+        assert all("=" not in (a.text or "") for a in fig.layout.annotations)

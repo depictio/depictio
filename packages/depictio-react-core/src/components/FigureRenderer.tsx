@@ -31,6 +31,7 @@ import { useNewItemIds } from '../hooks/useNewItemIds';
 import { useTransientFlag } from '../hooks/useTransientFlag';
 import { panelsForGrouping, type PanelSpec } from '../splitPanels';
 import SplitPanels from './advanced_viz/SplitPanels';
+import { drawnOncePerPanel, splitPanelsUsable } from '../figureSplit';
 import { InSplitPanelContext } from './advanced_viz/AdvancedVizExtras';
 import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
@@ -93,10 +94,6 @@ interface FigureRendererProps {
 
 const NOOP = () => {};
 
-/** A code figure that does not spread the group kwargs itself. */
-const codeIgnoresGroups = (metadata: StoredMetadata): boolean =>
-  metadata.mode === 'code' && !/depictio_group|__depictio_group__/.test(String(metadata.code_content ?? ''));
-
 /**
  * Renders a Plotly figure component. Server-side path: FastAPI calls
  * `_create_figure_from_data` (the same function the Dash callback uses) and
@@ -123,18 +120,21 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   sourceLink,
   bare = false,
 }) => {
-  // The "what's new" split of a code figure (#1397): the server never rewrites
-  // code, so the whole figure is drawn once per side instead, each from that
-  // side's rows (the advanced viz `SplitPanels`, one filter per panel). A code
-  // figure that spreads `depictio_group_kwargs` splits itself.
+  const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
+  const [renderMeta, setRenderMeta] = useState<FigureResponse['metadata'] | null>(null);
+  // Split a figure the server cannot cut (#1397, #1476): the whole figure is
+  // drawn once per group instead, each from that group's rows (the advanced
+  // viz `SplitPanels`, one filter per panel). A code figure that never names
+  // the groups, or a chart type with no facets, splits at once; any other UI
+  // figure after the server answered that its split did not take.
   const splitPanelsKey =
-    !bare && groupRender?.keepColor && groupRender.display === 'facet' && codeIgnoresGroups(metadata)
+    !bare && groupRender?.display === 'facet'
       ? JSON.stringify(panelsForGrouping(groupRender, filters))
       : '[]';
   const codePanels = useMemo(() => JSON.parse(splitPanelsKey) as PanelSpec[], [splitPanelsKey]);
-  const splitting = codePanels.length > 0;
-  const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
-  const [renderMeta, setRenderMeta] = useState<FigureResponse['metadata'] | null>(null);
+  const splitting =
+    splitPanelsUsable(codePanels.length, Boolean(groupRender?.keepColor)) &&
+    drawnOncePerPanel(metadata, renderMeta?.group_split);
   // User opted to render every point for this component (bypasses the cap).
   // Reset whenever the filters change so a new slice starts capped again.
   const [fullLoad, setFullLoad] = useState(false);
@@ -647,7 +647,9 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   if (!groupedBadgeLabel && renderMeta?.column_colored) {
     groupedBadgeLabel = `by ${renderMeta.column_colored}`;
   }
-  const groupedBadge = groupedBadgeLabel ? (
+  // Drawn once per group, the tile is split whatever an earlier whole render
+  // said about it: no badge, and it counts as grouped in the Analysis panel.
+  const groupedBadge = groupedBadgeLabel && !splitting ? (
     <GroupStatusBadge
       label={groupedBadgeLabel}
       colored={groupColored || Boolean(renderMeta?.column_colored)}
@@ -663,7 +665,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   // server has answered for them. A column override is a different question.
   useReportGroupReach(
     metadata.index,
-    groupRender?.colorByGroup && groupStatus ? groupColored : null,
+    groupRender?.colorByGroup && (splitting || groupStatus) ? splitting || groupColored : null,
   );
 
   // Publish the sample/full state so the chrome can render the "load all points"

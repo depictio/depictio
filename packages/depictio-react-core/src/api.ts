@@ -2208,6 +2208,10 @@ export interface FigureResponse {
     /** Column the figure was actually colored by (global "Color by" mode),
      *  null/absent when the override didn't apply to this frame. */
     column_colored?: string | null;
+    /** Whether an asked Split really cut the figure; false when it was
+     *  grouped but came out whole (a chart type Plotly cannot facet). Null
+     *  when no split was asked or nothing was grouped. */
+    group_split?: boolean | null;
     /** Grid rows this figure's content needs, one count the client cannot
      *  make, since a Plotly figure fills whatever box it is given. Sent for the
      *  categorical visu types (bar, box, violin) and absent everywhere else;

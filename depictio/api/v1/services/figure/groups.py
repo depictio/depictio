@@ -536,6 +536,22 @@ def with_overall_rows(grouped: Any, annotated: Any) -> Any:
     return pl.concat([overall, grouped], how="vertical_relaxed")
 
 
+def split_took(fig: Any, column: str) -> bool:
+    """Whether ``fig`` came out cut into one panel per value of ``column``.
+
+    Plotly Express labels each facet ``<column>=<value>``; a chart type with no
+    ``facet_col`` (pie, sunburst, treemap, polar, 3D...) silently drops the
+    kwarg and draws one whole figure. Read before ``tidy_facet_layout``, which
+    strips that prefix. The viewer then draws such a figure once per group.
+    """
+    layout = getattr(fig, "layout", None)
+    prefix = f"{column}="
+    for annotation in getattr(layout, "annotations", None) or ():
+        if str(getattr(annotation, "text", "") or "").startswith(prefix):
+            return True
+    return False
+
+
 def tidy_facet_layout(fig: Any) -> Any:
     """Make a faceted figure readable inside a dashboard tile.
 

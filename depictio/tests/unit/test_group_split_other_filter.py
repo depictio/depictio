@@ -98,3 +98,28 @@ def test_other_through_a_link_that_matched_nothing_adds_no_filter(monkeypatch):
         access_token="t",
     )
     assert extra == []
+
+
+def test_the_render_endpoints_keep_the_exclusion_when_cleaning_filters():
+    """``clean_filter_payload`` rebuilds every filter the render endpoints load
+    with: an "Other" panel that lost its flag drew the group itself."""
+    from depictio.api.v1.deltatables_utils import clean_filter_payload, filter_excludes
+
+    (kept,) = clean_filter_payload(
+        [
+            {
+                "index": "link_x",
+                "value": ["s1"],
+                "metadata": {
+                    "column_name": "sample",
+                    "interactive_component_type": "MultiSelect",
+                    "exclude": True,
+                },
+            }
+        ]
+    )
+    assert filter_excludes(kept)
+    (plain,) = clean_filter_payload(
+        [{"value": ["s1"], "column_name": "sample", "interactive_component_type": "MultiSelect"}]
+    )
+    assert "exclude" not in plain

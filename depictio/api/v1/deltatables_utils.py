@@ -1431,6 +1431,9 @@ def clean_filter_payload(filters: list[dict] | None) -> list[dict]:
             entry["filter_expr"] = filter_expr
         if (f.get("source") or meta.get("source")) == GENOME_SELECTION_SOURCE:
             entry["source"] = GENOME_SELECTION_SOURCE
+        # A split's "Other" panel keeps the rows NOT in these values.
+        if filter_excludes(f):
+            entry["exclude"] = True
         if entry["interactive_component_type"] == "Slider":
             # The comparison the component asked for (``gte`` when absent):
             # dropping it here made every dashboard render apply ``>=`` whatever

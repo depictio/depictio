@@ -199,6 +199,7 @@ def build_figure_preview(payload: dict) -> dict:
         sanitize_color_by_column,
         sanitize_group_defs,
         sanitize_grouping_display,
+        split_took,
         tidy_facet_layout,
         with_overall_rows,
     )
@@ -628,6 +629,15 @@ def build_figure_preview(payload: dict) -> dict:
     # figure has facets is a property of the figure, not of the request, and a
     # code figure may lay its own out with grouping switched off entirely. The
     # helper reads the axes and returns untouched when there is one panel.
+    # Whether a Split asked of this figure really cut it (#1476). None when no
+    # split was asked or nothing was grouped; False tells the viewer to draw the
+    # figure once per group instead (a chart type Plotly cannot facet).
+    group_split: bool | None = None
+    if grouping_display == "facet" and (group_colored or column_colored):
+        try:
+            group_split = split_took(fig, GROUP_COLUMN if group_colored else str(column_colored))
+        except Exception as exc:
+            logger.warning(f"celery_tasks.build_figure_preview: split check skipped: {exc}")
     try:
         tidy_facet_layout(fig)
     except Exception as exc:  # never lose a figure to its own tidying
@@ -761,6 +771,8 @@ def build_figure_preview(payload: dict) -> dict:
         # Column the global "Color by" override actually applied to this frame
         # (None when the frame doesn't carry the column or the mode is off).
         "column_colored": column_colored,
+        # Whether the asked Split cut the figure (see above).
+        "group_split": group_split,
         # Per-stage timings ride back through both the inline and the Celery
         # result-backend paths; the render endpoint lifts them into X-* headers
         # for the benchmark harness. Unknown key — the React client ignores it.
