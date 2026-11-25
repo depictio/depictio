@@ -2892,3 +2892,83 @@ def test_a_frozen_upset_compute_sends_the_dashboards_track_pins():
     assert payload["category_colors"] == {"Phylum": {"Bacillota": "#40c057"}}
     comp.pop(producer_a._FOLD_COLORS_KEY)
     assert "category_colors" not in producer_a.celery_compute_request(comp)[1]
+
+
+# ---------------------------------------------------------------------------
+# Public bundle (#1480): what a visitor of a public project downloads
+# ---------------------------------------------------------------------------
+
+_EMAIL_RE = __import__("re").compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+
+
+def test_a_public_bundle_names_no_one_and_ships_no_author_code(
+    offline_stack: dict[str, list],
+):
+    """Built as the project's owner but without their email, the public bundle
+    has no ``exported_by``; its code figure is frozen (never a replayable
+    prologue) and its source is gone from the shipped document."""
+    result = export_manifest(
+        str(DASHBOARD_OID), ExportUser(id=ObjectId(), is_admin=True), public=True
+    )
+    manifest = result.manifest
+    assert manifest is not None
+    assert manifest.provenance.exported_by is None
+    shipped = manifest.model_dump_json()
+    assert _EMAIL_RE.search(shipped) is None
+    assert "px.scatter(df" not in shipped
+    assert "code_content" not in shipped
+    assert "__public_freeze_code__" not in shipped
+    assert "fig-3" not in manifest.prologues
+    row = next(r for r in result.tier_rows if r.component_id == "fig-3")
+    assert row.tier in (ComponentTier.FROZEN, ComponentTier.PARTIAL)
+    assert "fig-3" in manifest.frozen
+    # No Python runtime: nothing in the file can run the author's code.
+    assert not (result.python or {}).get("embedded")
+
+
+def test_a_public_bundle_refuses_a_state_python_or_an_email(tmp_path: Path):
+    """The three ways a public bundle could carry more than the default view.
+    The refusal comes before any read, so any non-null state is enough."""
+    user = ExportUser(id=ObjectId(), email="")
+    for kwargs in (
+        {"python_runtime": "auto"},
+        {"python_runtime": "on"},
+        {"state": object()},
+    ):
+        with pytest.raises(ProducerAError):
+            export_static(
+                str(DASHBOARD_OID), out_path=tmp_path / "b.html", user=user, public=True, **kwargs
+            )
+    with pytest.raises(ProducerAError):
+        export_static(
+            str(DASHBOARD_OID),
+            out_path=tmp_path / "b.html",
+            user=ExportUser(id=ObjectId(), email="owner@example.com"),
+            public=True,
+        )
+
+
+def test_an_owner_export_still_ships_the_code_figure_source(offline_stack: dict[str, list]):
+    """The public freeze is opt-in: an owner's export is unchanged."""
+    manifest = export_manifest(
+        str(DASHBOARD_OID), ExportUser(id=ObjectId(), is_admin=True)
+    ).manifest
+    assert manifest is not None
+    assert "px.scatter(df" in manifest.model_dump_json()
+
+
+def test_the_preflight_lists_exactly_what_the_file_would_hold(offline_stack: dict[str, list]):
+    """The owner's preview before visitors may download (#1480): the collections
+    a build keeps, their columns and rows. The table's collection ships whole;
+    the advanced_viz one is pruned to what its live kind reads (``tip`` is read
+    only by the frozen tree); the heatmap's collection is dropped with it."""
+    inventory = {c["dc_id"]: c for c in _preflight().collections}
+    assert set(inventory) == {str(DC_OID), str(AV_DC_OID)}
+    table = inventory[str(DC_OID)]
+    assert sorted(table["columns"]) == ["bill", "flipper", "species", "year"]
+    assert table["rows"] == 4
+    assert table["whole"] is True
+    av = inventory[str(AV_DC_OID)]
+    assert sorted(av["columns"]) == ["lfc", "q_val"]
+    assert av["rows"] == 3
+    assert av["whole"] is False

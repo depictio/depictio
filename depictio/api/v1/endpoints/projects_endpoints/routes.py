@@ -171,6 +171,7 @@ def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
     document itself. Permission checks must already have been done by the caller —
     this helper is purely the cascade body extracted from ``delete_project``.
     """
+    _drop_public_bundles(project_id)
     dc_agg = list(
         projects_collection.aggregate(
             [
@@ -1797,11 +1798,94 @@ async def toggle_public_private(
     # flag (read by listings and badges) that must follow the project.
     cascade_counts = cascade_project_visibility(project_id, is_public_bool)
 
+    # A private project offers visitors no offline copy (#1480): the download
+    # goes off and its bundles are deleted, so making it public again does not
+    # silently reopen it.
+    if not is_public_bool and project.get("public_offline_download"):
+        projects_collection.update_one(
+            {"_id": ObjectId(project_id)}, {"$set": {"public_offline_download": False}}
+        )
+    if not is_public_bool:
+        _drop_public_bundles(project_id)
+
     return {
         "success": True,
         "message": f"Project '{project['name']}' with ID '{project_id}' is now {'public' if is_public_bool else 'private'}.",
         **cascade_counts,
     }
+
+
+def _drop_public_bundles(project_id: object) -> None:
+    """Delete a project's public offline bundles (#1480). Never raises."""
+    try:
+        from depictio.serverless import public_bundle
+
+        public_bundle.drop_project(str(project_id))
+    except Exception as exc:  # noqa: BLE001 - cleanup must not fail the caller
+        logger.warning(f"Could not drop the public bundles of project {project_id}: {exc}")
+
+
+class PublicOfflineDownloadRequest(BaseModel):
+    """Turn the visitors' offline download of a public project on or off."""
+
+    enabled: bool
+    #: The owner saw what the file holds (collections, columns, rows) before
+    #: turning it on. Required to enable, ignored to disable.
+    acknowledged: bool = False
+
+
+@projects_endpoint_router.put("/{project_id}/public_offline_download")
+async def set_public_offline_download(
+    project_id: str,
+    request: PublicOfflineDownloadRequest,
+    current_user=Depends(get_current_user),
+):
+    """Let visitors of a public project download its dashboards' offline copy (#1480).
+
+    Owner-gated like visibility (`/toggle_public_private`): a sysadmin may change
+    it on a published project, anyone else meets the lock. 404 while either
+    switch is off. Enabling needs a public project (409) and the owner's
+    acknowledgement of the preview (422), and queues a build of every dashboard
+    of the project at once; sending it again re-queues the stale ones.
+    Disabling deletes the bundles.
+    """
+    from depictio.serverless import public_bundle
+
+    if not public_bundle.enabled():
+        raise HTTPException(status_code=404, detail="Public offline download is disabled.")
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    project = _async_get_project_from_id(PyObjectId(project_id), current_user, projects_collection)
+    if not _can_manage_project_sharing(project, current_user):
+        raise HTTPException(
+            status_code=403, detail="User does not have permission to update this project."
+        )
+    if not getattr(current_user, "is_admin", False):
+        assert_project_unlocked(project_id)
+    if request.enabled and not project.get("is_public"):
+        raise HTTPException(
+            status_code=409, detail="Only a public project can offer visitors an offline copy."
+        )
+    if request.enabled and not request.acknowledged:
+        raise HTTPException(
+            status_code=422,
+            detail="Review what the offline copy contains before turning the download on.",
+        )
+
+    projects_collection.update_one(
+        {"_id": ObjectId(project_id)},
+        {"$set": {"public_offline_download": request.enabled, "last_modified": utc_now_str()}},
+    )
+    if request.enabled:
+        queued = public_bundle.schedule_for_project(project_id, delay=0)
+    else:
+        queued = 0
+        _drop_public_bundles(project_id)
+    logger.info(
+        f"Public offline download {'on' if request.enabled else 'off'} for project "
+        f"{project_id} ({queued} build(s) queued)"
+    )
+    return {"success": True, "public_offline_download": request.enabled, "queued": queued}
 
 
 # Routes whose handlers live in their own module (they import helpers from this

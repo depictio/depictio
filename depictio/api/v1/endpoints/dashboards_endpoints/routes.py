@@ -1687,6 +1687,13 @@ async def delete_dashboard(
                     logger.info(f"Removed {removed} version(s) for dashboard {dashboard_id}")
             except Exception as exc:  # noqa: BLE001 — cleanup must not fail the delete
                 logger.warning(f"Could not clear version ledger for {dashboard_id}: {exc}")
+            # Its public offline bundle (#1480) goes with it.
+            try:
+                from depictio.serverless import public_bundle
+
+                public_bundle.drop(str(dashboard_id))
+            except Exception as exc:  # noqa: BLE001 — cleanup must not fail the delete
+                logger.warning(f"Could not drop the public bundle of {dashboard_id}: {exc}")
         elif dashboard.get("parent_dashboard_id"):
             # A child tab deleted through this route is the same change as
             # DELETE /tab: anchored on the parent, since the deleted tab can no

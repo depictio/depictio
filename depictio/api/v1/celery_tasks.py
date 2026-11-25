@@ -3698,6 +3698,24 @@ def export_static_bundle(payload: dict) -> dict:
     }
 
 
+@celery_app.task(
+    name="depictio.serverless.build_public_bundle",
+    soft_time_limit=600,
+    time_limit=900,
+)
+def build_public_bundle(main_id: str) -> dict:
+    """Build the offline bundle a public project's visitors download (#1480).
+
+    Queued by ``public_bundle.schedule`` after a save, an ingestion, or the
+    owner turning the download on; never by a visitor. Rebuilds only when the
+    family's content key moved, and keeps the bundle served until the new one
+    is stored. Same limits as an owner export.
+    """
+    from depictio.serverless import public_bundle
+
+    return public_bundle.build(str(main_id))
+
+
 __all__: list[str] = [
     "build_figure_preview",
     "analyze_figure_code",
@@ -3712,6 +3730,7 @@ __all__: list[str] = [
     "compute_group_compare",
     "manifest_refresh_dc_task",
     "export_static_bundle",
+    "build_public_bundle",
 ]
 
 

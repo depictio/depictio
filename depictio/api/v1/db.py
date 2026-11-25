@@ -86,6 +86,8 @@ migration_targets_collection = db[settings.mongodb.collections.migration_targets
 migration_pushes_collection = db[settings.mongodb.collections.migration_pushes_collection]
 migration_invites_collection = db[settings.mongodb.collections.migration_invites_collection]
 static_exports_collection = db[settings.mongodb.collections.static_exports_collection]
+# The pre-built offline bundle a public project's visitors download (#1480).
+public_bundles_collection = db[settings.mongodb.collections.public_bundles_collection]
 test_collection = db[settings.mongodb.collections.test_collection]
 
 

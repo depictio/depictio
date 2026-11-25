@@ -196,6 +196,12 @@ _FOLD_COLUMNS_KEY = "__fold_columns__"
 #: The brand a figure's tab draws in (its own, else its main tab's), set beside
 #: the colours for ui-mode figures and stripped from the shipped document too.
 _FOLD_BRAND_KEY = "__fold_brand_theme__"
+#: Set on every code-mode figure of a public bundle (#1480, ``public=True``): the
+#: figure ships frozen from the server pipeline, never as a replayable prologue,
+#: and its source is stripped from the shipped document. A visitor's browser
+#: runs no author code, transpiled or not.
+_PUBLIC_FREEZE_KEY = "__public_freeze_code__"
+PUBLIC_CODE_REFUSAL = "a public bundle ships author code frozen"
 
 
 def figure_code(comp: dict[str, Any]) -> str:
@@ -257,6 +263,21 @@ def annotate_code_context(tabs: list["FamilyTab"]) -> None:
                     schema_cache[dc_id] = None
             if schema_cache.get(dc_id) is not None:
                 comp[_FOLD_COLUMNS_KEY] = schema_cache[dc_id]
+
+
+def mark_public_code_frozen(tabs: list["FamilyTab"]) -> None:
+    """Freeze every code-mode figure of a public bundle and drop its source.
+
+    A transpilable code figure normally ships as prologue ops the runtime
+    replays in the browser. A visitor of a public project downloads the file
+    without anyone vetting that code for them, so a public bundle takes the
+    frozen road for all of them (the server pipeline, RestrictedPython) and
+    :func:`sanitize_dashboard_doc` leaves their ``code_content`` out.
+    """
+    for tab in tabs:
+        for comp in tab.components:
+            if comp.get("component_type") == "figure" and comp.get("mode") == "code":
+                comp[_PUBLIC_FREEZE_KEY] = True
 
 
 def annotate_family_inheritance(tabs: list["FamilyTab"]) -> None:
@@ -322,6 +343,8 @@ def _code_figure_plan(
     the binder forms its hypothesis from. Either refusal returns
     ``(None, None, reason)`` and the figure freezes with ``code_mode``.
     """
+    if comp.get(_PUBLIC_FREEZE_KEY):
+        return None, None, PUBLIC_CODE_REFUSAL
     code = figure_code(comp)
     ops, refusal = transpile_with_reason(code)
     if ops is None:
@@ -995,7 +1018,16 @@ def sanitize_dashboard_doc(dashboard_data: dict[str, Any]) -> dict[str, Any]:
             {
                 k: v
                 for k, v in m.items()
-                if k not in (_FOLD_COLORS_KEY, _FOLD_COLUMNS_KEY, _FOLD_BRAND_KEY, PYTHON_JOB_KEY)
+                if k
+                not in (
+                    _FOLD_COLORS_KEY,
+                    _FOLD_COLUMNS_KEY,
+                    _FOLD_BRAND_KEY,
+                    PYTHON_JOB_KEY,
+                    _PUBLIC_FREEZE_KEY,
+                )
+                # A public bundle's code figure is frozen: its source goes too.
+                and not (k == "code_content" and m.get(_PUBLIC_FREEZE_KEY))
             }
             if isinstance(m, dict)
             else m
@@ -3073,6 +3105,51 @@ def _fetch_last_aggregations(project_doc: dict[str, Any] | None) -> dict[str, An
     return out
 
 
+def _project_dc_docs(project_doc: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    docs = list((project_doc or {}).get("data_collections") or [])
+    for workflow in (project_doc or {}).get("workflows") or []:
+        if isinstance(workflow, dict):
+            docs.extend(workflow.get("data_collections") or [])
+    for dc in docs:
+        if isinstance(dc, dict) and (dc.get("_id") or dc.get("id")):
+            out[str(dc.get("_id") or dc.get("id"))] = dc
+    return out
+
+
+def collection_inventory(
+    data_refs: dict[str, DataRef],
+    project_doc: dict[str, Any] | None,
+    stored_metadata: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Per bundled collection: name, type, columns, rows, and whether it ships whole.
+
+    What an owner reads before letting visitors download the file (#1480):
+    exactly the collections a build would keep (``data_refs`` after the unused
+    ones are dropped), the columns their Parquet holds (companion columns the
+    runtime derives are left out) and the row count. ``whole`` is a collection
+    read by a live table, which ships every column instead of the ones the
+    components name.
+    """
+    dcs = _project_dc_docs(project_doc)
+    column_sets = live_column_sets(stored_metadata)
+    out: list[dict[str, Any]] = []
+    for dc_id, ref in data_refs.items():
+        dc = dcs.get(dc_id) or {}
+        companions = set(ref.companions)
+        out.append(
+            {
+                "dc_id": dc_id,
+                "name": dc.get("data_collection_tag") or dc_id,
+                "type": (dc.get("config") or {}).get("type"),
+                "columns": [c.name for c in ref.columns if c.name not in companions],
+                "rows": ref.rows,
+                "whole": dc_id in column_sets and column_sets[dc_id] is None,
+            }
+        )
+    return sorted(out, key=lambda c: str(c["name"]))
+
+
 def project_links(project_doc: dict[str, Any] | None) -> list[dict[str, Any]]:
     """The project's ``links`` list, as stored (list of ``DCLink`` dicts)."""
     links = (project_doc or {}).get("links") or []
@@ -3423,6 +3500,10 @@ class ExportResult:
     #: The Python runtime plan: ``{"mode", "embedded", "components", "bytes",
     #: "version"}`` — what the export modal states before the build.
     python: dict[str, Any] | None = None
+    #: What the file would hold, per bundled collection (:func:`collection_inventory`):
+    #: the binding preflight's answer to "which data leaves the instance". Empty
+    #: on the data-free plan, which reads no collection.
+    collections: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _fetch_dashboard(dashboard_id: str) -> dict[str, Any]:
@@ -3968,6 +4049,7 @@ def export_manifest(
     decide_only: bool = False,
     python_runtime: str = "off",
     state: AnalysisState | None = None,
+    public: bool = False,
 ) -> ExportResult:
     """Assemble and validate the full ``BundleManifest`` for a dashboard family.
 
@@ -4041,6 +4123,8 @@ def export_manifest(
         definition_problems = _apply_definition_versions(tabs, pins.definition_version_id)
 
     items = family_components(tabs)
+    if public:
+        mark_public_code_frozen(tabs)
     annotate_family_inheritance(tabs)
     annotate_code_context(tabs)
     tier_rows: list[TierRow] = []
@@ -4225,6 +4309,7 @@ def export_manifest(
             tabs=[tab.tab_row() for tab in tabs],
             size=bundle_size,
             python=python_info,
+            collections=collection_inventory(data_refs, project_doc, stored_metadata),
         )
 
     # Links last: a link's tier depends on whether its SOURCE DC survived the
@@ -4965,6 +5050,7 @@ def export_static(
     bind: bool = True,
     python_runtime: str = "off",
     state: AnalysisState | None = None,
+    public: bool = False,
 ) -> ExportResult:
     """End-to-end: dashboard in Mongo → self-contained HTML at ``out_path``.
 
@@ -5011,7 +5097,13 @@ def export_static(
             runtime cannot reproduce is the caller's to refuse
             (``report.ineligibility``); the export itself applies the filters
             it is handed.
+        public: A bundle for a public project's visitors (#1480): code-mode
+            figures ship frozen without their source (:func:`mark_public_code_frozen`),
+            and it requires ``python_runtime="off"``, no ``state`` and a
+            ``user`` without an email, so nothing names the person it was built as.
     """
+    if public and (python_runtime != "off" or state is not None or check):
+        raise ProducerAError("a public bundle is built at the default state, without Python")
     if python_runtime not in ("auto", "on", "off"):
         raise ProducerAError(f"python_runtime must be auto, on or off, got {python_runtime!r}")
     bundle_mode = BundleMode(mode) if not isinstance(mode, BundleMode) else mode
@@ -5058,12 +5150,15 @@ def export_static(
     if out_path is None:
         raise ProducerAError("out_path is required unless check=True")
 
+    if public and export_user.email:
+        raise ProducerAError("a public bundle is built as a user without an email")
     result = export_manifest(
         dashboard_id,
         export_user,
         single_tab=single_tab,
         python_runtime=python_runtime,
         state=state,
+        public=public,
     )
     assert result.manifest is not None
     if state is not None:

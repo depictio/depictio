@@ -146,12 +146,18 @@ def _external_s3_endpoint() -> str | None:
     return None
 
 
-def _presigned_download_url(bucket: str | None, key: str | None) -> str | None:
-    """Best-effort 24h presigned GET for the exported bundle, else ``None``.
+def _presigned_download_url(
+    bucket: str | None,
+    key: str | None,
+    expires_in: int = _PRESIGN_EXPIRY_SECONDS,
+    filename: str | None = None,
+) -> str | None:
+    """Best-effort presigned GET for an exported bundle (24h by default), else ``None``.
 
-    Callers fall back to the proxied ``/export-static/download/{job_id}`` route,
-    which always works — the presigned URL is only an optimisation that lets the
-    browser pull the artifact straight from object storage.
+    Callers fall back to proxying the object through the API, which always
+    works: the presigned URL is only an optimisation that lets the browser pull
+    the artifact straight from object storage. ``filename`` makes the storage
+    answer with an attachment of that name.
     """
     endpoint = _external_s3_endpoint()
     if not endpoint or not bucket or not key:
@@ -164,11 +170,10 @@ def _presigned_download_url(bucket: str | None, key: str | None) -> str | None:
             endpoint_url=endpoint,
             verify=settings.minio.verify_tls,
         )
-        return client.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": bucket, "Key": key},
-            ExpiresIn=_PRESIGN_EXPIRY_SECONDS,
-        )
+        params: dict[str, Any] = {"Bucket": bucket, "Key": key}
+        if filename:
+            params["ResponseContentDisposition"] = f'attachment; filename="{filename}"'
+        return client.generate_presigned_url("get_object", Params=params, ExpiresIn=expires_in)
     except Exception as exc:
         logger.warning(f"Could not presign static export {bucket}/{key}: {exc}")
         return None
@@ -450,6 +455,9 @@ async def preflight_export_static(
         # The optional Python runtime (Pyodide): which tiles it would make live
         # and what it adds to the file, so the modal can offer it with its size.
         "python_runtime": result.python,
+        # Which collections, columns and rows the file would hold (#1480): what an
+        # owner reviews before letting visitors download it. Empty when unbound.
+        "collections": result.collections,
     }
 
 
