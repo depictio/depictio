@@ -172,14 +172,14 @@
     },
     "nf-core/ampliseq/2.14.0": {
       "version": "1.5.0",
-      "content_hash": "8f7fb7dc57c0fd34694ec3331aff113abdc366a0849da5d798aa17803f779d8e",
+      "content_hash": "7e7d8f89c9fcf98c3652de25d49da4440d3a040718d857c0555f693d69fd066d",
       "catalog": {
         "qiime2": "2.2.0"
       }
     },
     "nf-core/ampliseq/2.16.0": {
       "version": "1.6.0",
-      "content_hash": "76e26cf599bf19965354315758cb5acebe34bd28ef97d8328c178842329d383f",
+      "content_hash": "d54b24ca964b5da847f090c70194487d31b3c7621987a58c00e3bc9feb6d903b",
       "catalog": {
         "multiqc": "1.1.0",
         "qiime2": "2.2.0",
@@ -189,7 +189,7 @@
     },
     "nf-core/ampliseq/2.18.0": {
       "version": "2.0.0",
-      "content_hash": "a52910827e80a3b50a75750a833dafabb2c9e70bc8dd0ce61f351da5b3a628a2",
+      "content_hash": "404cc1e91da5f643e37c0f05230b468bb247a52dfeecb1bf637e425aa86e09ed",
       "catalog": {
         "multiqc": "1.1.0",
         "qiime2": "2.2.0",
@@ -199,7 +199,7 @@
     },
     "nf-core/ampliseq/3.1.0": {
       "version": "3.4.0",
-      "content_hash": "ce54c48046cd570dd4836eacc5152e951a28d229ccb47e6391b1ebce021c7680",
+      "content_hash": "1a3e6ae083cd0dc094c6b27b001e2907086fd9dbbb356b4b24c5512bc3061547",
       "catalog": {
         "multiqc": "1.1.0",
         "qiime2": "2.2.0",

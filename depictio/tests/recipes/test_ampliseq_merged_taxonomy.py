@@ -394,9 +394,19 @@ class TestSecondRunDifferentialAbundance:
         assert {f"{n}_alt" for n in ("lfc", "p_val", "q_val", "w", "se")} <= set(
             ancombc["source_overrides"]
         )
-        assert ancombc["params"] == {"label": "{REF_DB_NAME}", "alt_label": "pr2"}
+        assert ancombc["params"] == {
+            "label": "{REF_DB_NAME}", "alt_label": "pr2", "pairwise": "true", "group_col": "{GROUP_COL}",
+        }  # fmt: skip
         assert ma["source_overrides"]["alt_barplot"]["path"] == ("/pr2/qiime2/barplot/level-4.csv")
         assert ma["params"] == {"alt_label": "pr2"}
+        assert (
+            ancombc["source_overrides"]["alt_counts"]["path"] == "/pr2/qiime2/barplot/level-4.csv"
+        )
+        assert ancombc["source_overrides"]["counts"]["path"] == "qiime2/barplot/level-2.csv"
+        for transform in (ancombc, ma):
+            assert transform["source_overrides"]["feature_table"]["path"] == (
+                "qiime2/abundance_tables/feature-table.tsv"
+            )
         # The PHYLUM_LEVEL rule repoints the same DC's primary slices: both hold.
         assert ancombc["source_overrides"]["lfc"]["glob_pattern"].endswith("level-2/lfc_slice*.csv")
 
@@ -404,4 +414,9 @@ class TestSecondRunDifferentialAbundance:
         dcs = self._resolved({"DATA_ROOT": "/silva", "METADATA_FILE": "/m.tsv"})
         ancombc = self._dc(dcs, "ancombc_results")
 
-        assert not any(k.endswith("_alt") for k in ancombc.get("source_overrides") or {})
+        overrides = ancombc.get("source_overrides") or {}
+        assert not any(k.endswith("_alt") for k in overrides)
+        assert "feature_table" not in overrides and "alt_counts" not in overrides
+        # Pairs need no second run: the run's own barplot counts.
+        assert overrides["counts"]["path"] == "qiime2/barplot/level-3.csv"
+        assert ancombc["params"]["pairwise"] == "true"

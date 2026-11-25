@@ -15,7 +15,9 @@ reference databases, see ``qiime2/ancombc.py``), the taxa of a label that has a
 barplot of its own, ``qiime2/barplot/level-N.<label>.csv``, take their mean
 abundance from it: their lineages are that database's, which the default
 composition does not hold. So do the taxa of a second run's rows (``alt_label``,
-the template's PR2_RESULTS): their barplot is the ``alt_barplot`` path.
+the template's PR2_RESULTS): their barplot is the ``alt_barplot`` path. The rows of a
+merged taxonomy (``merged_label``) take theirs from the ASV counts of
+``feature_table`` summed per merged lineage, as the ANCOM-BC recipe tests them.
 """
 
 import polars as pl
@@ -48,6 +50,16 @@ SOURCES: list[RecipeSource] = [
         optional=True,
         input_schema={"index": pl.Utf8},
     ),
+    # The merged taxonomy's counts: ASV counts and ASV lineages. Absent without it.
+    RecipeSource(
+        ref="feature_table",
+        # A large file: read only where the template points it (see the template).
+        path="merged/qiime2/abundance_tables/feature-table.tsv",
+        format="TSV",
+        optional=True,
+        read_kwargs={"skip_rows": 1, "infer_schema_length": 0},
+    ),
+    RecipeSource(ref="merged_taxonomy", dc_ref="merged_taxonomy", optional=True),
 ]
 
 # OUTPUT SCHEMA: the columns transform() returns, checked after it.
@@ -95,6 +107,12 @@ def transform(sources: dict[str, pl.DataFrame | None], params: dict | None = Non
         )
     if (frame := sources.get("alt_barplot")) is not None:
         parts.append(_labelled_intensity(frame, pl.lit(params.get("alt_label") or "pr2")))
+    table, lineages = sources.get("feature_table"), sources.get("merged_taxonomy")
+    if table is not None and lineages is not None:
+        from depictio.recipes.lib.ancombc import collapse
+
+        wide = pl.from_pandas(collapse(table, lineages).rename_axis("index").reset_index())
+        parts.append(_labelled_intensity(wide, pl.lit(params.get("merged_label") or "merged")))
 
     # Mean log10(count + 1) per taxon across samples — the A axis.
     intensity = (

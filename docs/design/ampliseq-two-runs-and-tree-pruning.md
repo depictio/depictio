@@ -109,9 +109,41 @@ runs' own slices:
   per DC, so the second rule erased the first; they are now applied in rule order, a later
   field winning and `source_overrides` merging by key. Scalar fields keep their old
   precedence (the tree routes rely on it).
-- Not carried over: the overlay's third option, ANCOM-BC on the merged taxonomy, and its
-  Naples vs Barcelona contrast. Both came from an R rerun (`make ancombc`). The contrast can
-  come from ampliseq itself (`--ancombc_formula`, to test); the merged option is dropped.
+
+### The comparisons ampliseq does not run, and the merged option
+
+ampliseq tests each level of a metadata column against one reference, the alphabetical
+first: with three sites, two of the three pairs. The TREC overlay added the third pair
+(Naples vs Barcelona) and a third option, ANCOM-BC on the merged taxonomy, with an R rerun
+(`make ancombc`). The recipe now computes both at ingest, for any number of levels:
+- `depictio/recipes/lib/ancombc.py` runs ANCOM-BC through scikit-bio's port
+  (`skbio.stats.composition.ancombc`, the new `stats` extra, pinned 0.7.4), with the
+  settings QIIME2's `composition ancombc` uses in ampliseq: counts + 1, taxa present in at
+  least 10% of the samples, Holm per contrast, and `conserve` on.
+- **`conserve`.** QIIME2's ANCOM-BC widens each standard error by the spread of its
+  contrast's bias estimate. scikit-bio computes that spread but adds it only for
+  ANCOM-BC2, so the module reads it back (`_estimate_bias_em`, a private function: hence
+  the pin) and adds it. Without it the estimates match but the standard errors are smaller
+  by a constant per contrast, and more taxa come out significant than in ampliseq's own
+  results.
+- **Checked against ampliseq on the TREC run:** 5 contrasts (SILVA and PR2 by city, and
+  another metadata column) give the same estimates, standard errors and q-values as
+  ampliseq's slices (differences under 1e-6) and the same significant taxa. With
+  `conserve` off, the same code reproduces the overlay's own R rerun just as closely,
+  merged option included.
+- `qiime2/ancombc.py` (params `pairwise`, `group_col`) adds, per run, the pairs its slices
+  lack, from that run's barplot counts (`counts`, `alt_counts`), named as QIIME2 would
+  (`localityNaples_vs_Barcelona`). It first recomputes the run's own contrasts and warns
+  when they differ from the slices. With a merged taxonomy (`merged_taxonomy` DC plus the
+  run's `feature-table.tsv`, summed per merged Kingdom;Phylum, unresolved lineages left
+  out) it adds every pair under `taxonomy = merged`. `ma_canonical` takes the merged rows'
+  abundance from the same collapsed counts.
+- Without scikit-bio installed (a CLI-only install without `[stats]`) the recipe logs a
+  warning and loads only the pipeline's contrasts. The server images carry it.
+- **A change for the TREC numbers:** the overlay's rerun ran with `conserve` off, the
+  pipeline's contrasts with it on. Everything is now computed with it on, so the added
+  pairs and the merged option keep their estimates but count fewer significant taxa than
+  before (Naples vs Barcelona, SILVA: 34 instead of 41).
 
 ### Versions
 
@@ -128,15 +160,17 @@ outputs are unchanged without the new DC.
   - 20 tables and the tree are identical;
   - `ancombc_results` and `ma_canonical`: the `silva` rows (66 taxa) and the `pr2` rows (98
     taxa) are identical to the overlay's, every value, for the two contrasts ampliseq ran.
-    The overlay's `merged` rows and its third contrast came from the R rerun and are gone.
-- **The TREC dashboard on the new project:** every tab renders. Differential abundance shows the SILVA and PR2 options in the browser (volcano, cards, MA), but opens empty: its `taxonomy` filter starts on `merged`, which no longer exists.
+  - The pairs and the option the overlay got from its R rerun are back, computed at
+    ingest: all three options (`silva`, `pr2`, `merged`) by all three contrasts, with the
+    overlay's row counts and its estimates (log fold changes within 1e-8). Only their
+    standard errors are wider (`conserve`, above), so fewer taxa are significant: Naples
+    vs Barcelona 34 instead of 41 (SILVA), 32 instead of 34 (PR2); merged 39, 55 and 55
+    instead of 46, 67 and 64. `ma_canonical`: 837 rows, the same intensities.
+- **The TREC dashboard on the new project:** every tab renders. Differential abundance opens on the merged option and shows the three options and the three comparisons in the browser (volcano, cards, MA).
 - **Render checker:** `scripts/check_deployment.py` reports three `DC_NOT_REGISTERED` on `matrix_dc_id`. Those are false positives, already there before this branch: the field is deprecated, the viewer does not read it, and the three heatmaps render in the browser.
 
 ### What is left (draft issues below)
 
-- **Dashboards that start on `merged`.** The TREC dashboard's "Reference database" filter
-  on `ancombc_results.taxonomy` starts on `merged`, which no longer exists: it must start
-  on `silva` (a change in that project's dashboard, not here).
 - **A second-run option in the abstract.** The `*_alt` sources serve one extra run. Letting
   `SourceOverride.glob_pattern` take an absolute pattern resolved against its own folder
   would serve any number, and other two-run templates.

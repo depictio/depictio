@@ -12,7 +12,16 @@ folder, which a glob cannot reach: the ``<slice>_alt`` sources read its five sli
 by path (the template points them there) and label its rows ``alt_label``. Only
 then do the primary run's unlabelled rows take ``label``, so a single run keeps an
 empty ``taxonomy``.
+
+With ``pairwise`` and ``group_col`` set, the recipe computes what the pipeline did not
+run (``recipes/lib/ancombc.py``, the ``stats`` extra): every pair of levels of
+``group_col`` its slices lack, from each run's barplot counts (``counts``,
+``alt_counts``), and every pair for a merged taxonomy (``merged_taxonomy``, collapsed
+from the ASV counts of ``feature_table``, labelled ``merged_label``). It first checks
+that it reproduces the pipeline's own contrasts and warns when it does not.
 """
+
+import logging
 
 import polars as pl
 
@@ -80,6 +89,35 @@ SOURCES += [
     for name in ("lfc", "p_val", "q_val", "w", "se")
 ]
 
+# For the pairs the pipeline did not run (params pairwise / group_col): each run's
+# counts at the slices' level, as QIIME2's barplot (a row per sample, metadata
+# included), and a merged taxonomy's ASV lineages with the ASV counts.
+SOURCES += [
+    RecipeSource(
+        ref="counts",
+        path="qiime2/barplot/level-2.csv",
+        format="CSV",
+        optional=True,
+        input_schema={"index": pl.Utf8},
+    ),
+    RecipeSource(
+        ref="alt_counts",
+        path="pr2/qiime2/barplot/level-4.csv",
+        format="CSV",
+        optional=True,
+        input_schema={"index": pl.Utf8},
+    ),
+    RecipeSource(
+        ref="feature_table",
+        # A large file: read only where the template points it (see the template).
+        path="merged/qiime2/abundance_tables/feature-table.tsv",
+        format="TSV",
+        optional=True,
+        read_kwargs={"skip_rows": 1, "infer_schema_length": 0},
+    ),
+    RecipeSource(ref="merged_taxonomy", dc_ref="merged_taxonomy", optional=True),
+]
+
 # OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "id": pl.Utf8,
@@ -105,6 +143,11 @@ _SLICES = ("lfc", "p_val", "q_val", "w", "se")
 # ampliseq's default database, and the PR2 run of the template's PR2_RESULTS.
 DEFAULT_LABEL = "silva"
 DEFAULT_ALT_LABEL = "pr2"
+DEFAULT_MERGED_LABEL = "merged"
+# How far the recomputed pipeline contrasts may sit from its own slices.
+_AGREEMENT = 1e-4
+
+logger = logging.getLogger("depictio-cli")
 
 
 def _melt(frames: dict[str, pl.DataFrame], taxonomy: pl.Expr) -> pl.DataFrame:
@@ -130,24 +173,131 @@ def _melt(frames: dict[str, pl.DataFrame], taxonomy: pl.Expr) -> pl.DataFrame:
     return result
 
 
+def _truthy(value: object) -> bool:
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _check_agreement(fitted: pl.DataFrame, pipeline: pl.DataFrame, label: str) -> None:
+    """Warn when the recomputed contrasts differ from the pipeline's own slices."""
+    joined = pipeline.join(fitted, on=["id", "contrast"], suffix="_ours")
+    if joined.is_empty():
+        return
+    gap = joined.select(
+        pl.max_horizontal(
+            (pl.col(c) - pl.col(f"{c}_ours")).abs().max() for c in ("lfc", "se", "q_val")
+        )
+    ).item()
+    if gap is not None and gap > _AGREEMENT:
+        logger.warning(
+            f"ANCOM-BC ({label or 'run'}): the recomputed contrasts differ from the pipeline's "
+            f"by up to {gap:.3g}; the added pairs may not match its settings"
+        )
+
+
+def _pairs(
+    table,
+    groups,
+    column: str,
+    pipeline: pl.DataFrame,
+    label: str,
+    base: str | None,
+) -> pl.DataFrame:
+    """The pairs of ``column`` a run's slices (``pipeline``) lack, labelled ``label``.
+
+    When the run has slices, its contrasts are recomputed first: the added pairs are
+    only as good as the match between this fit and the pipeline's.
+    """
+    from depictio.recipes.lib import ancombc as lib
+
+    have = pipeline["contrast"].unique().to_list()
+    if have and base:
+        fitted = lib.fit(table, groups, base).with_columns(
+            (pl.lit(column) + pl.col("level")).alias("contrast")
+        )
+        _check_agreement(fitted, pipeline, label)
+    added = lib.pairs(table, groups, column, base=base, skip=have)
+    return added.with_columns(pl.lit(label).alias("taxonomy"))
+
+
+def _computed(
+    sources: dict[str, pl.DataFrame | None], params: dict, result: pl.DataFrame, labels: dict
+) -> list[pl.DataFrame]:
+    """The rows the recipe adds to the pipeline's (see the module docstring)."""
+    column = str(params.get("group_col") or "")
+    if not _truthy(params.get("pairwise")) or not column or column.startswith("{"):
+        return []
+    from depictio.recipes.lib import ancombc as lib
+
+    if not lib.available():
+        logger.warning(
+            "ANCOM-BC pairs need scikit-bio (pip install 'depictio[stats]'): only the "
+            "pipeline's own contrasts are loaded"
+        )
+        return []
+    out = []
+    base = None
+    for counts_ref, label in (("counts", labels["primary"]), ("alt_counts", labels["alt"])):
+        counts = sources.get(counts_ref)
+        if counts is None or label is None:
+            continue
+        if column not in counts.columns:
+            logger.warning(f"ANCOM-BC pairs: no column {column!r} in the {counts_ref} barplot")
+            continue
+        table, groups = lib.from_barplot(counts, column)
+        mine = result.filter(
+            pl.col("taxonomy").eq_missing(pl.lit(label))
+            & pl.col("contrast").str.starts_with(column)
+        ).select("id", "contrast", "lfc", "se", "q_val")
+        run_base = lib.base_of(mine["contrast"].unique(), column, lib.levels_of(groups))
+        base = base or run_base  # the merged taxonomy names its pairs as the first run
+        out.append(_pairs(table, groups, column, mine, label, run_base))
+    counts, feature_table, lineages = (
+        sources.get(k) for k in ("counts", "feature_table", "merged_taxonomy")
+    )
+    if (
+        counts is not None
+        and feature_table is not None
+        and lineages is not None
+        and column in counts.columns
+    ):
+        _, groups = lib.from_barplot(counts, column)
+        table = lib.collapse(feature_table, lineages)
+        empty = pl.DataFrame(schema={"id": pl.Utf8, "contrast": pl.Utf8})
+        out.append(_pairs(table, groups, column, empty, labels["merged"], base))
+    return out
+
+
 def transform(sources: dict[str, pl.DataFrame | None], params: dict | None = None) -> pl.DataFrame:
     """Melt each ANCOM-BC slice and join into one table with taxonomy annotations."""
     params = params or {}
     alt = {name: sources.get(f"{name}_alt") for name in _SLICES}
     has_alt = all(frame is not None for frame in alt.values())
+    has_merged = (
+        _truthy(params.get("pairwise"))
+        and sources.get("feature_table") is not None
+        and sources.get("merged_taxonomy") is not None
+    )
 
     label = pl.col("source_path").str.extract(_LABEL, 1)
-    primary = (params.get("label") or DEFAULT_LABEL) if has_alt else _NO_LABEL
+    primary = (params.get("label") or DEFAULT_LABEL) if has_alt or has_merged else _NO_LABEL
     result = _melt(
         {name: sources[name] for name in _SLICES},
         label.fill_null(pl.lit(primary)),
     )
+    alt_label = params.get("alt_label") or DEFAULT_ALT_LABEL
     if has_alt:
-        alt_label = params.get("alt_label") or DEFAULT_ALT_LABEL
         result = pl.concat(
             [result, _melt(alt, pl.lit(alt_label))],
             how="diagonal_relaxed",
         )
+    labels = {
+        "primary": primary,
+        "alt": alt_label if has_alt else None,
+        "merged": params.get("merged_label") or DEFAULT_MERGED_LABEL,
+    }
+    result = pl.concat(
+        [result, *_computed(sources, params, result, labels)], how="diagonal_relaxed"
+    )
 
     # The Phylum is the lineage's leaf: the template points the five slices at the
     # ANCOM-BC level that *is* Phylum for the run's reference database, whatever

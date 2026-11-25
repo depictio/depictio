@@ -384,7 +384,7 @@
     },
     "qiime2": {
       "version": "2.2.0",
-      "content_hash": "cd465ba80bdaad40dfa9512ebb1ef32557bc15b09ab2b320887c353c5053efcc"
+      "content_hash": "7fd4b970f0107d34bf9a9e7ead98f035507dca82ff8cd99ddfa300f10a389487"
     },
     "qsee": {
       "version": "1.1.0",

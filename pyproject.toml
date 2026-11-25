@@ -46,12 +46,17 @@ classifiers = [
 # [server] is the API and worker that the Docker images, [local] and [dev] build on;
 # it is not a deployment of its own, so the docs do not offer it.
 multiqc = ["multiqc==1.35"]
+# Statistics a recipe computes at ingest: ANCOM-BC for the comparisons and the
+# merged-taxonomy option nf-core/ampliseq does not run (recipes/lib/ancombc.py).
+# Pinned: the conserve adjustment reads a private scikit-bio function.
+stats = ["scikit-bio==0.7.4"]
 # Native filesystem events for `depictio watch`. Optional: without it the watcher
 # polls. Kept out of the core dependencies because watchdog 6.0.0 has no Python 3.14
 # macOS wheel.
 watch = ["watchdog==6.0.0"]
 server = [
   "depictio[multiqc]",
+  "depictio[stats]",
   "bcrypt==5.0.0",
   "maxminddb==2.8.2",
   "celery==5.6.3",

@@ -28,7 +28,7 @@ template:
       description: "Path to the Newick tree to serve. Defaults to {DATA_ROOT}/qiime2/phylogenetic_tree/tree.nwk. Not needed for a large run: a tree over 3,000 tips is pruned at ingest to the taxa the tip-metadata recipe keeps."
       required: false
     - name: "PR2_RESULTS"
-      description: "Results folder of a second nf-core/ampliseq run of the same reads with the PR2 database (--dada_ref_taxonomy pr2). When set, the merged_taxonomy DC gives each ASV PR2's lineage if PR2 calls it Eukaryota, else SILVA's (DATA_ROOT must be the SILVA run), and the taxonomy views read it: tip metadata, sunburst, sankey, Phylum relative abundance, stacked taxonomy, and the views built on them. ANCOM-BC and the MA plot read both runs, each under its own taxonomy label (REF_DB_NAME, pr2), the PR2 run at PR2_PHYLUM_LEVEL. taxonomy_composition stays the DATA_ROOT run's."
+      description: "Results folder of a second nf-core/ampliseq run of the same reads with the PR2 database (--dada_ref_taxonomy pr2). When set, the merged_taxonomy DC gives each ASV PR2's lineage if PR2 calls it Eukaryota, else SILVA's (DATA_ROOT must be the SILVA run), and the taxonomy views read it: tip metadata, sunburst, sankey, Phylum relative abundance, stacked taxonomy, and the views built on them. ANCOM-BC and the MA plot read both runs, each under its own taxonomy label (REF_DB_NAME, pr2), the PR2 run at PR2_PHYLUM_LEVEL, and add the merged taxonomy's ANCOM-BC, labelled merged. taxonomy_composition stays the DATA_ROOT run's."
       required: false
     - name: "EUK_PHYLUM_RANK"
       description: "With PR2_RESULTS: the PR2 rank shown as the Phylum of a eukaryote, Division, Subdivision (default) or Class. Metazoa read one rank deeper (Arthropoda, Mollusca ...)."
@@ -261,10 +261,17 @@ template:
               path: "{PR2_RESULTS}/qiime2/ancombc/differentials/Category-{GROUP_COL}-level-{PR2_PHYLUM_LEVEL}/w_slice.csv"
             se_alt:
               path: "{PR2_RESULTS}/qiime2/ancombc/differentials/Category-{GROUP_COL}-level-{PR2_PHYLUM_LEVEL}/se_slice.csv"
+            alt_counts:
+              path: "{PR2_RESULTS}/qiime2/barplot/level-{PR2_PHYLUM_LEVEL}.csv"
+            # The merged taxonomy's ANCOM-BC: this run's ASV counts per merged lineage.
+            feature_table:
+              path: "qiime2/abundance_tables/feature-table.tsv"
         - data_collection_tag: "ma_canonical"
           source_overrides:
             alt_barplot:
               path: "{PR2_RESULTS}/qiime2/barplot/level-{PR2_PHYLUM_LEVEL}.csv"
+            feature_table:
+              path: "qiime2/abundance_tables/feature-table.tsv"
     # QIIME2 names its collapsed taxonomy by depth, and the Phylum's depth follows
     # the reference database's ranks. The DC paths stay pinned at the default
     # database's depths (Phylum 3), which the reference seeds were built from;
@@ -292,6 +299,8 @@ template:
               glob_pattern: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-{PHYLUM_LEVEL}/w_slice*.csv"
             se:
               glob_pattern: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-{PHYLUM_LEVEL}/se_slice*.csv"
+            counts:
+              path: "qiime2/barplot/level-{PHYLUM_LEVEL}.csv"
         - data_collection_tag: "ma_canonical"
           source_overrides:
             labelled_barplots:
@@ -587,9 +596,15 @@ workflows:
             recipe: "qiime2/ancombc.py"
             # With PR2_RESULTS the PR2 run's slices (lfc_alt ...) come in as "pr2"
             # and this run's as REF_DB_NAME; a single run stays unlabelled.
+            # pairwise: ampliseq tests each level of GROUP_COL against the first
+            # one only; the recipe adds every other pair, from the barplot counts
+            # (`counts`, `alt_counts`), and with PR2_RESULTS every pair of the
+            # merged taxonomy, labelled "merged" (recipes/lib/ancombc.py).
             params:
               label: "{REF_DB_NAME}"
               alt_label: "pr2"
+              pairwise: "true"
+              group_col: "{GROUP_COL}"
             # level-3 is the Phylum for this release's default database (see
             # the taxonomy_composition note above); PHYLUM_LEVEL repoints it.
             # The slices are globs: a sibling `lfc_slice.<label>.csv` (and its
@@ -606,6 +621,8 @@ workflows:
                 glob_pattern: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-3/w_slice*.csv"
               se:
                 glob_pattern: "qiime2/ancombc/differentials/Category-{GROUP_COL}-level-3/se_slice*.csv"
+              counts:
+                path: "qiime2/barplot/level-3.csv"
           dc_specific_properties:
             format: "TSV"
             columns_description:
