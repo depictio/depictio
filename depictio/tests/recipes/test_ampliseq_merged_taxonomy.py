@@ -142,7 +142,9 @@ class TestRule:
         ]
         assert dino["confidence"] == pytest.approx(0.96)
 
-    def test_metazoa_read_one_rank_deeper(self):
+    def test_metazoa_read_one_rank_deeper_genus_and_species_stay(self):
+        """Phylum is PR2's Class for animals; Genus and Species stay PR2's own, and
+        the slot left between them is empty rather than holding a shifted rank."""
         copepod = _by_id(merge_pr2(_silva(), _pr2()))["copepod"]
 
         assert [copepod[s] for s in SLOTS] == [
@@ -150,9 +152,9 @@ class TestRule:
             "Arthropoda",
             "Crustacea",
             "Maxillopoda",
+            None,
             "Calanus",
             "Calanus_finmarchicus",
-            None,
         ]
 
     def test_organelles_keep_their_kingdom_and_blanks_are_null(self):
@@ -168,6 +170,21 @@ class TestRule:
         dino = _by_id(merge_pr2(_silva(), _pr2(), rank))["dino"]
 
         assert dino["Phylum"] == phylum
+        assert (dino["Genus"], dino["Species"]) == ("Tripos", "Tripos_furca")
+
+    @pytest.mark.parametrize(
+        ("rank", "slots"),
+        [
+            ("Division", ["Alveolata", "Dinoflagellata", "Dinophyceae", "Gonyaulacales"]),
+            ("Subdivision", ["Dinoflagellata", "Dinophyceae", "Gonyaulacales", "Ceratiaceae"]),
+            ("Class", ["Dinophyceae", "Gonyaulacales", "Ceratiaceae", None]),
+        ],
+    )
+    def test_slots_between_phylum_and_genus(self, rank, slots):
+        """Class, Order and Family take the PR2 ranks after the Phylum, never past Family."""
+        dino = _by_id(merge_pr2(_silva(), _pr2(), rank))["dino"]
+
+        assert [dino[s] for s in ("Phylum", "Class", "Order", "Family")] == slots
 
     def test_an_asv_pr2_lacks_keeps_silva(self):
         merged = _by_id(merge_pr2(_silva(), _pr2().filter(pl.col("ID") != "bac")))
@@ -297,7 +314,7 @@ class TestConsumers:
         )
 
         genus = set(out.filter(pl.col("rank") == "Genus")["taxon"])
-        assert {"Tripos", "Calanus_finmarchicus", "Vibrio"} <= genus
+        assert {"Tripos", "Calanus", "Vibrio"} <= genus
 
     @pytest.mark.parametrize(
         ("recipe", "extra"),

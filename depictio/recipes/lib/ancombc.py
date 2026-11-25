@@ -6,10 +6,12 @@ three or more levels the other pairs are missing (Naples vs Barcelona when Athen
 the reference), and a taxonomy the pipeline never saw (the merged SILVA + PR2 one) has
 no result at all. This module computes them from the same counts.
 
-Settings follow QIIME2's ``composition ancombc`` as ampliseq calls it: counts plus a
-pseudocount of 1, taxa kept when present in at least 10% of the samples
-(``prv_cut = 0.10``), Holm correction per contrast, and ``conserve`` on: each standard
-error is widened by the spread of its contrast's bias estimate. scikit-bio's port
+Settings follow QIIME2's ``composition ancombc`` as nf-core/ampliseq 2.18.0 calls it
+(``conf/modules.config``: ``--p-prv-cut 0.1 --p-lib-cut 500 --p-alpha 0.05
+--p-conserve``): samples under 500 reads left out (``lib_cut``), taxa kept when present
+in at least 10% of the samples (``prv_cut``), counts plus a pseudocount of 1, Holm
+correction per contrast, and ``conserve`` on: each standard error is widened by the
+spread of its contrast's bias estimate. scikit-bio's port
 computes that spread (``_estimate_bias_em``) but adds it only for ANCOM-BC2, so it is
 read back here and added. With it, a contrast the pipeline did run comes out with the
 same estimates, standard errors and q-values as the pipeline's own slices.
@@ -33,6 +35,7 @@ import pandas as pd
 import polars as pl
 
 PRV_CUT = 0.10
+LIB_CUT = 500
 PSEUDOCOUNT = 1.0
 COLUMNS = ("id", "contrast", "lfc", "p_val", "q_val", "w", "se")
 
@@ -56,10 +59,13 @@ def contrast_name(column: str, level: str, reference: str, base: str) -> str:
 
 
 def _prepare(counts: pd.DataFrame, groups: pd.Series) -> tuple[pd.DataFrame, pd.Series]:
-    """Samples with a group and taxa past the prevalence cut, as ANCOM-BC is given them."""
+    """Samples with a group and at least ``LIB_CUT`` reads, and taxa past the prevalence
+    cut, as ANCOM-BC is given them."""
     groups = groups.dropna().astype(str)
     samples = counts.index.intersection(groups.index)
     table = counts.loc[samples].astype(float)
+    table = table.loc[table.sum(axis=1) >= LIB_CUT]
+    samples = table.index
     table = table.loc[:, (table > 0).mean() >= PRV_CUT]
     return table, groups.loc[samples]
 
@@ -96,7 +102,8 @@ def fit(
     frames = []
     covariates = list(dict.fromkeys(result.index.get_level_values("Covariate")))
     for i, covariate in enumerate(covariates):
-        if "[T." not in covariate:
+        prefix = "C(grp, Treatment("
+        if "[T." not in covariate or not covariate.startswith(prefix):
             continue  # the intercept
         sub = result.xs(covariate, level="Covariate")
         se = sub["SE"].to_numpy(dtype=float)
@@ -113,7 +120,7 @@ def fit(
             pl.DataFrame(
                 {
                     "id": [str(t) for t in sub.index],
-                    "level": covariate.rsplit("[T.", 1)[1].rstrip("]"),
+                    "level": covariate.split("))[T.", 1)[1][:-1],
                     "lfc": lfc,
                     "se": se,
                     "w": w,

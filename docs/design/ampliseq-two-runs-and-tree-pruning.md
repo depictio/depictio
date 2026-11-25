@@ -66,11 +66,14 @@ depictio ingest results_silva138_2 --template nf-core/ampliseq/2.18.0 \
   `Eukaryota` (organelles such as `Eukaryota:plas` stay separate kingdoms), else
   SILVA's (Bacteria, Archaea, and ASVs neither assigns, so samples still sum to 1).
 - **The PR2 rank shift.** PR2 has nine ranks, two more than SILVA above the Phylum
-  (Supergroup, Division). The merged lineage keeps SILVA's seven slots: Kingdom = PR2
-  Domain, Phylum = `EUK_PHYLUM_RANK` (Subdivision, PR2 level 4), then the next PR2 ranks.
-  Metazoa read one rank deeper (Arthropoda, Mollusca ...). The merged Phylum is therefore
-  always at collapse level 2, and PR2's own collapsed outputs (ANCOM-BC slices,
-  barplots) must be read at level 4 to match it (`pr2_level()`).
+  (Supergroup, Division). The merged lineage keeps SILVA's seven slots (`slot_ranks()`):
+  Kingdom = PR2 Domain, Phylum = `EUK_PHYLUM_RANK` (Subdivision, PR2 level 4), Class,
+  Order and Family = the PR2 ranks after it, never past PR2's Family, and Genus and
+  Species = PR2's Genus and Species, always. Metazoa read one rank deeper (Phylum = PR2
+  Class: Arthropoda, Mollusca ...), so their Family slot is empty. The merged Phylum is
+  therefore always at collapse level 2, and PR2's own collapsed outputs (ANCOM-BC slices,
+  barplots) must be read at level 4 to match it (`pr2_level()`). The full mapping and the
+  join are in "Joins and choices" below.
 - New DC `merged_taxonomy` (recipe `nf-core/ampliseq/merged_taxonomy.py`): the SILVA run's
   `rel-table-ASV_with-DADA2-tax.tsv` with merged ranks, without sequences, plus
   `taxonomy_source` (`pr2`, `silva`, `fallback`). It reads the PR2 run's table of the
@@ -84,7 +87,7 @@ depictio ingest results_silva138_2 --template nf-core/ampliseq/2.18.0 \
 - Template variables `PR2_RESULTS` (the PR2 run's results folder) and
   `EUK_PHYLUM_RANK`. Without `PR2_RESULTS` the DC is removed and nothing changes.
 - Checked on the TREC run: the merged ASV table matches the hand-made overlay on every
-  rank and confidence, the rel-tables at levels 2 to 6 are identical, and the five
+  rank and confidence (both with the Metazoa fix of 25/11/2026, below), the rel-tables at levels 2 to 6 are identical, and the five
   consumers produce the same frames from the new DC as from the overlay folder.
 
 ### ANCOM-BC and the MA plot of both runs
@@ -133,17 +136,45 @@ first: with three sites, two of the three pairs. The TREC overlay added the thir
   merged option included.
 - `qiime2/ancombc.py` (params `pairwise`, `group_col`) adds, per run, the pairs its slices
   lack, from that run's barplot counts (`counts`, `alt_counts`), named as QIIME2 would
-  (`localityNaples_vs_Barcelona`). It first recomputes the run's own contrasts and warns
-  when they differ from the slices. With a merged taxonomy (`merged_taxonomy` DC plus the
+  (`localityNaples_vs_Barcelona`). It first refits the run's own contrasts and **stops the
+  ingest** when they do not reproduce the slices (another taxon set, or log fold change,
+  standard error or q-value more than 1e-4 apart): a recipe that does not reproduce the
+  pipeline must not add comparisons next to it. A second run with only some of its five
+  `*_alt` slices also stops it, rather than dropping that run's rows. With a merged taxonomy (`merged_taxonomy` DC plus the
   run's `feature-table.tsv`, summed per merged Kingdom;Phylum, unresolved lineages left
   out) it adds every pair under `taxonomy = merged`. `ma_canonical` takes the merged rows'
   abundance from the same collapsed counts.
 - Without scikit-bio installed (a CLI-only install without `[stats]`) the recipe logs a
   warning and loads only the pipeline's contrasts. The server images carry it.
-- **A change for the TREC numbers:** the overlay's rerun ran with `conserve` off, the
-  pipeline's contrasts with it on. Everything is now computed with it on, so the added
-  pairs and the merged option keep their estimates but count fewer significant taxa than
-  before (Naples vs Barcelona, SILVA: 34 instead of 41).
+- **A change for the TREC numbers:** the overlay's rerun ran with `conserve` off and no
+  library cut, the pipeline's contrasts with ampliseq's settings. Everything is now
+  computed with them, so the added pairs and the merged option keep their estimates but
+  count fewer significant taxa than the dashboard published before 25/11/2026 (Naples vs
+  Barcelona, SILVA: 34 instead of 41). The TREC repository's R script was fixed the same
+  day and now gives the same numbers.
+
+### Joins and choices
+
+Every join and every choice the merge and the comparisons make, in one place. The TREC
+repository documents the same in `docs/decisions.md`.
+
+| Join | Key | Kind | On the TREC run |
+|---|---|---|---|
+| SILVA run's ASVs to the PR2 run's taxonomy | ASV ID (md5 of the sequence, the same in both runs: same reads, same denoising) | left, from the SILVA run | all 127,845 found, same sequences. The PR2 run's extra ASVs (135,717 in all) are the organelles the SILVA run filtered out; they are dropped |
+| Merged lineages to the run's `feature-table.tsv` (merged ANCOM-BC, merged MA) | ASV ID, then summed per merged `Kingdom;Phylum` | inner | lineages with no Kingdom or Phylum left out (2.1% of reads) |
+| Second run's slices to the SILVA run's | none: rows are stacked, labelled `pr2` | stack | PR2 read at level 4, where its Subdivision is |
+| Samples to metadata | sample ID | as for one run | 85 samples everywhere |
+
+| Choice | Rule | Why, and what it costs |
+|---|---|---|
+| Which database names an ASV | PR2 if its Domain starts with `Eukaryota` (organelles included), else SILVA if Bacteria or Archaea, else SILVA as it is (`fallback`) | Each database where it is strong. TREC: 57,520 / 69,852 / 473 ASVs |
+| Confidence threshold on PR2's call | none | Domain disagreements are 0.5% of reads (317 ASVs Bacteria for SILVA and nuclear Eukaryota for PR2, PR2 confidence median 0.63). Worth an option if another project shows more |
+| PR2 ranks in SILVA's seven slots | `slot_ranks()`, above. Metazoa one rank deeper (`DEEPEN`) | Until 25/11/2026 Metazoa were read one slot off (Family held a genus, Genus a species): 16,316 ASVs, 32.5% of TREC reads, at genus and species level. Fixed here and in `build_trec_dualtax.py`; the tests pin the copepod lineage |
+| What "Phylum" is per option | `silva`: SILVA Phylum; `pr2`: PR2 Subdivision (bacteria too, e.g. `Proteobacteria_X`); `merged`: SILVA Phylum for prokaryotes, PR2 Subdivision for eukaryotes, PR2 Class for Metazoa | Names compare across options only for eukaryotes (pr2, merged) or prokaryotes (silva, merged) |
+| Organelles | ampliseq's default `--exclude_taxa mitochondria,chloroplast` matches SILVA labels only | PR2 run keeps them (10.7% of its reads, 20 of its 98 ANCOM-BC taxa at level 4); merged keeps PR2-labelled ones the SILVA run let through (0.2%) |
+| Abundances of the merged view | the SILVA run's tables | consistent with that run's diversity results |
+| ANCOM-BC settings | ampliseq 2.18.0 `conf/modules.config`: `prv_cut` 0.1, `lib_cut` 500, `conserve` on, Holm per contrast, q < 0.05, pseudocount 1, reference = the alphabetical first level | what the pipeline's own contrasts use; the recipe refuses to add comparisons if it does not reproduce them |
+| MA plot A axis | mean log10(count + 1) over the samples where the taxon is present | zeros are not in the composition table. Rare taxa sit higher than a mean over all samples would put them |
 
 ### Versions
 

@@ -17,8 +17,11 @@ With ``pairwise`` and ``group_col`` set, the recipe computes what the pipeline d
 run (``recipes/lib/ancombc.py``, the ``stats`` extra): every pair of levels of
 ``group_col`` its slices lack, from each run's barplot counts (``counts``,
 ``alt_counts``), and every pair for a merged taxonomy (``merged_taxonomy``, collapsed
-from the ASV counts of ``feature_table``, labelled ``merged_label``). It first checks
-that it reproduces the pipeline's own contrasts and warns when it does not.
+from the ASV counts of ``feature_table``, labelled ``merged_label``). It first
+recomputes the pipeline's own contrasts and stops the ingest when they do not match
+(same taxa tested; estimates, standard errors and q-values within ``_AGREEMENT``): the
+added pairs are only trustworthy if the same fit reproduces what the pipeline did. The
+merged taxonomy has no pipeline result to check against; it runs the same fit.
 """
 
 import logging
@@ -178,19 +181,27 @@ def _truthy(value: object) -> bool:
 
 
 def _check_agreement(fitted: pl.DataFrame, pipeline: pl.DataFrame, label: str) -> None:
-    """Warn when the recomputed contrasts differ from the pipeline's own slices."""
+    """Stop when the recomputed contrasts differ from the pipeline's own slices."""
+    run = label or "run"
+    fitted = fitted.filter(pl.col("contrast").is_in(pipeline["contrast"].unique().to_list()))
+    ours, theirs = set(fitted["id"]), set(pipeline["id"])
+    if ours != theirs:
+        raise ValueError(
+            f"ANCOM-BC ({run}): the recipe does not reproduce the pipeline: it tests "
+            f"{len(ours)} taxa, the pipeline {len(theirs)} ({len(ours ^ theirs)} differ). "
+            "The settings differ (prevalence or library-size cut?); no pair was added"
+        )
     joined = pipeline.join(fitted, on=["id", "contrast"], suffix="_ours")
-    if joined.is_empty():
-        return
     gap = joined.select(
         pl.max_horizontal(
             (pl.col(c) - pl.col(f"{c}_ours")).abs().max() for c in ("lfc", "se", "q_val")
         )
     ).item()
     if gap is not None and gap > _AGREEMENT:
-        logger.warning(
-            f"ANCOM-BC ({label or 'run'}): the recomputed contrasts differ from the pipeline's "
-            f"by up to {gap:.3g}; the added pairs may not match its settings"
+        raise ValueError(
+            f"ANCOM-BC ({run}): the recipe does not reproduce the pipeline: its estimates, "
+            f"standard errors or q-values differ by up to {gap:.3g} (tolerance {_AGREEMENT}). "
+            "No pair was added"
         )
 
 
@@ -272,6 +283,12 @@ def transform(sources: dict[str, pl.DataFrame | None], params: dict | None = Non
     params = params or {}
     alt = {name: sources.get(f"{name}_alt") for name in _SLICES}
     has_alt = all(frame is not None for frame in alt.values())
+    missing_alt = [f"{name}_alt" for name, frame in alt.items() if frame is None]
+    if not has_alt and len(missing_alt) < len(_SLICES):
+        raise ValueError(
+            f"ANCOM-BC: the second run has {len(_SLICES) - len(missing_alt)} of its 5 slices; "
+            f"missing {missing_alt}"
+        )
     has_merged = (
         _truthy(params.get("pairwise"))
         and sources.get("feature_table") is not None

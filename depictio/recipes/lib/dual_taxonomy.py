@@ -16,11 +16,18 @@ recipe downstream reads it as a SILVA table and its Phylum sits at collapse
 level 2. PR2 has nine ranks (Domain, Supergroup, Division, Subdivision, Class,
 …), two more than SILVA above the Phylum, which is the shift to keep in mind
 with its own collapsed outputs: PR2's level 4 (Subdivision) is what SILVA's
-level 2 (Phylum) is. For a PR2 ASV the Kingdom slot takes the Domain, the
-Phylum slot ``euk_phylum_rank`` (Subdivision by default), and the next PR2 ranks
-fill Class … Species in order. For the clades in :data:`DEEPEN` (Metazoa, a
-Subdivision holding a quarter of the reads) every slot reads one rank further
-down, so the animals show as Arthropoda, Mollusca … rather than one block.
+level 2 (Phylum) is. For a PR2 ASV (:func:`slot_ranks`):
+
+* Kingdom = the Domain, as is (organelles stay ``Eukaryota:plas`` …);
+* Phylum = ``euk_phylum_rank`` (Subdivision by default);
+* Class, Order, Family = the PR2 ranks after it, in order, never past PR2's
+  Family; a slot with no rank left is empty;
+* Genus, Species = PR2's Genus and Species, always.
+
+For the clades in :data:`DEEPEN` (Metazoa, a Subdivision holding a quarter of
+the reads) the Phylum is the next PR2 rank (Class), so the animals show as
+Arthropoda, Mollusca … rather than one block; their Family slot is then empty,
+and their Genus and Species stay PR2's genus and species.
 
 The rule is the one ``bin/build_trec_dualtax.py`` applied by hand on the TREC
 AML 2024 project. Abundances come from the SILVA run's table, so the merged
@@ -58,6 +65,19 @@ MERGED_PHYLUM_LEVEL = 2
 #: assigned it a domain; the SILVA label is kept).
 SOURCE_COLUMN = "taxonomy_source"
 SOURCES = ("pr2", "silva", "fallback")
+
+
+def slot_ranks(phylum_rank: str) -> list[str | None]:
+    """The PR2 rank read into each of :data:`SLOTS` when ``phylum_rank`` is the Phylum.
+
+    Genus and Species are true ranks in both databases, so they always map to
+    PR2's Genus and Species. Only Class, Order and Family take what lies between
+    the Phylum and the genus, which depends on the rank chosen for the Phylum.
+    """
+    start = PR2_RANKS.index(phylum_rank)
+    middle = [r for r in PR2_RANKS[start + 1 :] if PR2_RANKS.index(r) <= PR2_RANKS.index("Family")]
+    middle = (middle + [None, None, None])[:3]
+    return ["Domain", phylum_rank, *middle, "Genus", "Species"]
 
 
 def pr2_level(euk_phylum_rank: str = DEFAULT_EUK_PHYLUM_RANK) -> int:
@@ -138,17 +158,12 @@ def merge_pr2(
     )
 
     start = PR2_RANKS.index(euk_phylum_rank)
-    # Slot -> PR2 rank: Kingdom = Domain, Phylum = euk_phylum_rank, then the next
-    # PR2 ranks in order; slots past the last PR2 rank stay empty.
-    plain = ["Domain", *PR2_RANKS[start : start + len(SLOTS) - 1]]
-    deep = ["Domain", *PR2_RANKS[start + 1 : start + len(SLOTS)]]
-    plain += [None] * (len(SLOTS) - len(plain))
-    deep += [None] * (len(SLOTS) - len(deep))
-    deeper = PR2_RANKS[start + 1] if start + 1 < len(PR2_RANKS) else None
+    deeper = PR2_RANKS[start + 1]
+    plain, deep = slot_ranks(euk_phylum_rank), slot_ranks(deeper)
     deepen = (
         (pl.col(SOURCE_COLUMN) == "pr2")
         & pl.col(f"_pr2_{euk_phylum_rank}").is_in(DEEPEN)
-        & (pl.col(f"_pr2_{deeper}").is_not_null() if deeper else pl.lit(False))
+        & pl.col(f"_pr2_{deeper}").is_not_null()
     )
 
     def from_pr2(rank: str | None) -> pl.Expr:

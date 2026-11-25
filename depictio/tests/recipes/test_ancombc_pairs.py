@@ -190,3 +190,27 @@ def test_ma_takes_the_merged_abundance_from_the_collapsed_counts(tmp_path: Path)
 
     assert out["avg_log_intensity"][0] == 1.0  # log10(9 + 1); the zero is left out
     assert abs(out["avg_log_intensity"][1] - (np.log10(91) + 2.0) / 2) < 1e-9
+
+
+def test_a_recipe_that_does_not_reproduce_the_pipeline_stops(tmp_path: Path) -> None:
+    """The pairs are only as good as the match: a mismatch fails the ingest."""
+    _write_run(tmp_path, "Bacteria", seed=1)
+    lfc = tmp_path / DIR / "lfc_slice.csv"
+    pl.read_csv(lfc).with_columns(pl.col("localityBarcelona") + 0.5).write_csv(lfc)
+
+    with pytest.raises(ValueError, match="does not reproduce"):
+        ANCOMBC.transform(_sources(tmp_path), params=PARAMS)
+
+
+def test_a_partial_second_run_stops(tmp_path: Path, monkeypatch) -> None:
+    """Four of the five PR2 slices: an error, not a silent drop of every PR2 row."""
+    monkeypatch.setenv("DEPICTIO_CONTEXT", "cli")
+    _write_run(tmp_path, "Bacteria", seed=1)
+    extra = {f"{n}_alt": str(tmp_path / DIR / f"{n}_slice.csv") for n in SLOTS_BUT_SE}
+    sources = _sources(tmp_path, extra)
+
+    with pytest.raises(ValueError, match="se_alt"):
+        ANCOMBC.transform(sources, params={**PARAMS, "label": "silva"})
+
+
+SLOTS_BUT_SE = ("lfc", "p_val", "q_val", "w")

@@ -108,6 +108,23 @@ class TestFit:
 
         assert "Bacteria;rare" not in out["id"].to_list()
 
+    def test_shallow_samples_are_left_out(self):
+        """ampliseq's lib_cut: a sample under 500 reads is not tested."""
+        counts, groups = _counts()
+        shallow = counts.copy()
+        shallow.iloc[0] = 1  # 15 reads
+
+        assert lib.fit(shallow, groups, "Athens").equals(
+            lib.fit(counts.iloc[1:], groups.iloc[1:], "Athens")
+        )
+
+    def test_a_level_name_with_a_bracket_is_kept(self):
+        counts, groups = _counts(levels=("A", "B[1]"))
+
+        out = lib.fit(counts, groups, "A")
+
+        assert out["level"].unique().to_list() == ["B[1]"]
+
 
 def test_collapse_sums_asvs_per_merged_phylum():
     table = pl.DataFrame(

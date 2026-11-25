@@ -4,7 +4,8 @@ Joins ANCOM-BC log-fold-change results with per-taxon mean log abundance
 derived from the raw composition counts. Produces the canonical MA roles:
 
     feature_id : Utf8           -- taxon id (joined on id)
-    avg_log_intensity : Float64 -- mean log10(count + 1) across samples (the A axis)
+    avg_log_intensity : Float64 -- mean log10(count + 1) over the samples where the
+                                   taxon is present (the A axis; zeros are not counted)
     log2_fold_change : Float64  -- ANCOM-BC lfc (the M axis)
 
 Optional ``significance`` (q_val) drives tier colouring; ``label`` (Phylum)
@@ -114,7 +115,8 @@ def transform(sources: dict[str, pl.DataFrame | None], params: dict | None = Non
         wide = pl.from_pandas(collapse(table, lineages).rename_axis("index").reset_index())
         parts.append(_labelled_intensity(wide, pl.lit(params.get("merged_label") or "merged")))
 
-    # Mean log10(count + 1) per taxon across samples — the A axis.
+    # Mean log10(count + 1) per taxon over the samples where it is present (the
+    # composition table holds no zero counts): the A axis.
     intensity = (
         composition.group_by("taxonomy")
         .agg((pl.col("count") + 1).log(base=10).mean().alias("avg_log_intensity"))
