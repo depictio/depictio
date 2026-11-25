@@ -646,3 +646,52 @@ def test_dry_run_with_only_optional_absent_collections_reads_clean(wide_console)
     flat = _flat(captured.get())
     assert _flat("Sources not found under this data root") not in flat
     assert _flat("0 missing sources, 1 optional absent") in flat
+
+
+def test_dry_run_counts_an_optional_scan_matching_nothing_as_absent(wide_console):
+    """An optional scan that matches no file is "empty" to the preview, and the
+    ingest skips it like any optional collection: not an empty to warn about."""
+    from depictio.cli.cli.utils.template_preview import DataCollectionPreview
+
+    preview = RunPreview(
+        template_id=TEMPLATE,
+        data_root="/data/run",
+        project_name="megatest",
+        resolved_variables={},
+        detected_runs=[],
+        data_collections=[
+            DataCollectionPreview(
+                tag="multiqc_data",
+                kind="scan",
+                mode="single",
+                location="/data/run/multiqc",
+                matched=1,
+            ),
+            DataCollectionPreview(
+                tag="picrust_pathways",
+                kind="scan",
+                mode="recursive",
+                location="/data/run/picrust",
+                matched=0,
+                optional=True,
+                status="empty",
+            ),
+            DataCollectionPreview(
+                tag="dada2_tables",
+                kind="scan",
+                mode="recursive",
+                location="/data/run/dada2",
+                matched=0,
+                status="empty",
+            ),
+        ],
+    )
+    with rich_utils.console.capture() as captured:
+        run_module._render_run_preview(preview)
+    flat = _flat(captured.get())
+    # The required empty scan still counts and warns; the optional one is apart.
+    assert (
+        _flat("1 data collection(s) will ingest, 1 empty, 0 missing sources, 1 optional absent")
+        in flat
+    )
+    assert _flat("Optional, inputs absent from this run: picrust_pathways") in flat

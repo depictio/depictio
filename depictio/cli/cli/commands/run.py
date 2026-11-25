@@ -631,6 +631,12 @@ def ingestion_record(trap_sigterm: bool = True) -> Iterator[_IngestionRecord]:
         restore_sigterm()
 
 
+def _optional_absent(dc) -> bool:
+    """An optional collection with nothing to read: a source not found, or a scan
+    matching no file. The ingest skips both, so the dry run sets them apart."""
+    return bool(dc.optional) and dc.status in ("missing", "empty")
+
+
 def _render_run_preview(preview) -> None:
     """Print what a ``--dry-run`` would actually ingest, per data collection.
 
@@ -683,9 +689,7 @@ def _render_run_preview(preview) -> None:
                 "Kind": dc.kind,
                 "Mode": dc.mode or "-",
                 "Files": str(dc.matched),
-                "Status": _status_cell(
-                    "absent (optional)" if dc.status == "missing" and dc.optional else dc.status
-                ),
+                "Status": _status_cell("absent (optional)" if _optional_absent(dc) else dc.status),
             }
             for dc in preview.data_collections
         ],
@@ -704,12 +708,12 @@ def _render_run_preview(preview) -> None:
     # cropped to the terminal's width, and a source path cropped in the middle
     # is exactly the half that would have told you the prefix is wrong.
     # An optional collection whose inputs are absent is what the ingest skips
-    # ("Skipped N optional data collection(s)..."), not a source it failed to
-    # find: it is named and counted apart, so the dry run and the ingest agree.
+    # ("Skipped optional data collection ..."), neither a source it failed to
+    # find nor an empty scan: it is named and counted apart, so the dry run and
+    # the ingest agree.
     missing = [dc for dc in preview.data_collections if dc.status == "missing" and not dc.optional]
-    optional_absent = [
-        dc for dc in preview.data_collections if dc.status == "missing" and dc.optional
-    ]
+    empty = [dc for dc in preview.data_collections if dc.status == "empty" and not dc.optional]
+    optional_absent = [dc for dc in preview.data_collections if _optional_absent(dc)]
     if missing:
         rich_print_checked_statement("Sources not found under this data root:", "warning")
         for dc in missing:
@@ -732,13 +736,13 @@ def _render_run_preview(preview) -> None:
     counts = Counter(dc.status for dc in preview.data_collections)
     summary = (
         f"{counts['ok']} data collection(s) will ingest, "
-        f"{counts['empty']} empty, {len(missing)} missing sources"
+        f"{len(empty)} empty, {len(missing)} missing sources"
     )
     if optional_absent:
         summary += f", {len(optional_absent)} optional absent"
     if counts["pruned"]:
         summary += f", {counts['pruned']} pruned (optional source absent)"
-    rich_print_checked_statement(summary, "warning" if counts["empty"] or missing else "success")
+    rich_print_checked_statement(summary, "warning" if empty or missing else "success")
 
 
 def _write_provisioned_cli_config(base_raw_config: dict, provision: dict) -> str:
