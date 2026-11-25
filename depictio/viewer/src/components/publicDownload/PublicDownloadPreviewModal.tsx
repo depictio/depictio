@@ -9,9 +9,7 @@ import {
   Modal,
   Paper,
   ScrollArea,
-  Spoiler,
   Stack,
-  Table,
   Text,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
@@ -20,7 +18,8 @@ import {
   preflightStaticExport,
   type StaticExportPreflight,
 } from 'depictio-react-core';
-import { formatBundleBytes, formatCount } from './format';
+import { formatBundleBytes } from './format';
+import CollectionInventory from '../export/CollectionInventory';
 
 interface DashboardPreview {
   id: string;
@@ -81,54 +80,7 @@ const DashboardInventory: React.FC<{ preview: DashboardPreview }> = ({ preview }
         {preflight && (
           <>
             <TierCounts counts={preflight.counts} />
-            {(preflight.collections ?? []).length === 0 ? (
-              <Text size="xs" c="dimmed">
-                No table data ships with this dashboard: every tile is a frozen picture.
-              </Text>
-            ) : (
-              <Table withTableBorder={false} verticalSpacing={4} fz="xs">
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Collection</Table.Th>
-                    <Table.Th ta="right">Rows</Table.Th>
-                    <Table.Th>Columns</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {(preflight.collections ?? []).map((c) => (
-                    <Table.Tr key={c.dc_id} data-testid="public-download-preview-collection">
-                      <Table.Td style={{ verticalAlign: 'top' }}>
-                        <Group gap={4} wrap="nowrap">
-                          <Text size="xs" fw={500}>
-                            {c.name}
-                          </Text>
-                          {c.type && (
-                            <Badge variant="outline" color="gray" size="xs">
-                              {c.type}
-                            </Badge>
-                          )}
-                        </Group>
-                        {c.whole && (
-                          <Badge variant="light" size="xs" mt={2}>
-                            ships whole
-                          </Badge>
-                        )}
-                      </Table.Td>
-                      <Table.Td ta="right" style={{ verticalAlign: 'top' }}>
-                        {formatCount(c.rows)}
-                      </Table.Td>
-                      <Table.Td style={{ verticalAlign: 'top' }}>
-                        <Spoiler maxHeight={36} showLabel="all columns" hideLabel="fewer">
-                          <Text size="xs" c="dimmed" style={{ wordBreak: 'break-word' }}>
-                            {c.columns.length} · {c.columns.join(', ')}
-                          </Text>
-                        </Spoiler>
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-            )}
+            <CollectionInventory collections={preflight.collections ?? []} />
           </>
         )}
       </Stack>

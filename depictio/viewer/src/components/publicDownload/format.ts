@@ -13,8 +13,3 @@ export function formatBuiltAt(iso?: string | null): string {
   if (Number.isNaN(date.getTime())) return '';
   return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
-
-/** "1,234" in the reader's locale. */
-export function formatCount(n: number): string {
-  return n.toLocaleString();
-}
