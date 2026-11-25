@@ -83,7 +83,8 @@ const TileSummary: React.FC<{
 
   return (
     <Stack gap={6} data-testid={testId}>
-      <Group gap="md" px="xs">
+      {/* Aligned on the chevrons of the tab rows below. */}
+      <Group gap="md" pl={13} pr="xs">
         {order
           .filter((key) => (totals.get(key) ?? 0) > 0)
           .map((key) => (

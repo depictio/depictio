@@ -119,10 +119,17 @@ const SIZE_UPPER_BOUND_NOTE =
  * squeeze under. Disabling Export here would refuse builds the server would
  * have accepted; the reader is told what is likely and left to decide.
  */
-const SizeEstimate: React.FC<{ size: StaticExportSizeEstimate }> = ({ size }) => {
-  const total = size.estimated_total_bytes;
-  if (typeof total !== 'number') return null;
-  const upTo = `up to about ${approxMB(total)}`;
+const SizeEstimate: React.FC<{
+  size: StaticExportSizeEstimate;
+  /** The Python runtime, when embedded: the data estimate leaves it out. */
+  extraBytes?: number;
+}> = ({ size, extraBytes = 0 }) => {
+  const data = size.estimated_total_bytes;
+  if (typeof data !== 'number') return null;
+  const total = data + extraBytes;
+  const upTo =
+    `up to about ${approxMB(total)}` +
+    (extraBytes > 0 ? ', the Python runtime included' : '');
 
   if (size.verdict === 'would_be_refused') {
     return (
@@ -451,6 +458,13 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
                     </Text>
                   )}
                 </Group>
+                {/* Badges only when they split the tiles: "Live: 44" under "44 of
+                    44 tiles stay interactive" says it twice. */}
+                {(['live', 'partial', 'frozen', 'omitted'] as const).filter(
+                  (tier) => decidedCounts[tier] > 0,
+                ).length +
+                  (undecidedCount > 0 ? 1 : 0) >
+                  1 && (
                 <Group gap={6}>
                   {(['live', 'partial', 'frozen', 'omitted'] as const)
                     .filter((tier) => decidedCounts[tier] > 0)
@@ -475,6 +489,7 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
                     </Badge>
                   )}
                 </Group>
+                )}
                 {undecidedCount > 0 && (
                   // The counts above are only the settled rows, so say what the
                   // rest are: promising "24 frozen" and shipping 9 is the failure
@@ -487,7 +502,14 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
                 )}
                 {/* Last of the summary rather than at the bottom: the tables
                     below are folded, so the size is read before Export. */}
-                {preflight.size_estimate && <SizeEstimate size={preflight.size_estimate} />}
+                {preflight.size_estimate && (
+                  <SizeEstimate
+                    size={preflight.size_estimate}
+                    extraBytes={
+                      pythonChoice && pythonInfo?.embedded ? pythonInfo.bytes || 0 : 0
+                    }
+                  />
+                )}
               </Stack>
             </Paper>
 

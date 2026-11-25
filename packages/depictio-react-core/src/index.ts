@@ -1508,6 +1508,7 @@ export {
   componentKindLabel,
   componentTitle,
   groupSpotlightHits,
+  humanizeKind,
   searchSpotlight,
   stripMarkdown,
   SPOTLIGHT_PER_TAB,

@@ -6,7 +6,6 @@ import {
   Badge,
   Button,
   Center,
-  Checkbox,
   Group,
   Loader,
   Modal,
@@ -15,6 +14,7 @@ import {
   SegmentedControl,
   SimpleGrid,
   Stack,
+  Switch,
   Text,
   ThemeIcon,
   Tooltip,
@@ -27,6 +27,7 @@ import {
   exportNotebook,
   fetchNotebookPreflight,
   fetchNotebookRenderStatus,
+  humanizeKind,
   publicBundleDownloadUrl,
   startNotebookRender,
   type AnalysisState,
@@ -420,7 +421,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     group.items.push({
       id: c.index,
       title: c.title || c.index,
-      kind: c.kind || c.component_type,
+      kind: humanizeKind(c.kind || c.component_type),
       status: c.status,
       note: note || null,
     });
@@ -464,7 +465,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
               Export as a report
             </Text>
             <Text size="xs" c="dimmed" lh={1.3}>
-              {dashboardTitle || 'This dashboard'} · every tab
+              {dashboardTitle || 'This dashboard'}
             </Text>
           </Stack>
         </Group>
@@ -507,7 +508,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
           </SimpleGrid>
           {readyReport && format !== 'qmd' && !job && (
             <Paper withBorder radius="md" px="sm" py={8} data-testid="notebook-export-ready-copy">
-              <Group justify="space-between" wrap="nowrap" gap="sm">
+              <Stack gap={6}>
                 <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
                   <Icon icon="mdi:lightning-bolt-outline" width={18} style={{ flexShrink: 0 }} />
                   <Text size="xs" style={{ minWidth: 0 }}>
@@ -518,14 +519,14 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
                       </>
                     ) : (
                       <>
-                        <b>A ready copy</b> exists at the default view
-                        {readyReport.built_at ? ` (built ${formatBuiltAt(readyReport.built_at)})` : ''}
-                        ; your filters need a render.
+                        <b>Ready copy</b> at the default view
+                        {readyReport.built_at ? `, built ${formatBuiltAt(readyReport.built_at)}` : ''}
+                        . Your filters need a render.
                       </>
                     )}
                   </Text>
                 </Group>
-                <Group gap={6} wrap="nowrap">
+                <Group gap={6} wrap="wrap" pl={26}>
                   <Button
                     component="a"
                     href={publicBundleDownloadUrl(dashboardId, 'report')}
@@ -535,7 +536,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
                     leftSection={<Icon icon="mdi:download" width={14} />}
                     data-testid="notebook-export-ready-html"
                   >
-                    HTML{readyReport.size_bytes ? ` · ${formatBundleBytes(readyReport.size_bytes)}` : ''}
+                    Report + dashboard{readyReport.size_bytes ? ` · ${formatBundleBytes(readyReport.size_bytes)}` : ''}
                   </Button>
                   {readyReport.pdf_available && (
                     <Button
@@ -554,31 +555,59 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
                     </Button>
                   )}
                 </Group>
-              </Group>
+              </Stack>
             </Paper>
           )}
-          <Group gap="lg">
-            {onExportDashboardOnly && (
-              <Anchor
-                component="button"
-                type="button"
-                size="xs"
-                onClick={handleDashboardOnly}
-                data-testid="export-dashboard-only"
-              >
-                The dashboard alone, as one offline HTML file…
-              </Anchor>
-            )}
-            {reportEditorEnabled && (
-              <Anchor
-                size="xs"
-                href={`/dashboard-report/${dashboardId}`}
-                data-testid="notebook-export-edit-report"
-              >
-                Edit the report: cover, introduction, captions…
-              </Anchor>
-            )}
-          </Group>
+          {/* The PDF is one of the outputs, not a detail of the look: it sits
+              with the formats. */}
+          <Paper withBorder radius="md" px="sm" py={8} data-testid="notebook-export-pdf-row">
+            <Group justify="space-between" wrap="nowrap" gap="sm">
+              <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+                <Icon icon="mdi:file-pdf-box" width={18} style={{ flexShrink: 0 }} />
+                <Stack gap={0} style={{ minWidth: 0 }}>
+                  <Text size="sm" fw={500}>
+                    Also a PDF
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {pdf
+                      ? pdfStyle === 'colour'
+                        ? 'Figures as images, tables as their first rows; tab colours on headings.'
+                        : 'Figures as images, tables as their first rows; print-friendly text.'
+                      : 'Figures as images, tables as their first rows, ready to print.'}
+                  </Text>
+                </Stack>
+              </Group>
+              <Group gap="xs" wrap="nowrap">
+                {pdf && (
+                  <SegmentedControl
+                    size="xs"
+                    value={pdfStyle}
+                    onChange={(v) => setPdfStyle(v as NotebookPdfStyle)}
+                    data={[
+                      { label: 'Colour', value: 'colour' },
+                      { label: 'Mono', value: 'mono' },
+                    ]}
+                    data-testid="notebook-export-pdf-style"
+                  />
+                )}
+                <Switch
+                  checked={pdf}
+                  onChange={(e) => setPdf(e.currentTarget.checked)}
+                  aria-label="Also a PDF"
+                  data-testid="notebook-export-pdf"
+                />
+              </Group>
+            </Group>
+          </Paper>
+          {reportEditorEnabled && (
+            <Anchor
+              size="xs"
+              href={`/dashboard-report/${dashboardId}`}
+              data-testid="notebook-export-edit-report"
+            >
+              Edit the report: cover, introduction, captions…
+            </Anchor>
+          )}
         </Stack>
 
         {error && (
@@ -634,7 +663,6 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
               </Text>
               <Text size="xs" c="dimmed">
                 {theme === 'paper' ? 'Paper' : 'Classic'}
-                {pdf ? ` · PDF (${pdfStyle === 'colour' ? 'colour' : 'monochrome'})` : ''}
                 {isCombined ? ` · opens on the ${defaultView}` : ''}
               </Text>
             </Accordion.Control>
@@ -675,34 +703,6 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
                       The view the file shows first; a reader's own choice is remembered after
                       that, and links can open either (<code>#dashboard</code>,{' '}
                       <code>#report</code>).
-                    </Text>
-                  </Stack>
-                )}
-                <Checkbox
-                  checked={pdf}
-                  onChange={(e) => setPdf(e.currentTarget.checked)}
-                  label="Also a PDF"
-                  description={
-                    'Rendered beside the HTML report with Quarto (typst, no TeX): figures as ' +
-                    'images, tables as their first rows, filters and other interactive parts left out.'
-                  }
-                  data-testid="notebook-export-pdf"
-                />
-                {pdf && (
-                  <Stack gap={4}>
-                    <SegmentedControl
-                      value={pdfStyle}
-                      onChange={(v) => setPdfStyle(v as NotebookPdfStyle)}
-                      data={[
-                        { label: 'Colour', value: 'colour' },
-                        { label: 'Monochrome', value: 'mono' },
-                      ]}
-                      data-testid="notebook-export-pdf-style"
-                    />
-                    <Text size="xs" c="dimmed">
-                      {pdfStyle === 'colour'
-                        ? 'Tab colours on headings and in the contents, tinted notes.'
-                        : 'Print-friendly: headings, contents and notes in the text colour. Figures keep theirs.'}
                     </Text>
                   </Stack>
                 )}
@@ -751,16 +751,29 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
         )}
 
         <Group justify="space-between" wrap="nowrap" gap="sm">
-          <Text size="xs" c="dimmed" data-testid="notebook-export-render-hint">
-            {isReport && !job && renderAvailable
-              ? 'Rendered on the server, about a minute or more. You can leave this open.'
-              : ''}
-          </Text>
+          <Group gap="lg" style={{ minWidth: 0 }}>
+            {onExportDashboardOnly && (
+              <Anchor
+                component="button"
+                type="button"
+                size="xs"
+                onClick={handleDashboardOnly}
+                data-testid="export-dashboard-only"
+              >
+                The dashboard alone (offline HTML)…
+              </Anchor>
+            )}
+          </Group>
           <Group gap="xs" wrap="nowrap">
             <Button variant="default" onClick={onClose}>
               Close
             </Button>
             {isReport && job?.status !== 'ready' ? (
+              <Tooltip
+                label="Rendered on the server: about a minute or more. You can leave this open."
+                disabled={!isReport || Boolean(job) || !renderAvailable}
+                zIndex={Z_LAYERS.tooltip}
+              >
               <Button
                 leftSection={<Icon icon="mdi:file-document-outline" width={16} />}
                 onClick={handleRender}
@@ -771,6 +784,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
               >
                 {job?.status === 'error' ? 'Render again' : PRIMARY_LABEL[format]}
               </Button>
+              </Tooltip>
             ) : (
               <>
                 {isReport && job?.pdf_filename && (
