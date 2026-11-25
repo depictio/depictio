@@ -828,7 +828,7 @@ def _apply_conditionals(
     removed_dc_tags: set[str] = set()
     removal_reasons: dict[str, str] = {}
     active_dashboards: list[str] = []
-    overrides_by_tag: dict[str, Any] = {}
+    overrides_by_tag: dict[str, list[DCOverride]] = {}
 
     for rule in conditionals:
         fires = False
@@ -849,14 +849,16 @@ def _apply_conditionals(
             removal_reasons.setdefault(tag, reason)
             logger.info(f"Conditional rule: removing DC tag '{tag}'")
 
-        # Collect DC source-binding overrides (last-write-wins per tag).
+        # Collect DC source-binding overrides, applied in rule order: a later
+        # rule's field wins, and source_overrides / dc_properties merge by key, so
+        # two rules repointing different sources of one DC both hold.
         # Resolved through the variable map first: the rule fires on a variable
         # being present, so pointing the DC at that variable's value is the
         # natural thing to write, and every override field can hold a path.
         for ov in rule.override_dcs:
             if variables:
                 ov = DCOverride(**substitute_template_variables(ov.model_dump(), variables))
-            overrides_by_tag[ov.data_collection_tag] = ov
+            overrides_by_tag.setdefault(ov.data_collection_tag, []).append(ov)
             logger.info(f"Conditional rule: overriding DC source '{ov.data_collection_tag}'")
 
         # Override active dashboards. Multiple firing rules are last-write-wins;
@@ -904,28 +906,31 @@ def _apply_conditionals(
     if overrides_by_tag:
         for workflow in config.get("workflows", []):
             for dc in workflow.get("data_collections", []):
-                ov = overrides_by_tag.get(dc.get("data_collection_tag"))
-                if ov is None:
-                    continue
-                cfg = dc.setdefault("config", {})
-                if ov.scan_pattern is not None or ov.scan_filename is not None:
-                    params = cfg.setdefault("scan", {}).setdefault("scan_parameters", {})
-                    if ov.scan_pattern is not None:
-                        params.setdefault("regex_config", {})["pattern"] = ov.scan_pattern
-                    if ov.scan_filename is not None:
-                        params["filename"] = ov.scan_filename
-                if ov.format is not None:
-                    cfg.setdefault("dc_specific_properties", {})["format"] = ov.format
-                if ov.recipe is not None:
-                    cfg.setdefault("transform", {})["recipe"] = ov.recipe
-                if ov.source_overrides is not None:
-                    so = cfg.setdefault("transform", {}).setdefault("source_overrides", {})
-                    so.update(ov.source_overrides)
-                if ov.dc_properties:
-                    cfg.setdefault("dc_specific_properties", {}).update(ov.dc_properties)
-                logger.info(f"Repointed DC '{dc.get('data_collection_tag')}' for route")
+                for ov in overrides_by_tag.get(dc.get("data_collection_tag"), []):
+                    _apply_dc_override(dc, ov)
 
     return config, active_dashboards, removal_reasons
+
+
+def _apply_dc_override(dc: dict, ov: DCOverride) -> None:
+    """Repoint one DC config at a conditional rule's override, in place."""
+    cfg = dc.setdefault("config", {})
+    if ov.scan_pattern is not None or ov.scan_filename is not None:
+        params = cfg.setdefault("scan", {}).setdefault("scan_parameters", {})
+        if ov.scan_pattern is not None:
+            params.setdefault("regex_config", {})["pattern"] = ov.scan_pattern
+        if ov.scan_filename is not None:
+            params["filename"] = ov.scan_filename
+    if ov.format is not None:
+        cfg.setdefault("dc_specific_properties", {})["format"] = ov.format
+    if ov.recipe is not None:
+        cfg.setdefault("transform", {})["recipe"] = ov.recipe
+    if ov.source_overrides is not None:
+        so = cfg.setdefault("transform", {}).setdefault("source_overrides", {})
+        so.update(ov.source_overrides)
+    if ov.dc_properties:
+        cfg.setdefault("dc_specific_properties", {}).update(ov.dc_properties)
+    logger.info(f"Repointed DC '{dc.get('data_collection_tag')}' for route")
 
 
 def _placeholders_in(node: Any) -> set[str]:
@@ -1415,6 +1420,10 @@ def _introspect_pipeline_params(
         used one
       - ``DADA2_REF_DB``: the database label ampliseq 3.x writes into the name
         of the DADA2 taxonomy its single-taxonomy steps read
+      - ``REF_DB_NAME``: that database's bare name (``silva`` for ``silva=138.2``),
+        the label of the run's rows next to a second run's
+      - ``PR2_PHYLUM_LEVEL``: with a second run against PR2 (``PR2_RESULTS``), the
+        PR2 collapse level of ``EUK_PHYLUM_RANK``, where its ANCOM-BC is read
     """
     root = as_data_root(root)
     if params is None:
@@ -1430,12 +1439,26 @@ def _introspect_pipeline_params(
         ):
             variables.setdefault(name, str(int(phylum_level) + offset))
 
+    if variables.get("PR2_RESULTS"):
+        from depictio.recipes.lib.dual_taxonomy import (
+            DEFAULT_EUK_PHYLUM_RANK,
+            EUK_PHYLUM_RANKS,
+            pr2_level,
+        )
+
+        rank = variables.get("EUK_PHYLUM_RANK") or DEFAULT_EUK_PHYLUM_RANK
+        if rank in EUK_PHYLUM_RANKS:
+            variables.setdefault("PR2_PHYLUM_LEVEL", str(pr2_level(rank)))
+
     if not params:
         return
 
     dada2_label = _ampliseq_dada2_label(params)
     if dada2_label:
         variables.setdefault("DADA2_REF_DB", dada2_label)
+    first_db = str(params.get("dada_ref_taxonomy") or "").split(",")[0].split("=")[0].strip()
+    if first_db:
+        variables.setdefault("REF_DB_NAME", first_db)
 
     # ampliseq phylogenetic placement never writes qiime2/phylogenetic_tree/tree.nwk;
     # the tree is the EPA-ng graft under pplace/. Keyed on the reference tree input

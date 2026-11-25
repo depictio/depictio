@@ -40,6 +40,8 @@ AUTO_VARIABLES = {
     "METADATA_FILE": "found in `input/` when the run had `--metadata`",
     "PPLACE_TREE_FILE": "found in `pplace/` when the run had `--pplace_tree`",
     "DADA2_REF_DB": "ampliseq: the first `--dada_ref_taxonomy` database, or the consolidated one",
+    "REF_DB_NAME": "ampliseq: the first `--dada_ref_taxonomy` database's name (`silva`)",
+    "PR2_PHYLUM_LEVEL": "ampliseq with PR2_RESULTS: PR2's collapse level of EUK_PHYLUM_RANK",
     "PHYLUM_LEVEL": "read from the QIIME2 barplots / DADA2 taxonomy",
     "CLASS_LEVEL": "PHYLUM_LEVEL + 1",
     "ORDER_LEVEL": "PHYLUM_LEVEL + 2",

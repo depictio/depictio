@@ -44,7 +44,7 @@ depictio ingest results_silva138_2 --template nf-core/ampliseq/2.18.0 \
 - Checked on the TREC run: the ingest route (recipe output, then prune) gives a tree
   byte-identical to the one pruned by hand, in under a second.
 
-## 2. A second run with another reference database (done for the taxonomy views)
+## 2. A second run with another reference database (done)
 
 ### Where to merge
 
@@ -87,6 +87,32 @@ depictio ingest results_silva138_2 --template nf-core/ampliseq/2.18.0 \
   rank and confidence, the rel-tables at levels 2 to 6 are identical, and the five
   consumers produce the same frames from the new DC as from the overlay folder.
 
+### ANCOM-BC and the MA plot of both runs
+
+The hand-made overlay showed ANCOM-BC per database, tagged `taxonomy = silva | pr2`, from
+slices it renamed `lfc_slice.silva.csv` / `lfc_slice.pr2.csv`. The template now reads both
+runs' own slices:
+- `qiime2/ancombc.py` gains five optional *path* sources for a second run (`lfc_alt` ...).
+  Paths, not globs: a recipe glob cannot leave the data root (`Path.glob` refuses an
+  absolute pattern). Their rows are labelled `alt_label` (`pr2`), and only then do the
+  DATA_ROOT run's unlabelled rows take `label`. A single run keeps an empty `taxonomy`, so
+  other templates are unchanged.
+- `ma_canonical` takes the second run's barplot (`alt_barplot`) for the abundance of the
+  `pr2` rows, whose lineages the SILVA composition does not hold.
+- ampliseq 2.18.0 points them, under `PR2_RESULTS`, at
+  `{PR2_RESULTS}/qiime2/ancombc/differentials/Category-{GROUP_COL}-level-{PR2_PHYLUM_LEVEL}/`
+  and `qiime2/barplot/level-{PR2_PHYLUM_LEVEL}.csv`. Two variables are auto-set by the CLI:
+  `PR2_PHYLUM_LEVEL` from `EUK_PHYLUM_RANK` (`pr2_level()`, Subdivision = 4), and
+  `REF_DB_NAME`, the bare name of the run's first `--dada_ref_taxonomy` (`silva`).
+- Two conditional rules now repoint different sources of `ancombc_results` (the
+  `PHYLUM_LEVEL` globs and the `PR2_RESULTS` paths). Overrides used to be last-write-wins
+  per DC, so the second rule erased the first; they are now applied in rule order, a later
+  field winning and `source_overrides` merging by key. Scalar fields keep their old
+  precedence (the tree routes rely on it).
+- Not carried over: the overlay's third option, ANCOM-BC on the merged taxonomy, and its
+  Naples vs Barcelona contrast. Both came from an R rerun (`make ancombc`). The contrast can
+  come from ampliseq itself (`--ancombc_formula`, to test); the merged option is dropped.
+
 ### Versions
 
 ampliseq 2.18.0 template 1.7.0 to 1.8.0 (pruning: a new DC option and a new order) then
@@ -100,17 +126,20 @@ outputs are unchanged without the new DC.
 - **Ingest:** the raw SILVA folder plus `PR2_RESULTS`, with no `TREE_FILE`, took 80 s. A second ingest with `--update-config` kept every ID.
 - **Upgrade path:** a project built the old way on 1.24.0 (overlay folder and `TREE_FILE`) was re-ingested the new way. The two were compared table by table:
   - 20 tables and the tree are identical;
-  - `ancombc_results` and `ma_canonical` keep the SILVA run's slices only.
-- **The TREC dashboard on the new project:** every tab renders except Differential abundance. That tab shows 0 taxa: its `taxonomy` filter starts on `merged`, and the column is now empty (draft issue 1).
+  - `ancombc_results` and `ma_canonical`: the `silva` rows (66 taxa) and the `pr2` rows (98
+    taxa) are identical to the overlay's, every value, for the two contrasts ampliseq ran.
+    The overlay's `merged` rows and its third contrast came from the R rerun and are gone.
+- **The TREC dashboard on the new project:** every tab renders. Differential abundance shows the SILVA and PR2 options in the browser (volcano, cards, MA), but opens empty: its `taxonomy` filter starts on `merged`, which no longer exists.
 - **Render checker:** `scripts/check_deployment.py` reports three `DC_NOT_REGISTERED` on `matrix_dc_id`. Those are false positives, already there before this branch: the field is deprecated, the viewer does not read it, and the three heatmaps render in the browser.
 
 ### What is left (draft issues below)
 
-- **ANCOM-BC and the MA plot keep the DATA_ROOT run's results.** The TREC dashboard offers
-  "SILVA" and "PR2" options, read from slices the overlay labelled `.silva.csv` /
-  `.pr2.csv`. The ANCOM-BC recipe reads its slices with globs, and a recipe glob cannot
-  leave the data root (`Path.glob` refuses an absolute pattern), so the PR2 run's slices
-  are out of reach today.
+- **Dashboards that start on `merged`.** The TREC dashboard's "Reference database" filter
+  on `ancombc_results.taxonomy` starts on `merged`, which no longer exists: it must start
+  on `silva` (a change in that project's dashboard, not here).
+- **A second-run option in the abstract.** The `*_alt` sources serve one extra run. Letting
+  `SourceOverride.glob_pattern` take an absolute pattern resolved against its own folder
+  would serve any number, and other two-run templates.
 - **`taxonomy_composition`** reads QIIME2's barplot counts, which the merged table (relative
   abundances) does not carry. It stays SILVA's, as it was with the overlay.
 - **A server-side ingest** (ingest worker, Data refresh) reads `PR2_RESULTS` only when the
@@ -143,39 +172,11 @@ to use it. What is still missing is a **scripted** route, kept in Git with the p
 - a table added in the app must be added again whenever the project is created anew (a new
   instance, new IDs).
 
-Smallest change: a local overlay template that extends a bundled one (draft issue 3).
+Smallest change: a local overlay template that extends a bundled one (draft issue 2).
 
 ## Draft issues (not filed)
 
-### 1. [FEATURE] ampliseq: ANCOM-BC and MA plot per reference database with PR2_RESULTS
-
-When `PR2_RESULTS` is set, `ancombc_results` and `ma_canonical` still read only the
-DATA_ROOT (SILVA) run. Projects that merged SILVA and PR2 by hand showed both runs' results
-side by side, tagged `taxonomy = silva | pr2`, from slices renamed `lfc_slice.silva.csv` /
-`lfc_slice.pr2.csv`.
-
-Proposal:
-- `qiime2/ancombc.py`: five optional *path* sources for a second run (`lfc_alt` ...; paths,
-  not globs: a recipe glob cannot leave the data root) and params `label` / `alt_label`
-  (default unset, so other templates are unchanged).
-- ampliseq 2.18.0: when `PR2_RESULTS` is set, point them at
-  `{PR2_RESULTS}/qiime2/ancombc/differentials/Category-{GROUP_COL}-level-{PR2_PHYLUM_LEVEL}/`,
-  with `PR2_PHYLUM_LEVEL` derived from `EUK_PHYLUM_RANK` (`pr2_level()`: Subdivision = 4),
-  labels `silva` / `pr2`.
-- `ma_canonical`: the PR2 run's `qiime2/barplot/level-{PR2_PHYLUM_LEVEL}.csv` as the
-  labelled barplot for the `pr2` rows.
-- Alternative: let `SourceOverride.glob_pattern` take an absolute pattern resolved against
-  its own folder, which would also serve other two-run templates.
-
-Done when: a project ingested with `PR2_RESULTS` shows both databases' ANCOM-BC results,
-with the same taxa and log fold changes as each run's own slices.
-
-Until then, a dashboard that filters `ancombc_results` on `taxonomy` (the TREC one does, starting
-on `merged`) shows an empty differential tab on a project ingested this way. Setting
-`taxonomy = silva` on the DATA_ROOT slices, even before the PR2 slices are read, keeps the
-SILVA option working.
-
-### 2. [TASK] ampliseq: taxonomy_composition from the merged taxonomy
+### 1. [TASK] ampliseq: taxonomy_composition from the merged taxonomy
 
 `taxonomy_composition` reads QIIME2's barplot (`level-N.csv`, counts plus metadata). With
 `PR2_RESULTS` it stays SILVA's. Either collapse counts from the merged table (it would need
@@ -183,7 +184,7 @@ the SILVA run's count table, `qiime2/abundance_tables/feature-table.tsv`), or do
 this DC is per run and label its card in the base dashboard. Check first which dashboard
 components read it.
 
-### 3. [FEATURE] Extra collections on a template project, kept in a file
+### 2. [FEATURE] Extra collections on a template project, kept in a file
 
 A template project takes extra tables in the app (Add data), but not from a file kept with
 the project. Proposal: a local template that extends a bundled one:
@@ -206,7 +207,7 @@ like `--template <dir>` today. Tags must not clash with the base template's.
 Done when: `depictio ingest <dir> --template ./trec-template` creates the ampliseq project
 with the CTD table and its links, and a second ingest with `--update-config` keeps both.
 
-### 4. [TASK] ampliseq 3.1.0: tree pruning and the PR2 merge
+### 3. [TASK] ampliseq 3.1.0: tree pruning and the PR2 merge
 
 Port `max_tips` (and the metadata-before-tree order) and the `merged_taxonomy` DC to the
 3.1.0 template. ampliseq 3.x may name SILVA's top rank `Domain` (`with_kingdom` handles it

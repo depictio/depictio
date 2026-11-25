@@ -123,3 +123,108 @@ def test_ma_is_unchanged_without_labelled_barplots() -> None:
     out = MA.transform({"ancombc": ancombc, "composition": composition, "labelled_barplots": None})
     assert out["avg_log_intensity"].to_list() == [2.0]
     assert "taxonomy" not in out.columns
+
+
+# A second ampliseq run of the same reads (the template's PR2_RESULTS) lives in its
+# own results folder. A glob cannot leave the data root, so its five slices are
+# plain optional paths: ``<slice>_alt`` sources, labelled ``alt_label``, while the
+# DATA_ROOT run's unlabelled slices take ``label``.
+
+ALT_DIR = "qiime2/ancombc/differentials/Category-locality-level-4"
+
+
+def _alt_slices(root: Path, ids: list[str]) -> dict[str, str]:
+    """The second run's slices, written as ampliseq names them, by absolute path."""
+    paths = {}
+    for name in SLICES:
+        path = root / ALT_DIR / f"{name}_slice.csv"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        rows = "\n".join(f"{i},1.0,{n + 7}.5" for n, i in enumerate(ids))
+        path.write_text(f"id,(Intercept),localityNaples\n{rows}\n")
+        paths[f"{name}_alt"] = str(path)
+    return paths
+
+
+def test_a_second_run_is_read_under_its_own_label(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("DEPICTIO_CONTEXT", "cli")  # the second run sits outside the root
+    for name in SLICES:
+        _slice(tmp_path / "silva", name, None, ["Bacteria;Pseudomonadota", "Eukaryota;"])
+    alt = _alt_slices(
+        tmp_path / "pr2",
+        ["Eukaryota;Obazoa;Opisthokonta;Metazoa", "Eukaryota;TSAR;Alveolata;Dinoflagellata"],
+    )
+    sources = resolve_sources(ANCOMBC, tmp_path / "silva", {**_overrides(), **alt})
+
+    out = ANCOMBC.transform(sources, params={"label": "silva", "alt_label": "pr2"})
+
+    by_label = {t: sorted(out.filter(pl.col("taxonomy") == t)["id"]) for t in ("silva", "pr2")}
+    assert by_label["silva"] == ["Bacteria;Pseudomonadota", "Eukaryota;"]
+    assert by_label["pr2"] == [
+        "Eukaryota;Obazoa;Opisthokonta;Metazoa",
+        "Eukaryota;TSAR;Alveolata;Dinoflagellata",
+    ]
+    assert out.height == 4
+    # PR2 read at its own Phylum depth: the leaf is the phylum, the root the domain.
+    pr2 = out.filter(pl.col("taxonomy") == "pr2").sort("id")
+    assert pr2["Phylum"].to_list() == ["Metazoa", "Dinoflagellata"]
+    assert pr2["Kingdom"].to_list() == ["Eukaryota", "Eukaryota"]
+    assert pr2["lfc"].to_list() == [7.5, 8.5]
+
+
+def test_without_a_second_run_the_label_changes_nothing(tmp_path: Path) -> None:
+    """Every other template reads one run: its rows stay unlabelled."""
+    for name in SLICES:
+        _slice(tmp_path, name, None, ["Bacteria;Pseudomonadota"])
+    sources = resolve_sources(ANCOMBC, tmp_path, _overrides())
+
+    assert all(sources[f"{name}_alt"] is None for name in SLICES)
+    out = ANCOMBC.transform(sources, params={"label": "silva", "alt_label": "pr2"})
+    assert out["taxonomy"].null_count() == 1
+
+
+def test_an_unresolved_label_falls_back_to_the_database_names(tmp_path: Path, monkeypatch) -> None:
+    """Unresolved {VAR} params are dropped: the second run still gets a label."""
+    monkeypatch.setenv("DEPICTIO_CONTEXT", "cli")
+    for name in SLICES:
+        _slice(tmp_path / "silva", name, None, ["Bacteria;Pseudomonadota"])
+    alt = _alt_slices(tmp_path / "pr2", ["Eukaryota;TSAR;Alveolata;Dinoflagellata"])
+    sources = resolve_sources(ANCOMBC, tmp_path / "silva", {**_overrides(), **alt})
+
+    out = ANCOMBC.transform(sources, params={})
+
+    assert sorted(out["taxonomy"].to_list()) == ["pr2", "silva"]
+
+
+def test_ma_reads_the_second_runs_barplot_for_its_rows(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("DEPICTIO_CONTEXT", "cli")
+    barplot = tmp_path / "pr2" / "qiime2" / "barplot" / "level-4.csv"
+    barplot.parent.mkdir(parents=True)
+    barplot.write_text(
+        "index,Eukaryota;TSAR;Alveolata;Dinoflagellata,locality\nS0,9,Naples\nS1,99,Naples\n"
+    )
+    resolved = resolve_sources(MA, tmp_path, {"alt_barplot": str(barplot)})
+    ancombc = pl.DataFrame(
+        {
+            "id": ["Bacteria;Pseudomonadota", "Eukaryota;TSAR;Alveolata;Dinoflagellata"],
+            "lfc": [1.0, 2.0],
+            "q_val": [0.01, 0.02],
+            "Phylum": ["Pseudomonadota", "Dinoflagellata"],
+            "contrast": ["localityNaples"] * 2,
+            "taxonomy": ["silva", "pr2"],
+        }
+    )
+    composition = pl.DataFrame({"taxonomy": ["Bacteria;Pseudomonadota"], "count": [9.0]})
+
+    out = MA.transform(
+        {
+            "ancombc": ancombc,
+            "composition": composition,
+            "labelled_barplots": None,
+            "alt_barplot": resolved["alt_barplot"],
+        },
+        params={"alt_label": "pr2"},
+    ).sort("feature_id")
+
+    assert out["taxonomy"].to_list() == ["silva", "pr2"]
+    assert out["avg_log_intensity"][0] == 1.0
+    assert abs(out["avg_log_intensity"][1] - (1.0 + 2.0) / 2) < 1e-9

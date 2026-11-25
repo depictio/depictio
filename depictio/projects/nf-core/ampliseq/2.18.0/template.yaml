@@ -28,10 +28,16 @@ template:
       description: "Path to the Newick tree to serve. Defaults to {DATA_ROOT}/qiime2/phylogenetic_tree/tree.nwk. Not needed for a large run: a tree over 3,000 tips is pruned at ingest to the taxa the tip-metadata recipe keeps."
       required: false
     - name: "PR2_RESULTS"
-      description: "Results folder of a second nf-core/ampliseq run of the same reads with the PR2 database (--dada_ref_taxonomy pr2). When set, the merged_taxonomy DC gives each ASV PR2's lineage if PR2 calls it Eukaryota, else SILVA's (DATA_ROOT must be the SILVA run), and the taxonomy views read it: tip metadata, sunburst, sankey, Phylum relative abundance, stacked taxonomy, and the views built on them. ANCOM-BC, the MA plot and taxonomy_composition stay the DATA_ROOT run's."
+      description: "Results folder of a second nf-core/ampliseq run of the same reads with the PR2 database (--dada_ref_taxonomy pr2). When set, the merged_taxonomy DC gives each ASV PR2's lineage if PR2 calls it Eukaryota, else SILVA's (DATA_ROOT must be the SILVA run), and the taxonomy views read it: tip metadata, sunburst, sankey, Phylum relative abundance, stacked taxonomy, and the views built on them. ANCOM-BC and the MA plot read both runs, each under its own taxonomy label (REF_DB_NAME, pr2), the PR2 run at PR2_PHYLUM_LEVEL. taxonomy_composition stays the DATA_ROOT run's."
       required: false
     - name: "EUK_PHYLUM_RANK"
       description: "With PR2_RESULTS: the PR2 rank shown as the Phylum of a eukaryote, Division, Subdivision (default) or Class. Metazoa read one rank deeper (Arthropoda, Mollusca ...)."
+      required: false
+    - name: "PR2_PHYLUM_LEVEL"
+      description: "Auto-set with PR2_RESULTS: PR2's QIIME2 collapse level of EUK_PHYLUM_RANK (4 for Subdivision), where the PR2 run's ANCOM-BC slices and barplot are read."
+      required: false
+    - name: "REF_DB_NAME"
+      description: "Auto-set from params.json: the name of the run's first --dada_ref_taxonomy database (silva for silva=138.2). Labels the DATA_ROOT run's ANCOM-BC rows next to the PR2 run's."
       required: false
     - name: "PPLACE_TREE_FILE"
       description: "Auto-set from params.json (pplace_tree): the grafted tree pplace/<name>.graft.<name>.epa_result.newick. Serves it as the phylogenetic tree on the phylogenetic-placement route, which writes no qiime2/phylogenetic_tree/tree.nwk. An explicit TREE_FILE takes precedence."
@@ -241,6 +247,24 @@ template:
           source_overrides:
             pr2_tax:
               path: "{PR2_RESULTS}/qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv"
+        # ANCOM-BC and the MA plot read the PR2 run too, at PR2's Phylum level,
+        # under taxonomy "pr2" next to the DATA_ROOT run's REF_DB_NAME rows.
+        - data_collection_tag: "ancombc_results"
+          source_overrides:
+            lfc_alt:
+              path: "{PR2_RESULTS}/qiime2/ancombc/differentials/Category-{GROUP_COL}-level-{PR2_PHYLUM_LEVEL}/lfc_slice.csv"
+            p_val_alt:
+              path: "{PR2_RESULTS}/qiime2/ancombc/differentials/Category-{GROUP_COL}-level-{PR2_PHYLUM_LEVEL}/p_val_slice.csv"
+            q_val_alt:
+              path: "{PR2_RESULTS}/qiime2/ancombc/differentials/Category-{GROUP_COL}-level-{PR2_PHYLUM_LEVEL}/q_val_slice.csv"
+            w_alt:
+              path: "{PR2_RESULTS}/qiime2/ancombc/differentials/Category-{GROUP_COL}-level-{PR2_PHYLUM_LEVEL}/w_slice.csv"
+            se_alt:
+              path: "{PR2_RESULTS}/qiime2/ancombc/differentials/Category-{GROUP_COL}-level-{PR2_PHYLUM_LEVEL}/se_slice.csv"
+        - data_collection_tag: "ma_canonical"
+          source_overrides:
+            alt_barplot:
+              path: "{PR2_RESULTS}/qiime2/barplot/level-{PR2_PHYLUM_LEVEL}.csv"
     # QIIME2 names its collapsed taxonomy by depth, and the Phylum's depth follows
     # the reference database's ranks. The DC paths stay pinned at the default
     # database's depths (Phylum 3), which the reference seeds were built from;
@@ -561,6 +585,11 @@ workflows:
           source: "transformed"
           transform:
             recipe: "qiime2/ancombc.py"
+            # With PR2_RESULTS the PR2 run's slices (lfc_alt ...) come in as "pr2"
+            # and this run's as REF_DB_NAME; a single run stays unlabelled.
+            params:
+              label: "{REF_DB_NAME}"
+              alt_label: "pr2"
             # level-3 is the Phylum for this release's default database (see
             # the taxonomy_composition note above); PHYLUM_LEVEL repoints it.
             # The slices are globs: a sibling `lfc_slice.<label>.csv` (and its
@@ -749,6 +778,8 @@ workflows:
           source: "transformed"
           transform:
             recipe: "nf-core/ampliseq/ma_canonical.py"
+            params:
+              alt_label: "pr2"
             # Barplots of other analyses of the same samples, `level-N.<label>.csv`,
             # give their taxa an abundance (see the ancombc_results note above).
             source_overrides:

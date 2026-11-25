@@ -340,3 +340,38 @@ class TestSelectionIsShared:
         assert [p.name for p in params_files_newest_first(info)] == [
             "params_2026-01-01_00-00-00.json"
         ]
+
+
+class TestSecondRun:
+    """A second ampliseq run against PR2 (PR2_RESULTS): its ANCOM-BC level and the labels."""
+
+    def _introspect(self, root, params, **variables):
+        _write_params(root / "pipeline_info", "params_2026-01-01_00-00-00.json", params)
+        _introspect_pipeline_params(str(root), variables)
+        return variables
+
+    def test_the_pr2_level_follows_the_phylum_rank(self, tmp_path):
+        params = {"dada_ref_taxonomy": "silva=138.2"}
+
+        assert self._introspect(tmp_path, params, PR2_RESULTS="/pr2")["PR2_PHYLUM_LEVEL"] == "4"
+        assert (
+            self._introspect(tmp_path, params, PR2_RESULTS="/pr2", EUK_PHYLUM_RANK="Division")[
+                "PR2_PHYLUM_LEVEL"
+            ]
+            == "3"
+        )
+
+    def test_no_second_run_no_pr2_level(self, tmp_path):
+        assert "PR2_PHYLUM_LEVEL" not in self._introspect(tmp_path, {"dada_ref_taxonomy": "silva"})
+
+    def test_the_database_name_labels_the_run(self, tmp_path):
+        variables = self._introspect(tmp_path, {"dada_ref_taxonomy": "silva=138.2"})
+
+        assert variables["REF_DB_NAME"] == "silva"
+
+    def test_an_explicit_name_wins(self, tmp_path):
+        variables = self._introspect(
+            tmp_path, {"dada_ref_taxonomy": "silva=138.2"}, REF_DB_NAME="SILVA 138"
+        )
+
+        assert variables["REF_DB_NAME"] == "SILVA 138"

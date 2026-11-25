@@ -6,6 +6,12 @@ samples side by side, e.g. ANCOM-BC against two reference databases. A file name
 ``taxonomy = <label>``; the file ampliseq writes (``lfc_slice.csv``) has no label
 and leaves the column empty. A dashboard switches between the labels with a filter
 on ``taxonomy``.
+
+A second run of the same reads, against another database, sits in its own results
+folder, which a glob cannot reach: the ``<slice>_alt`` sources read its five slices
+by path (the template points them there) and label its rows ``alt_label``. Only
+then do the primary run's unlabelled rows take ``label``, so a single run keeps an
+empty ``taxonomy``.
 """
 
 import polars as pl
@@ -62,6 +68,18 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
+# The second run's slices, by plain path: absent unless the template sets them.
+SOURCES += [
+    RecipeSource(
+        ref=f"{name}_alt",
+        path=f"pr2/qiime2/ancombc/differentials/Category-habitat-level-4/{name}_slice.csv",
+        format="CSV",
+        optional=True,
+        input_schema={"id": pl.Utf8},
+    )
+    for name in ("lfc", "p_val", "q_val", "w", "se")
+]
+
 # OUTPUT SCHEMA: the columns transform() returns, checked after it.
 OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "id": pl.Utf8,
@@ -83,35 +101,53 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
 # ``lfc_slice.csv`` has no label.
 _LABEL = r"_slice\.([^/.]+)\.csv$"
 _NO_LABEL = ""
+_SLICES = ("lfc", "p_val", "q_val", "w", "se")
+# ampliseq's default database, and the PR2 run of the template's PR2_RESULTS.
+DEFAULT_LABEL = "silva"
+DEFAULT_ALT_LABEL = "pr2"
 
 
-def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
-    """Melt each ANCOM-BC slice and join into one table with taxonomy annotations."""
+def _melt(frames: dict[str, pl.DataFrame], taxonomy: pl.Expr) -> pl.DataFrame:
+    """One run's five slices, melted to one row per taxon and contrast."""
     contrast_cols = [
-        c for c in sources["lfc"].columns if c not in ("id", "(Intercept)", "source_path")
+        c for c in frames["lfc"].columns if c not in ("id", "(Intercept)", "source_path")
     ]
-
     melted = {
-        name: (
-            sources[name]
-            .select(
-                "id",
-                pl.col("source_path").str.extract(_LABEL, 1).fill_null(_NO_LABEL).alias("taxonomy"),
-                *contrast_cols,
-            )
-            .unpivot(
-                on=contrast_cols,
-                index=["id", "taxonomy"],
-                variable_name="contrast",
-                value_name=name,
-            )
+        name: frames[name]
+        .select("id", taxonomy.alias("taxonomy"), *contrast_cols)
+        .unpivot(
+            on=contrast_cols,
+            index=["id", "taxonomy"],
+            variable_name="contrast",
+            value_name=name,
         )
-        for name in ["lfc", "p_val", "q_val", "w", "se"]
+        .with_columns(pl.col(name).cast(pl.Float64, strict=False))
+        for name in _SLICES
     }
-
     result = melted["lfc"]
-    for name in ["p_val", "q_val", "w", "se"]:
+    for name in _SLICES[1:]:
         result = result.join(melted[name], on=["id", "taxonomy", "contrast"], how="left")
+    return result
+
+
+def transform(sources: dict[str, pl.DataFrame | None], params: dict | None = None) -> pl.DataFrame:
+    """Melt each ANCOM-BC slice and join into one table with taxonomy annotations."""
+    params = params or {}
+    alt = {name: sources.get(f"{name}_alt") for name in _SLICES}
+    has_alt = all(frame is not None for frame in alt.values())
+
+    label = pl.col("source_path").str.extract(_LABEL, 1)
+    primary = (params.get("label") or DEFAULT_LABEL) if has_alt else _NO_LABEL
+    result = _melt(
+        {name: sources[name] for name in _SLICES},
+        label.fill_null(pl.lit(primary)),
+    )
+    if has_alt:
+        alt_label = params.get("alt_label") or DEFAULT_ALT_LABEL
+        result = pl.concat(
+            [result, _melt(alt, pl.lit(alt_label))],
+            how="diagonal_relaxed",
+        )
 
     # The Phylum is the lineage's leaf: the template points the five slices at the
     # ANCOM-BC level that *is* Phylum for the run's reference database, whatever

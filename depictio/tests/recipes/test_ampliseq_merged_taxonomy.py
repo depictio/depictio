@@ -363,3 +363,45 @@ class TestTemplate:
             "phylogenetic_tree_metadata_canonical",
         }
         assert all(tags.index("merged_taxonomy") < tags.index(t) for t in readers)
+
+
+class TestSecondRunDifferentialAbundance:
+    """With PR2_RESULTS, ANCOM-BC and the MA plot read the PR2 run too."""
+
+    _resolved = TestTemplate._resolved
+
+    def _dc(self, dcs, tag):
+        (dc,) = [dc for dc in dcs if dc["data_collection_tag"] == tag]
+        return dc["config"]["transform"]
+
+    def test_pr2_results_points_ancombc_and_ma_at_the_second_run(self):
+        dcs = self._resolved(
+            {
+                "DATA_ROOT": "/silva",
+                "PR2_RESULTS": "/pr2",
+                "GROUP_COL": "locality",
+                "PR2_PHYLUM_LEVEL": "4",
+                "PHYLUM_LEVEL": "2",
+                "METADATA_FILE": "/m.tsv",
+            }
+        )
+        ancombc = self._dc(dcs, "ancombc_results")
+        ma = self._dc(dcs, "ma_canonical")
+
+        assert ancombc["source_overrides"]["lfc_alt"]["path"] == (
+            "/pr2/qiime2/ancombc/differentials/Category-locality-level-4/lfc_slice.csv"
+        )
+        assert {f"{n}_alt" for n in ("lfc", "p_val", "q_val", "w", "se")} <= set(
+            ancombc["source_overrides"]
+        )
+        assert ancombc["params"] == {"label": "{REF_DB_NAME}", "alt_label": "pr2"}
+        assert ma["source_overrides"]["alt_barplot"]["path"] == ("/pr2/qiime2/barplot/level-4.csv")
+        assert ma["params"] == {"alt_label": "pr2"}
+        # The PHYLUM_LEVEL rule repoints the same DC's primary slices: both hold.
+        assert ancombc["source_overrides"]["lfc"]["glob_pattern"].endswith("level-2/lfc_slice*.csv")
+
+    def test_without_pr2_results_no_second_run_is_read(self):
+        dcs = self._resolved({"DATA_ROOT": "/silva", "METADATA_FILE": "/m.tsv"})
+        ancombc = self._dc(dcs, "ancombc_results")
+
+        assert not any(k.endswith("_alt") for k in ancombc.get("source_overrides") or {})

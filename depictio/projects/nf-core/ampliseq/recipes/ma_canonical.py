@@ -14,7 +14,8 @@ When the ANCOM-BC table carries a ``taxonomy`` label (a run analysed against two
 reference databases, see ``qiime2/ancombc.py``), the taxa of a label that has a
 barplot of its own, ``qiime2/barplot/level-N.<label>.csv``, take their mean
 abundance from it: their lineages are that database's, which the default
-composition does not hold.
+composition does not hold. So do the taxa of a second run's rows (``alt_label``,
+the template's PR2_RESULTS): their barplot is the ``alt_barplot`` path.
 """
 
 import polars as pl
@@ -39,6 +40,14 @@ SOURCES: list[RecipeSource] = [
         optional=True,
         input_schema={"index": pl.Utf8},
     ),
+    # The second run's barplot at its ANCOM-BC level. Absent unless the template sets it.
+    RecipeSource(
+        ref="alt_barplot",
+        path="pr2/qiime2/barplot/level-4.csv",
+        format="CSV",
+        optional=True,
+        input_schema={"index": pl.Utf8},
+    ),
 ]
 
 # OUTPUT SCHEMA: the columns transform() returns, checked after it.
@@ -56,7 +65,7 @@ OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
 }
 
 
-def _labelled_intensity(barplots: pl.DataFrame) -> pl.DataFrame:
+def _labelled_intensity(barplots: pl.DataFrame, taxonomy: pl.Expr) -> pl.DataFrame:
     """Mean log10(count + 1) per taxon of each labelled barplot.
 
     The same quantity as below, taken from the wide barplot the way the
@@ -64,9 +73,7 @@ def _labelled_intensity(barplots: pl.DataFrame) -> pl.DataFrame:
     """
     taxa = [c for c in barplots.columns if ";" in c]
     return (
-        barplots.with_columns(
-            pl.col("source_path").str.extract(r"\.([^/.]+)\.csv$", 1).alias("taxonomy")
-        )
+        barplots.with_columns(taxonomy.alias("taxonomy"))
         .unpivot(on=taxa, index="taxonomy", variable_name="feature_id", value_name="count")
         .with_columns(pl.col("count").cast(pl.Float64))
         .filter(pl.col("count") > 0)
@@ -75,11 +82,19 @@ def _labelled_intensity(barplots: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
+def transform(sources: dict[str, pl.DataFrame | None], params: dict | None = None) -> pl.DataFrame:
     """Compute mean log intensity per taxon and join with ANCOM-BC lfc."""
+    params = params or {}
     composition = sources["composition"]
     ancombc = sources["ancombc"]
-    labelled = sources.get("labelled_barplots")
+    assert composition is not None and ancombc is not None
+    parts = []
+    if (frame := sources.get("labelled_barplots")) is not None:
+        parts.append(
+            _labelled_intensity(frame, pl.col("source_path").str.extract(r"\.([^/.]+)\.csv$", 1))
+        )
+    if (frame := sources.get("alt_barplot")) is not None:
+        parts.append(_labelled_intensity(frame, pl.lit(params.get("alt_label") or "pr2")))
 
     # Mean log10(count + 1) per taxon across samples — the A axis.
     intensity = (
@@ -101,10 +116,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     )
 
     df = ancombc_renamed.join(intensity, on="feature_id", how="left")
-    if labelled is not None and "taxonomy" in df.columns:
-        df = df.join(
-            _labelled_intensity(labelled), on=["taxonomy", "feature_id"], how="left"
-        ).with_columns(
+    if parts and "taxonomy" in df.columns:
+        df = df.join(pl.concat(parts), on=["taxonomy", "feature_id"], how="left").with_columns(
             pl.coalesce("labelled_intensity", "avg_log_intensity").alias("avg_log_intensity")
         )
 
