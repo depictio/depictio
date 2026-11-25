@@ -3,6 +3,43 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.24.0
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.24.0</summary>
+
+### Changes 📜
+
+#### New Features ✨
+
+* feat: offline exports round two, report layer and report editor ([#1457](https://github.com/depictio/depictio/pull/1457)) ([#1472](https://github.com/depictio/depictio/pull/1472)) [e33a4e8f7]
+* feat: shared depictio palette, automatic figure marks and faithful catalog previews ([#1474](https://github.com/depictio/depictio/pull/1474)) [f73105708]
+
+#### Other Changes 📝
+
+* Bump version: 1.23.1 → 1.24.0 [e203933e6]
+* feat(auth): claim the default admin in single-user mode, admin sign-in in public mode ([#1469](https://github.com/depictio/depictio/pull/1469)) [876f71d4f]
+* fix(auth): seed the default admin in public mode too ([#1435](https://github.com/depictio/depictio/pull/1435)) [e509265fb]
+* dev(docs-shots): capture docs screenshots against depictio local up [6b8d91d87]
+* docs(tool-studio): capture spec for the v1.23 Studio, light and dark, outside the repo [050727b9c]
+* ci(allinone): nf-core pipeline matrix off the build-recipe PR gate [5191f794e]
+* Update CHANGELOG.md for v1.23.1 [bf404d26a]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.23.1
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
