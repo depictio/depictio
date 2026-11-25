@@ -156,22 +156,24 @@ first: with three sites, two of the three pairs. The TREC overlay added the thir
 ### Joins and choices
 
 Every join and every choice the merge and the comparisons make, in one place. The TREC
-repository documents the same in `docs/decisions.md`.
+repository documents the same in `docs/decisions.md`, with two figures (the merge in detail; the ANCOM-BC options, settings and check).
+
+Shares are mean relative abundance over the 85 samples.
 
 | Join | Key | Kind | On the TREC run |
 |---|---|---|---|
-| SILVA run's ASVs to the PR2 run's taxonomy | ASV ID (md5 of the sequence, the same in both runs: same reads, same denoising) | left, from the SILVA run | all 127,845 found, same sequences. The PR2 run's extra ASVs (135,717 in all) are the organelles the SILVA run filtered out; they are dropped |
-| Merged lineages to the run's `feature-table.tsv` (merged ANCOM-BC, merged MA) | ASV ID, then summed per merged `Kingdom;Phylum` | inner | lineages with no Kingdom or Phylum left out (2.1% of reads) |
+| SILVA run's ASVs to the PR2 run's taxonomy | ASV ID (md5 of the sequence, the same in both runs: same reads, same denoising) | left, from the SILVA run | all 127,845 found, same sequences. The PR2 run's 7,872 extra ASVs are those SILVA labels chloroplast or mitochondria, which the SILVA run filters out (`exclude_taxa`); they are dropped |
+| Merged lineages to the run's `feature-table.tsv` (merged ANCOM-BC, merged MA) | ASV ID, then summed per merged `Kingdom;Phylum` | inner | lineages with no Kingdom or Phylum left out (about 2%) |
 | Second run's slices to the SILVA run's | none: rows are stacked, labelled `pr2` | stack | PR2 read at level 4, where its Subdivision is |
 | Samples to metadata | sample ID | as for one run | 85 samples everywhere |
 
 | Choice | Rule | Why, and what it costs |
 |---|---|---|
 | Which database names an ASV | PR2 if its Domain starts with `Eukaryota` (organelles included), else SILVA if Bacteria or Archaea, else SILVA as it is (`fallback`) | Each database where it is strong. TREC: 57,520 / 69,852 / 473 ASVs |
-| Confidence threshold on PR2's call | none | Domain disagreements are 0.5% of reads (317 ASVs Bacteria for SILVA and nuclear Eukaryota for PR2, PR2 confidence median 0.63). Worth an option if another project shows more |
-| PR2 ranks in SILVA's seven slots | `slot_ranks()`, above. Metazoa one rank deeper (`DEEPEN`) | Until 25/11/2026 Metazoa were read one slot off (Family held a genus, Genus a species): 16,316 ASVs, 32.5% of TREC reads, at genus and species level. Fixed here and in `build_trec_dualtax.py`; the tests pin the copepod lineage |
+| Confidence threshold on PR2's call | none | Domain disagreements are about 0.5% (317 ASVs Bacteria or Archaea for SILVA and nuclear Eukaryota for PR2, 0.29%, PR2 confidence median 0.63). Worth an option if another project shows more |
+| PR2 ranks in SILVA's seven slots | `slot_ranks()`, above. Metazoa one rank deeper (`DEEPEN`) | Until 25/11/2026 Metazoa were read one slot off (Family held a genus, Genus a species): the Metazoa, 32.5% of TREC abundance, at genus and species level. Fixed here and in `build_trec_dualtax.py`; the tests pin the copepod lineage |
 | What "Phylum" is per option | `silva`: SILVA Phylum; `pr2`: PR2 Subdivision (bacteria too, e.g. `Proteobacteria_X`); `merged`: SILVA Phylum for prokaryotes, PR2 Subdivision for eukaryotes, PR2 Class for Metazoa | Names compare across options only for eukaryotes (pr2, merged) or prokaryotes (silva, merged) |
-| Organelles | ampliseq's default `--exclude_taxa mitochondria,chloroplast` matches SILVA labels only | PR2 run keeps them (10.7% of its reads, 20 of its 98 ANCOM-BC taxa at level 4); merged keeps PR2-labelled ones the SILVA run let through (0.2%) |
+| Organelles | ampliseq's default `--exclude_taxa mitochondria,chloroplast` matches SILVA labels only | PR2 run keeps them (9.9%, 20 of its 98 ANCOM-BC taxa at level 4); merged keeps PR2-labelled ones the SILVA run let through (0.26%) |
 | Abundances of the merged view | the SILVA run's tables | consistent with that run's diversity results |
 | ANCOM-BC settings | ampliseq 2.18.0 `conf/modules.config`: `prv_cut` 0.1, `lib_cut` 500, `conserve` on, Holm per contrast, q < 0.05, pseudocount 1, reference = the alphabetical first level | what the pipeline's own contrasts use; the recipe refuses to add comparisons if it does not reproduce them |
 | MA plot A axis | mean log10(count + 1) over the samples where the taxon is present | zeros are not in the composition table. Rare taxa sit higher than a mean over all samples would put them |
