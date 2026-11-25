@@ -38,14 +38,14 @@ from __future__ import annotations
 import functools
 import json
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
 import anyio.to_thread
 import boto3
 from celery.result import AsyncResult
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 
 from depictio.api.celery_app import celery_app
@@ -53,6 +53,7 @@ from depictio.api.v1.celery_tasks import export_static_bundle as export_static_b
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import static_exports_collection
+from depictio.api.v1.endpoints.user_endpoints.rate_limit import enforce_rate_limit
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.api.v1.s3 import s3_client
 from depictio.models.models.analysis_state import ExportStaticRequest, NotebookExportRequest
@@ -475,17 +476,52 @@ def can_export_static(
     return {"can_export": export_denial(dashboard_id, current_user, "owner") is None}
 
 
+#: Only recent pending jobs count towards the queue cap. A build stuck long
+#: past this is a worker problem, not queue pressure, and a TTL index (or a
+#: retention prune) is expected to have settled the document by then.
+_PENDING_GRACE = timedelta(minutes=15)
+
+
+def _pending_builds() -> int:
+    """Builds waiting or running on the whole instance, owner jobs and public
+    bundle rebuilds alike.
+
+    Both compete for the same Celery workers, so one cap covers both. Pending
+    job documents older than the grace window are ignored: a document that old
+    describes a lost or wedged build, not a queue the caller is competing with.
+    The public-bundle counter lives behind a lazy import because that module is
+    younger than this route; without it there are simply no rebuilds to count.
+    """
+    cutoff = datetime.now(timezone.utc) - _PENDING_GRACE
+    pending = static_exports_collection.count_documents(
+        {"status": "pending", "created_at": {"$gte": cutoff}}
+    )
+    try:
+        from depictio.serverless.public_bundle import pending_count
+    except ImportError:
+        return pending
+    return pending + pending_count()
+
+
 @serverless_endpoint_router.post("/export-static/{dashboard_id}")
 def dispatch_export_static(
     dashboard_id: str,
+    request: Request,
     python_runtime: Literal["auto", "on", "off"] = DEFAULT_PYTHON_RUNTIME,
-    request: ExportStaticRequest | None = None,
+    body: ExportStaticRequest | None = None,
     current_user=Depends(get_user_or_anonymous),
 ) -> dict[str, Any]:
     """Enqueue a static-bundle build; poll ``/export-static/status/{job_id}``.
 
     Owner-gated (RFC §8 — a bundle is bulk data exfiltration). Denials return 404
     rather than 403 so the endpoint cannot be used to enumerate dashboards.
+
+    Two guards run before anything is enqueued. A per-user limit
+    (``static_export.build_per_user_max`` per ``build_per_user_window_s``)
+    bounds how many builds one owner can start in a burst; it is fail-closed,
+    because a Redis outage is no reason to let builds through uncounted. An
+    instance-wide cap (``static_export.queue_max_pending``) keeps the queue from
+    growing past what its workers drain.
 
     An optional ``{"state": AnalysisState}`` body freezes the bundle's tiles on
     the exported view and makes it open on it; a state the runtime cannot
@@ -497,7 +533,7 @@ def dispatch_export_static(
         logger.info(f"Static export refused for {dashboard_id}: {denial}")
         raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
 
-    state = request.state if request is not None else None
+    state = body.state if body is not None else None
     if state is not None:
         from depictio.serverless import report
 
@@ -505,6 +541,28 @@ def dispatch_export_static(
         if reason:
             logger.info(f"Static export refused for {dashboard_id}: {reason}")
             raise HTTPException(status_code=409, detail=reason)
+
+    enforce_rate_limit(
+        request,
+        "static_export_build",
+        max_calls=settings.static_export.build_per_user_max,
+        window_s=settings.static_export.build_per_user_window_s,
+        scope=f"user:{current_user.id}",
+        fail_closed=True,
+        detail="Too many exports started; try again in a few minutes.",
+        unavailable_detail="Exports are temporarily unavailable; please retry in a moment.",
+    )
+    pending_builds = _pending_builds()
+    if pending_builds >= settings.static_export.queue_max_pending:
+        logger.warning(
+            "Static export refused: queue full "
+            f"({pending_builds} pending, cap {settings.static_export.queue_max_pending})."
+        )
+        raise HTTPException(
+            status_code=429,
+            detail="The export queue is full; try again in a few minutes.",
+            headers={"Retry-After": "60"},
+        )
 
     job_id = uuid4().hex
     static_exports_collection.insert_one(

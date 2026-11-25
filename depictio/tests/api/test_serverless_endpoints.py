@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 from bson import ObjectId
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from depictio.api.v1.endpoints.serverless_endpoints import routes as routes_mod
@@ -67,6 +67,21 @@ class _FakeJobs:
 
     def find_one(self, query: dict[str, Any], projection: Any = None) -> dict[str, Any] | None:
         return self.docs.get(query.get("_id"))
+
+    def count_documents(self, query: dict[str, Any]) -> int:
+        """Match equality and ``$gte`` (the queue cap's ``created_at`` filter)."""
+        matched = 0
+        for doc in self.docs.values():
+            for key, expected in query.items():
+                value = doc.get(key)
+                if isinstance(expected, dict) and "$gte" in expected:
+                    if value is None or value < expected["$gte"]:
+                        break
+                elif value != expected:
+                    break
+            else:
+                matched += 1
+        return matched
 
     def insert_one(self, doc: dict[str, Any]) -> None:
         self.docs[doc["_id"]] = dict(doc)
@@ -182,6 +197,39 @@ def stranger() -> User:
 @pytest.fixture
 def admin() -> User:
     return _user(ADMIN_OID, is_admin=True)
+
+
+class _FakeRedis:
+    """The two commands the fixed-window limiter uses: INCR and EXPIRE.
+
+    Keys never expire (the window rolls over in the key itself), which is what
+    a single test needs: counters rise across calls within one window.
+    """
+
+    def __init__(self):
+        self.store: dict[str, int] = {}
+        self.ttls: dict[str, int] = {}
+
+    def incr(self, key: str) -> int:
+        self.store[key] = self.store.get(key, 0) + 1
+        return self.store[key]
+
+    def expire(self, key: str, seconds: int) -> None:
+        self.ttls[key] = seconds
+
+
+@pytest.fixture
+def limiter(monkeypatch: pytest.MonkeyPatch) -> _FakeRedis:
+    """Point the rate limiter at a dict, so tests need no Redis.
+
+    The dispatch's per-user limit is fail-closed: without this fixture a
+    request would 503 (no Redis) instead of dispatching.
+    """
+    from depictio.api.v1.endpoints.user_endpoints import rate_limit
+
+    fake = _FakeRedis()
+    monkeypatch.setattr(rate_limit, "_get_redis_client", lambda: fake)
+    return fake
 
 
 @pytest.fixture
@@ -544,7 +592,7 @@ def test_preflight_over_the_size_ceiling_is_413_with_the_reason(
 
 
 def test_dispatch_creates_job_and_enqueues(
-    client, owner, jobs, dashboards, monkeypatch: pytest.MonkeyPatch
+    client, owner, jobs, dashboards, limiter, monkeypatch: pytest.MonkeyPatch
 ):
     _patch_project(monkeypatch, [OWNER_OID])
     task = _FakeTask()
@@ -657,7 +705,7 @@ def _export_state(**extra: Any) -> dict[str, Any]:
 
 
 def test_dispatch_with_a_state_carries_it_to_the_worker(
-    client, owner, jobs, dashboards, monkeypatch: pytest.MonkeyPatch
+    client, owner, jobs, dashboards, limiter, monkeypatch: pytest.MonkeyPatch
 ):
     """The body's state rides in the task payload, JSON-serializable as the
     worker rebuilds it; the job doc and response are as without one."""
@@ -684,7 +732,7 @@ def test_dispatch_with_a_state_carries_it_to_the_worker(
 
 
 def test_dispatch_with_a_pinned_grouped_state_queues_it(
-    client, owner, jobs, dashboards, monkeypatch: pytest.MonkeyPatch
+    client, owner, jobs, dashboards, limiter, monkeypatch: pytest.MonkeyPatch
 ):
     """Pins, selection groups and colour-by are all reproduced offline now: the
     state is accepted and travels to the worker whole."""
@@ -735,6 +783,122 @@ def test_dispatch_anonymous_on_a_public_project_is_404(
     assert resp.json()["detail"] == "Dashboard not found or access denied"
     assert task.calls == []
     assert jobs.docs == {}
+
+
+# ---------------------------------------------------------------------------
+# Dispatch limits
+# ---------------------------------------------------------------------------
+
+
+def test_sixth_build_by_the_same_user_is_refused(
+    client, owner, jobs, dashboards, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    """``build_per_user_max`` (5) builds per user per window: the sixth is a
+    429 that enqueues no job and starts no task."""
+    _patch_project(monkeypatch, [OWNER_OID])
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    _as_user(client, owner)
+
+    for _ in range(5):
+        assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 200
+
+    resp = client.post(f"/serverless/export-static/{DASHBOARD_OID}")
+
+    assert resp.status_code == 429
+    assert resp.json()["detail"] == "Too many exports started; try again in a few minutes."
+    assert len(task.calls) == 5
+    assert len(jobs.docs) == 5
+
+
+def test_the_build_limit_is_per_user_not_per_instance(
+    client, owner, stranger, jobs, dashboards, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    """The limit is scoped to the signed-in user, not the address or the whole
+    instance: one owner hitting it leaves another owner free to build."""
+    _patch_project(monkeypatch, [OWNER_OID, OTHER_OID])
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    _as_user(client, owner)
+    for _ in range(5):
+        assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 200
+    assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 429
+
+    _as_user(client, stranger)
+    assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 200
+    assert len(task.calls) == 6
+
+
+def test_the_build_limit_fails_closed_without_redis(
+    client, owner, jobs, dashboards, monkeypatch: pytest.MonkeyPatch
+):
+    """The dispatch never fails open: with the limiter's Redis unavailable the
+    build is refused (503), not allowed through uncounted."""
+    from depictio.api.v1.endpoints.user_endpoints import rate_limit
+
+    _patch_project(monkeypatch, [OWNER_OID])
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    monkeypatch.setattr(rate_limit, "_get_redis_client", lambda: None)
+    _as_user(client, owner)
+
+    resp = client.post(f"/serverless/export-static/{DASHBOARD_OID}")
+
+    assert resp.status_code == 503
+    assert resp.json()["detail"] == "Exports are temporarily unavailable; please retry in a moment."
+    assert task.calls == []
+    assert jobs.docs == {}
+
+
+def test_dispatch_past_the_queue_cap_is_refused(
+    client, owner, jobs, dashboards, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    """``queue_max_pending`` (20) bounds the whole instance: a build arriving on
+    top of a full queue is a 429 the caller can retry, and nothing is enqueued.
+    A pending document older than the grace window is a lost build, not queue
+    pressure, so ageing enough of them out opens the queue again."""
+    from datetime import timedelta
+
+    from depictio.api.v1.configs.config import settings
+
+    cap = settings.static_export.queue_max_pending
+    _patch_project(monkeypatch, [OWNER_OID])
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    for i in range(cap + 1):
+        jobs.insert_one(_pending_job(f"queued-{i}"))
+    _as_user(client, owner)
+
+    resp = client.post(f"/serverless/export-static/{DASHBOARD_OID}")
+
+    assert resp.status_code == 429
+    assert resp.json()["detail"] == "The export queue is full; try again in a few minutes."
+    assert resp.headers["Retry-After"] == "60"
+    assert task.calls == []
+    assert len(jobs.docs) == cap + 1
+
+    jobs.docs["queued-0"]["created_at"] = datetime.now(timezone.utc) - timedelta(minutes=20)
+    jobs.docs["queued-1"]["created_at"] = datetime.now(timezone.utc) - timedelta(minutes=20)
+    assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 200
+    assert len(task.calls) == 1
+
+
+def test_enforce_rate_limit_with_defaults_keeps_the_auth_message(limiter):
+    """The generalised limiter with no overrides answers as the auth callers
+    always saw: a 429 about authentication requests, not about exports."""
+    from depictio.api.v1.endpoints.user_endpoints import rate_limit
+
+    class _Req:
+        client = None
+        headers: dict[str, str] = {}
+
+    req = _Req()
+    for _ in range(10):
+        rate_limit.enforce_rate_limit(req, "login")
+    with pytest.raises(HTTPException) as exc:
+        rate_limit.enforce_rate_limit(req, "login")
+    assert exc.value.status_code == 429
+    assert exc.value.detail == "Too many authentication requests; please wait before retrying."
 
 
 # ---------------------------------------------------------------------------
