@@ -9,3 +9,10 @@ export function usePublicDownloadEnabled(): boolean {
   const { info } = useServerInfo();
   return info?.features?.static_export_public_download === true;
 }
+
+/** What a public project offers its visitors until its owner decides
+ *  (`DEPICTIO_STATIC_EXPORT_PUBLIC_DOWNLOAD_DEFAULT`, on unless set off). */
+export function usePublicDownloadDefault(): boolean {
+  const { info } = useServerInfo();
+  return info?.features?.static_export_public_download_default !== false;
+}

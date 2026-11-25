@@ -19,7 +19,7 @@ import { Icon } from '@iconify/react';
 import {
   BrandThemeForm,
   BrandThemePreview,
-  canExportStatic,
+  getStaticExportAccess,
   isEmptyBrandTheme,
   startReportPreview,
   useBrandScopeAttributes,
@@ -34,6 +34,7 @@ import {
   type DashboardData,
   type InteractiveFilter,
   type LogoMode,
+  type StaticExportAccess,
 } from 'depictio-react-core';
 import DashboardInfoBody from './DashboardInfoBody';
 import ShareFiltersField from './ShareFiltersField';
@@ -872,27 +873,28 @@ const PREVIEW_HINT =
   'version. Leave the version preview to export.';
 
 /**
- * Whether the dashboard-only export is offered: the server's answer
- * (`canExportStatic`, the very rule the dispatch applies). null while it is
- * asked; false without a dashboard.
+ * Whether the dashboard-only export is offered, and whether it is a visitor's
+ * public build (#1480): the server's answer (`getStaticExportAccess`, the very
+ * rule the dispatch applies). null while it is asked; refused without a
+ * dashboard.
  */
-function useCanExportStatic(dashboardId: string | null): boolean | null {
-  const [allowed, setAllowed] = React.useState<boolean | null>(null);
+function useStaticExportAccess(dashboardId: string | null): StaticExportAccess | null {
+  const [access, setAccess] = React.useState<StaticExportAccess | null>(null);
   React.useEffect(() => {
     if (!dashboardId) {
-      setAllowed(false);
+      setAccess({ allowed: false, public: false });
       return;
     }
     let alive = true;
-    setAllowed(null);
-    void canExportStatic(dashboardId).then((ok) => {
-      if (alive) setAllowed(ok);
+    setAccess(null);
+    void getStaticExportAccess(dashboardId).then((answer) => {
+      if (alive) setAccess(answer);
     });
     return () => {
       alive = false;
     };
   }, [dashboardId]);
-  return allowed;
+  return access;
 }
 
 /**
@@ -1228,12 +1230,19 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   const staticExportEnabled = useStaticExportEnabled();
   const notebookExportEnabled = useNotebookExportEnabled();
   const publicDownloadEnabled = usePublicDownloadEnabled();
-  const staticExportAllowed = useCanExportStatic(
+  const staticExportAccess = useStaticExportAccess(
     onExportStatic && !isStaticBundle && staticExportEnabled ? (dashboardId ?? null) : null,
   );
-  // A reader who may not build gets the copies the owner offers (#1480).
+  const staticExportAllowed = staticExportAccess ? staticExportAccess.allowed : null;
+  // A reader who is not an owner gets the copies the project offers (#1480);
+  // a signed-in visitor may also export their own view as a public build.
   const publicCopy = usePublicCopy(
-    publicDownloadEnabled && staticExportAllowed === false && dashboardId ? dashboardId : null,
+    publicDownloadEnabled &&
+      staticExportAccess &&
+      (staticExportAccess.public || !staticExportAccess.allowed) &&
+      dashboardId
+      ? dashboardId
+      : null,
   );
   // Unknown while the auth status loads: nothing is disabled on a guess.
   const { user: currentUser, isSingleUserMode, loading: userLoading } = useCurrentUser();

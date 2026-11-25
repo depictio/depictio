@@ -21,6 +21,7 @@ import { notifications } from '@mantine/notifications';
 import {
   preflightStaticExport,
   dispatchStaticExport,
+  getStaticExportAccess,
   pollStaticExport,
   downloadStaticExport,
   staticTierExplanation,
@@ -201,6 +202,9 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
   // The optional Python runtime, off unless the reader turns it on: it adds
   // ~50 MB to the file and ~10 s before the first tab settles offline.
   const [pythonChoice, setPythonChoice] = useState(false);
+  // A visitor of a project that offers its copies (#1480): their export is a
+  // public build, which never carries the Python runtime.
+  const [visitor, setVisitor] = useState(false);
   // Set on close/unmount so in-flight promises and the poll loop go quiet
   // instead of setting state on a closed modal. The server-side build keeps
   // running — reopening and re-exporting is cheap (idempotent job dispatch).
@@ -215,7 +219,11 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
     setErrorMessage(null);
     setExporting(false);
     setPythonChoice(false);
+    setVisitor(false);
     setPreflightLoading(true);
+    void getStaticExportAccess(dashboardId).then((access) => {
+      if (!cancelledRef.current) setVisitor(access.public);
+    });
     preflightStaticExport(dashboardId)
       .then((pf) => {
         if (!cancelledRef.current) setPreflight(pf);
@@ -333,7 +341,7 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
       (isProvisional(b) ? -1 : (TIER_ORDER[b.tier] ?? 4)),
   );
   const pythonInfo = preflight?.python_runtime;
-  const pythonOffered = Boolean(pythonInfo && pythonInfo.candidates.length > 0);
+  const pythonOffered = !visitor && Boolean(pythonInfo && pythonInfo.candidates.length > 0);
   const collections = preflight?.collections ?? [];
   const interactive = decidedCounts.live + decidedCounts.partial;
   const fixed = decidedCounts.frozen + decidedCounts.omitted;
@@ -451,7 +459,19 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
               <Text size="xs" c="dimmed">
                 Anyone you send it to can read this data, with no sign-in.
               </Text>
-              <CollectionInventory collections={collections} />
+              {visitor && (
+                <Text size="xs" c="dimmed" data-testid="export-static-visitor-note">
+                  It is drawn from this project's public data at the filters you have set,
+                  without the figures' source code.
+                </Text>
+              )}
+              {preflight.bound === false ? (
+                <Text size="xs" c="dimmed" data-testid="collection-inventory-unbound">
+                  The data the tiles show, read when the file is built.
+                </Text>
+              ) : (
+                <CollectionInventory collections={collections} />
+              )}
             </Stack>
 
             <Accordion

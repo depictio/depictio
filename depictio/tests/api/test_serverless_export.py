@@ -2905,35 +2905,37 @@ def test_a_public_bundle_names_no_one_and_ships_no_author_code(
     offline_stack: dict[str, list],
 ):
     """Built as the project's owner but without their email, the public bundle
-    has no ``exported_by``; its code figure is frozen (never a replayable
-    prologue) and its source is gone from the shipped document."""
+    has no ``exported_by`` and its code figure's source is gone from the shipped
+    document. The figure itself is drawn as an owner's bundle draws it: its
+    prologue, when it has one, is the closed IR, not code."""
+    owner = export_manifest(str(DASHBOARD_OID), ExportUser(id=ObjectId(), is_admin=True))
     result = export_manifest(
         str(DASHBOARD_OID), ExportUser(id=ObjectId(), is_admin=True), public=True
     )
     manifest = result.manifest
-    assert manifest is not None
+    assert manifest is not None and owner.manifest is not None
     assert manifest.provenance.exported_by is None
     shipped = manifest.model_dump_json()
     assert _EMAIL_RE.search(shipped) is None
     assert "px.scatter(df" not in shipped
     assert "code_content" not in shipped
-    assert "__public_freeze_code__" not in shipped
-    assert "fig-3" not in manifest.prologues
-    row = next(r for r in result.tier_rows if r.component_id == "fig-3")
-    assert row.tier in (ComponentTier.FROZEN, ComponentTier.PARTIAL)
-    assert "fig-3" in manifest.frozen
+    assert "__public_code_hidden__" not in shipped
+    # The same tiers and the same replayable prologues as the owner's bundle.
+    tiers = {r.component_id: r.tier for r in result.tier_rows}
+    assert tiers == {r.component_id: r.tier for r in owner.tier_rows}
+    assert set(manifest.prologues) == set(owner.manifest.prologues)
     # No Python runtime: nothing in the file can run the author's code.
     assert not (result.python or {}).get("embedded")
 
 
-def test_a_public_bundle_refuses_a_state_python_or_an_email(tmp_path: Path):
-    """The three ways a public bundle could carry more than the default view.
-    The refusal comes before any read, so any non-null state is enough."""
+def test_a_public_bundle_refuses_python_or_an_email(tmp_path: Path):
+    """The ways a public bundle could carry more than a visitor's view: the
+    Python runtime, or the name of who it was built as. The refusal comes
+    before any read."""
     user = ExportUser(id=ObjectId(), email="")
     for kwargs in (
         {"python_runtime": "auto"},
         {"python_runtime": "on"},
-        {"state": object()},
     ):
         with pytest.raises(ProducerAError):
             export_static(

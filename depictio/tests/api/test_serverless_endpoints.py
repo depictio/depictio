@@ -18,6 +18,7 @@ from bson import ObjectId
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.serverless_endpoints import routes as routes_mod
 from depictio.models.models.analysis_state import AnalysisState
 from depictio.models.models.base import PyObjectId
@@ -247,8 +248,12 @@ def _as_user(client: TestClient, user: User) -> None:
 
 @pytest.fixture
 def jobs(monkeypatch: pytest.MonkeyPatch) -> _FakeJobs:
+    from depictio.serverless import public_bundle
+
     fake = _FakeJobs()
     monkeypatch.setattr(routes_mod, "static_exports_collection", fake)
+    # The queue cap also counts public rebuilds, in the real Mongo otherwise.
+    monkeypatch.setattr(public_bundle, "pending_count", lambda: 0)
     return fake
 
 
@@ -784,6 +789,144 @@ def test_dispatch_anonymous_on_a_public_project_is_404(
     assert resp.json()["detail"] == "Dashboard not found or access denied"
     assert task.calls == []
     assert jobs.docs == {}
+
+
+# ---------------------------------------------------------------------------
+# A visitor exports the view they have (#1480)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def offering(monkeypatch: pytest.MonkeyPatch, dashboards):
+    """A public project offering its copies (the instance default), both
+    switches on, owned by OWNER_OID; the stranger is a mere viewer."""
+    from depictio.api.v1 import db as db_mod
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as dashboards_routes_mod
+
+    monkeypatch.setattr(settings.static_export, "enabled", True)
+    monkeypatch.setattr(settings.static_export, "public_download_enabled", True)
+    monkeypatch.setattr(settings.static_export, "public_download_default", True)
+    project = {
+        "_id": PROJECT_OID,
+        "is_public": True,
+        "permissions": {"owners": [{"_id": OWNER_OID}], "editors": [], "viewers": []},
+    }
+    projects = _FakeCollection([project])
+    monkeypatch.setattr(dashboards_routes_mod, "projects_collection", projects)
+    monkeypatch.setattr(db_mod, "projects_collection", projects)
+    return project
+
+
+def test_a_viewer_exports_their_view_as_a_public_build(
+    client, stranger, jobs, offering, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    """Built as the owner without an email, public, without Python, at the
+    visitor's state; the job stays the visitor's to poll and download."""
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    _as_user(client, stranger)
+
+    resp = client.post(
+        f"/serverless/export-static/{DASHBOARD_OID}?python_runtime=on",
+        json={"state": _export_state()},
+    )
+
+    assert resp.status_code == 200
+    [payload] = task.calls[0]
+    assert payload["public"] is True
+    assert payload["python_runtime"] == "off"
+    assert payload["user"] == {
+        "id": str(OWNER_OID),
+        "email": "",
+        "is_admin": False,
+        "is_anonymous": False,
+    }
+    assert payload["state"]["filters"][0]["value"] == [2021]
+    assert jobs.docs[resp.json()["job_id"]]["user_id"] == str(OTHER_OID)
+
+
+def test_a_viewer_export_is_404_when_the_project_does_not_offer(
+    client, stranger, jobs, offering, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    _as_user(client, stranger)
+    offering["public_offline_download"] = False
+    assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 404
+    offering.pop("public_offline_download")
+    monkeypatch.setattr(settings.static_export, "public_download_default", False)
+    assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 404
+    monkeypatch.setattr(settings.static_export, "public_download_default", True)
+    offering["is_public"] = False
+    assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 404
+    assert task.calls == []
+
+
+def test_an_anonymous_visitor_does_not_build(
+    client, jobs, offering, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    """An anonymous caller is everyone at once: the ready copies are theirs, a
+    build is not."""
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    _as_user(client, _user(ObjectId()).model_copy(update={"is_anonymous": True}))
+    assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 404
+    assert task.calls == []
+
+
+def test_a_viewer_export_of_pinned_data_is_refused(
+    client, stranger, jobs, offering, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    _as_user(client, stranger)
+    resp = client.post(
+        f"/serverless/export-static/{DASHBOARD_OID}",
+        json={"state": _export_state(pins={"as_of_version": "v-old"})},
+    )
+    assert resp.status_code == 400
+    assert "live data" in resp.json()["detail"]
+    assert task.calls == []
+
+
+def test_viewer_exports_are_limited_per_address(
+    client, stranger, jobs, offering, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    """Guest accounts are made at will: an address gets its own limit."""
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    monkeypatch.setattr(settings.static_export, "public_export_per_ip_max", 2)
+    monkeypatch.setattr(settings.static_export, "build_per_user_max", 50)
+    for n in range(3):
+        _as_user(client, _user(ObjectId()))  # a fresh guest each time
+        resp = client.post(f"/serverless/export-static/{DASHBOARD_OID}")
+        assert resp.status_code == (200 if n < 2 else 429)
+    assert len(task.calls) == 2
+
+
+def test_a_viewer_export_fails_closed_without_redis(
+    client, stranger, jobs, offering, monkeypatch: pytest.MonkeyPatch
+):
+    from depictio.api.v1.endpoints.user_endpoints import rate_limit
+
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    monkeypatch.setattr(rate_limit, "_get_redis_client", lambda: None)
+    _as_user(client, stranger)
+    assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 503
+    assert task.calls == []
+
+
+def test_can_export_tells_a_viewer_they_export_publicly(client, stranger, owner, offering):
+    _as_user(client, stranger)
+    assert client.get(f"/serverless/export-static/{DASHBOARD_OID}/can-export").json() == {
+        "can_export": True,
+        "public": True,
+    }
+    _as_user(client, owner)
+    assert client.get(f"/serverless/export-static/{DASHBOARD_OID}/can-export").json() == {
+        "can_export": True
+    }
 
 
 # ---------------------------------------------------------------------------

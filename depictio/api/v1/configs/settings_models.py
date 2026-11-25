@@ -3160,6 +3160,15 @@ class StaticExportConfig(BaseSettings):
             "exporter's email. Off by default (`features.static_export_public_download`)."
         ),
     )
+    public_download_default: bool = Field(
+        default=True,
+        description=(
+            "Whether a public project offers visitors its offline copies until its owner "
+            "decides (#1480). A public project's data are public, and every figure carries "
+            "its data anyway, so the offer is on by default; an owner can still turn it off "
+            "(`Project.public_offline_download`). Only acts with `public_download_enabled`."
+        ),
+    )
     public_download_per_ip_per_minute: int = Field(
         default=10,
         ge=1,
@@ -3175,6 +3184,18 @@ class StaticExportConfig(BaseSettings):
             "Seconds between the change that makes a public bundle stale and its rebuild, "
             "so a burst of autosaves or a multi-collection ingestion costs one build."
         ),
+    )
+    public_export_per_ip_max: int = Field(
+        default=10,
+        ge=1,
+        description=(
+            "Exports of their own view a visitor (not an owner) may start from one address "
+            "per `public_export_window_s`, on top of the per-user limit: guest accounts "
+            "are made at will. Fail closed, as the other export limits."
+        ),
+    )
+    public_export_window_s: int = Field(
+        default=600, ge=1, description="Window of the per-address visitor export limit, in seconds."
     )
     build_per_user_max: int = Field(
         default=5,

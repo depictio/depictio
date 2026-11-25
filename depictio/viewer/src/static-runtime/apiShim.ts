@@ -1552,6 +1552,17 @@ export const dispatchStaticExport = refuse(`Exporting is ${READ_ONLY}.`);
 export const pollStaticExport = refuse(`Exporting is ${READ_ONLY}.`);
 export const downloadStaticExport = refuse(`Exporting is ${READ_ONLY}.`);
 /** The Export button's state: a bundle has no server to export from. */
+/** The view the bundle was exported at (`initial_filters`), to open on; null
+ *  when it was exported at the dashboard's defaults. */
+export function bundleOpeningFilters(): InteractiveFilter[] | null {
+  const filters = rawBundle().initial_filters ?? [];
+  return filters.length > 0 ? (filters as unknown as InteractiveFilter[]) : null;
+}
+
+export async function getStaticExportAccess(): Promise<{ allowed: boolean; public: boolean }> {
+  return { allowed: false, public: false };
+}
+
 export async function canExportStatic(): Promise<boolean> {
   return false;
 }

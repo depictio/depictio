@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Switch } from '@mantine/core';
+import { Anchor, Switch } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { Download } from 'lucide-react';
 import { setPublicOfflineDownload } from 'depictio-react-core';
@@ -38,6 +38,8 @@ const PublicDownloadRow: React.FC<{
   onChanged,
 }) => {
   const [previewOpen, setPreviewOpen] = useState(false);
+  // The preview without the switch: what visitors can download today.
+  const [reviewOnly, setReviewOnly] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const apply = async (next: boolean) => {
@@ -65,9 +67,24 @@ const PublicDownloadRow: React.FC<{
   };
 
   const onToggle = (checked: boolean) => {
+    setReviewOnly(false);
     if (checked) setPreviewOpen(true);
     else void apply(false);
   };
+  const review = (
+    <Anchor
+      component="button"
+      type="button"
+      size="xs"
+      onClick={() => {
+        setReviewOnly(true);
+        setPreviewOpen(true);
+      }}
+      data-testid="project-public-download-review"
+    >
+      What visitors can download
+    </Anchor>
+  );
 
   const title = 'Offline copy for visitors';
   const text = !isPublic
@@ -75,7 +92,7 @@ const PublicDownloadRow: React.FC<{
     : lockedForMe
       ? `${enabled ? 'Visitors can download each dashboard as one HTML file that works offline.' : 'Visitors cannot download an offline copy.'} Editing is locked: only an administrator can change it.`
       : enabled
-      ? 'Visitors can download each dashboard as one HTML file that works offline.'
+      ? 'Visitors can download each dashboard as one HTML file that works offline, at its default view or at the filters they set.'
       : 'Let visitors download each dashboard as one HTML file that works offline. You see what it holds before turning it on.';
   const disabled = !canManage || !isPublic || lockedForMe || busy;
   const checked = enabled && isPublic;
@@ -86,6 +103,7 @@ const PublicDownloadRow: React.FC<{
       projectId={projectId}
       projectName={projectName}
       busy={busy}
+      readOnly={reviewOnly}
       onClose={() => setPreviewOpen(false)}
       onConfirm={() => void apply(true)}
     />
@@ -100,6 +118,7 @@ const PublicDownloadRow: React.FC<{
         <div className="pm-visibility-body">
           <div className="pm-visibility-title">{title}</div>
           <div className="pm-visibility-text">{text}</div>
+          {checked && review}
         </div>
         <Switch
           checked={checked}
@@ -123,6 +142,7 @@ const PublicDownloadRow: React.FC<{
         disabled={disabled}
         data-testid="project-public-download-switch"
       />
+      {checked && review}
       {modal}
     </>
   );

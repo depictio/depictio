@@ -3625,6 +3625,7 @@ def export_static_bundle(payload: dict) -> dict:
             JSON-serializable throughout. The job id is part of the S3 key.
             ``state`` is the exported analysis state, when the dispatch was
             sent one: the tiles freeze on it and the bundle opens on it.
+            ``public`` (a visitor's export, #1480) makes it a public build.
 
     Returns:
         ``{"s3_key", "bucket", "size_bytes", "built_at", "tab_count"}``.
@@ -3671,6 +3672,8 @@ def export_static_bundle(payload: dict) -> dict:
             single_tab=bool(payload.get("single_tab", False)),
             python_runtime=str(payload.get("python_runtime") or "off"),
             state=analysis_state,
+            # A visitor's export (#1480): no figure source, no email, no Python.
+            **({"public": True} if payload.get("public") else {}),
         )
         html_bytes = out.read_bytes()
 

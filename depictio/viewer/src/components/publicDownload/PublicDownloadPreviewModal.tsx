@@ -103,7 +103,9 @@ const PublicDownloadPreviewModal: React.FC<{
   busy: boolean;
   onClose: () => void;
   onConfirm: () => void;
-}> = ({ opened, projectId, projectName, busy, onClose, onConfirm }) => {
+  /** Only show what visitors can download (the offer is already on). */
+  readOnly?: boolean;
+}> = ({ opened, projectId, projectName, busy, onClose, onConfirm, readOnly = false }) => {
   const [previews, setPreviews] = useState<DashboardPreview[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [reviewed, setReviewed] = useState(false);
@@ -155,7 +157,11 @@ const PublicDownloadPreviewModal: React.FC<{
       opened={opened}
       onClose={onClose}
       size="xl"
-      title={<Text fw={600}>Let visitors download an offline copy</Text>}
+      title={
+        <Text fw={600}>
+          {readOnly ? 'What visitors can download' : 'Let visitors download an offline copy'}
+        </Text>
+      }
       data-testid="public-download-preview-modal"
     >
       <Stack gap="md">
@@ -166,8 +172,9 @@ const PublicDownloadPreviewModal: React.FC<{
         </Text>
         <Alert variant="light" icon={<Icon icon="mdi:shield-check-outline" width={18} />}>
           The copy is built at each dashboard's default view and names no one: no email, no
-          Python runtime, and code-mode figures ship as pictures without their code. It is
-          rebuilt after a save or an ingestion.
+          Python runtime, and code-mode figures stay interactive without their source. It is
+          rebuilt after a save or an ingestion. A signed-in visitor can also export the view
+          they have filtered, built the same way from the same data.
         </Alert>
         {listError && (
           <Alert color="red" variant="light">
@@ -189,6 +196,14 @@ const PublicDownloadPreviewModal: React.FC<{
             </Stack>
           </ScrollArea.Autosize>
         )}
+        {readOnly ? (
+          <Group justify="flex-end">
+            <Button variant="default" onClick={onClose}>
+              Close
+            </Button>
+          </Group>
+        ) : (
+          <>
         <Checkbox
           checked={reviewed}
           onChange={(e) => setReviewed(e.currentTarget.checked)}
@@ -209,6 +224,8 @@ const PublicDownloadPreviewModal: React.FC<{
             Turn on
           </Button>
         </Group>
+          </>
+        )}
       </Stack>
     </Modal>
   );

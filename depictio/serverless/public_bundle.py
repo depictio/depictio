@@ -133,14 +133,24 @@ def report_enabled() -> bool:
     return bool(enabled() and nb.enabled and nb.render_enabled)
 
 
+def offered(project: dict[str, Any] | None) -> bool:
+    """The project's offer: its owner's choice, else the instance's default."""
+    choice = (project or {}).get("public_offline_download")
+    if choice is None:
+        return bool(settings.static_export.public_download_default)
+    return bool(choice)
+
+
+def _offered_query() -> dict[str, Any]:
+    """The Mongo filter of the projects that offer their copies."""
+    if settings.static_export.public_download_default:
+        return {"public_offline_download": {"$ne": False}}
+    return {"public_offline_download": True}
+
+
 def eligible(project: dict[str, Any] | None) -> bool:
     """Whether ``project``'s visitors may download its dashboards' bundles."""
-    return bool(
-        enabled()
-        and project
-        and project.get("is_public")
-        and project.get("public_offline_download")
-    )
+    return bool(enabled() and project and project.get("is_public") and offered(project))
 
 
 def main_tab_id(dashboard_id: Any) -> str | None:
@@ -352,7 +362,7 @@ def notify_data_changed(dc_id: Any) -> None:
             {
                 "$or": [{"data_collections._id": oid}, {"workflows.data_collections._id": oid}],
                 "is_public": True,
-                "public_offline_download": True,
+                **_offered_query(),
             },
             {"_id": 1},
         )
@@ -360,6 +370,30 @@ def notify_data_changed(dc_id: Any) -> None:
             schedule_for_project(project["_id"])
     except Exception as exc:  # noqa: BLE001 - a hook must never break an ingestion
         logger.warning(f"public bundle: change of collection {dc_id} not handled: {exc}")
+
+
+def schedule_missing() -> int:
+    """Queue a build of every offered public dashboard that has no copy yet:
+    a project made public before the download was switched on, or offered by
+    the instance's default rather than by its owner. Never raises."""
+    if not enabled():
+        return 0
+    try:
+        db = _db()
+        known = {str(doc["_id"]) for doc in db.public_bundles_collection.find({}, {"_id": 1})}
+        queued = 0
+        for project in db.projects_collection.find(
+            {"is_public": True, **_offered_query()}, {"_id": 1}
+        ):
+            for main_id in _main_tabs(project["_id"]):
+                if main_id not in known:
+                    queued += schedule(main_id, project["_id"])
+        if queued:
+            logger.info(f"public bundle: {queued} missing offline cop(ies) queued")
+        return queued
+    except Exception as exc:  # noqa: BLE001 - startup must not fail on it
+        logger.warning(f"public bundle: missing copies not queued: {exc}")
+        return 0
 
 
 def pending_count() -> int:

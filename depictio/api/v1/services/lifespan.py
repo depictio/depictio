@@ -392,6 +392,19 @@ def start_version_check() -> asyncio.Task | None:
         return None
 
 
+def start_public_bundles() -> None:
+    """Queue the visitors' offline copies a public project offers but never had
+    built (#1480): one made public before the download was switched on, or
+    offered by the instance's default. Runs on every API worker and every boot,
+    not only on the initializing one (an initialized deployment never
+    initializes again): ``public_bundle.schedule`` coalesces atomically, so a
+    second worker queues nothing more.
+    """
+    from depictio.serverless import public_bundle
+
+    public_bundle.schedule_missing()
+
+
 def start_multiqc_prewarm(should_initialize: bool) -> None:
     """Fire-and-forget MultiQC prewarm for every dashboard at startup.
 
@@ -494,6 +507,7 @@ async def lifespan(_app: FastAPI):
     start_monitoring_storage(should_initialize)
     start_comment_indexes(should_initialize)
     start_multiqc_prewarm(should_initialize)
+    start_public_bundles()
     start_installation_telemetry()
     version_check_task = start_version_check()
 

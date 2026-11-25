@@ -196,12 +196,12 @@ _FOLD_COLUMNS_KEY = "__fold_columns__"
 #: The brand a figure's tab draws in (its own, else its main tab's), set beside
 #: the colours for ui-mode figures and stripped from the shipped document too.
 _FOLD_BRAND_KEY = "__fold_brand_theme__"
-#: Set on every code-mode figure of a public bundle (#1480, ``public=True``): the
-#: figure ships frozen from the server pipeline, never as a replayable prologue,
-#: and its source is stripped from the shipped document. A visitor's browser
-#: runs no author code, transpiled or not.
-_PUBLIC_FREEZE_KEY = "__public_freeze_code__"
-PUBLIC_CODE_REFUSAL = "a public bundle ships author code frozen"
+#: Set on every code-mode figure of a public bundle (#1480, ``public=True``): its
+#: source is stripped from the shipped document. The figure still ships as its
+#: transpiled prologue when it has one: the closed JSON IR of
+#: :mod:`depictio.serverless.prologue` (filter, unpivot, group_by, sort,
+#: rename), which is data, not code. A public bundle never embeds Python.
+_PUBLIC_CODE_KEY = "__public_code_hidden__"
 
 
 def figure_code(comp: dict[str, Any]) -> str:
@@ -265,19 +265,19 @@ def annotate_code_context(tabs: list["FamilyTab"]) -> None:
                 comp[_FOLD_COLUMNS_KEY] = schema_cache[dc_id]
 
 
-def mark_public_code_frozen(tabs: list["FamilyTab"]) -> None:
-    """Freeze every code-mode figure of a public bundle and drop its source.
+def mark_public_code_hidden(tabs: list["FamilyTab"]) -> None:
+    """Have :func:`sanitize_dashboard_doc` leave the source of every code-mode
+    figure of a public bundle out.
 
-    A transpilable code figure normally ships as prologue ops the runtime
-    replays in the browser. A visitor of a public project downloads the file
-    without anyone vetting that code for them, so a public bundle takes the
-    frozen road for all of them (the server pipeline, RestrictedPython) and
-    :func:`sanitize_dashboard_doc` leaves their ``code_content`` out.
+    The figure itself is drawn as in any bundle: replayed from its transpiled
+    prologue (the closed IR, no code) when it has one, else frozen from the
+    server pipeline. Nothing in a public bundle runs Python: it is built with
+    ``python_runtime="off"``.
     """
     for tab in tabs:
         for comp in tab.components:
             if comp.get("component_type") == "figure" and comp.get("mode") == "code":
-                comp[_PUBLIC_FREEZE_KEY] = True
+                comp[_PUBLIC_CODE_KEY] = True
 
 
 def annotate_family_inheritance(tabs: list["FamilyTab"]) -> None:
@@ -343,8 +343,6 @@ def _code_figure_plan(
     the binder forms its hypothesis from. Either refusal returns
     ``(None, None, reason)`` and the figure freezes with ``code_mode``.
     """
-    if comp.get(_PUBLIC_FREEZE_KEY):
-        return None, None, PUBLIC_CODE_REFUSAL
     code = figure_code(comp)
     ops, refusal = transpile_with_reason(code)
     if ops is None:
@@ -1024,10 +1022,10 @@ def sanitize_dashboard_doc(dashboard_data: dict[str, Any]) -> dict[str, Any]:
                     _FOLD_COLUMNS_KEY,
                     _FOLD_BRAND_KEY,
                     PYTHON_JOB_KEY,
-                    _PUBLIC_FREEZE_KEY,
+                    _PUBLIC_CODE_KEY,
                 )
-                # A public bundle's code figure is frozen: its source goes too.
-                and not (k == "code_content" and m.get(_PUBLIC_FREEZE_KEY))
+                # A public bundle ships no figure source.
+                and not (k == "code_content" and m.get(_PUBLIC_CODE_KEY))
             }
             if isinstance(m, dict)
             else m
@@ -4124,7 +4122,7 @@ def export_manifest(
 
     items = family_components(tabs)
     if public:
-        mark_public_code_frozen(tabs)
+        mark_public_code_hidden(tabs)
     annotate_family_inheritance(tabs)
     annotate_code_context(tabs)
     tier_rows: list[TierRow] = []
@@ -5098,12 +5096,14 @@ def export_static(
             (``report.ineligibility``); the export itself applies the filters
             it is handed.
         public: A bundle for a public project's visitors (#1480): code-mode
-            figures ship frozen without their source (:func:`mark_public_code_frozen`),
-            and it requires ``python_runtime="off"``, no ``state`` and a
-            ``user`` without an email, so nothing names the person it was built as.
+            figures ship without their source (:func:`mark_public_code_hidden`),
+            and it requires ``python_runtime="off"`` and a ``user`` without an
+            email, so nothing names the person it was built as. ``state`` is
+            the visitor's view for an export they ask for, ``None`` for the
+            cached copy.
     """
-    if public and (python_runtime != "off" or state is not None or check):
-        raise ProducerAError("a public bundle is built at the default state, without Python")
+    if public and (python_runtime != "off" or check):
+        raise ProducerAError("a public bundle is built without Python")
     if python_runtime not in ("auto", "on", "off"):
         raise ProducerAError(f"python_runtime must be auto, on or off, got {python_runtime!r}")
     bundle_mode = BundleMode(mode) if not isinstance(mode, BundleMode) else mode

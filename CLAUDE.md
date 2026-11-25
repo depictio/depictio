@@ -240,7 +240,7 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 - Import records the state it replaces, then an `import` version; a re-push from the same
   source lineage is a new version. Provenance (`project.provenance`) is server-owned:
   create/update strip it from payloads, as they strip `public_offline_download` (an imported
-  project arrives with its visitors' download off)
+  project follows the instance default until its owner decides)
 - `published_lock` is returned by `/dashboards/get` but is runtime-only on `DashboardData`
   (popped in `/save`, in `SNAPSHOT_DERIVED_FIELDS`)
 - **Invite codes** (`migration_invites`, `services/migration_invites.py`): a target admin
@@ -424,17 +424,23 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   vitest). Change the Python side, regenerate the fixture
 - `BundleManifest.initial_filters` is the report's exported state; a contract change means
   regenerating `serverless.schema.json` and `manifest-basic.json`
-- **Public offline download** (#1480): visitors of a public project download a bundle an owner rule
-  built, never one they trigger. Off by default: needs `DEPICTIO_STATIC_EXPORT_ENABLED` and
-  `DEPICTIO_STATIC_EXPORT_PUBLIC_DOWNLOAD_ENABLED` (`features.static_export_public_download`), plus
-  the server-owned `Project.public_offline_download`, written only by
-  `PUT /projects/{id}/public_offline_download` (owner, `acknowledged` to enable, 409 on a private
-  project, GUARDED). `depictio/serverless/public_bundle.py`: one `public_bundles` doc per family
+- **Public offline download** (#1480): the data of a public project are public, so its visitors get
+  pre-built files. Off by default on the instance: needs `DEPICTIO_STATIC_EXPORT_ENABLED` and
+  `DEPICTIO_STATIC_EXPORT_PUBLIC_DOWNLOAD_ENABLED` (`features.static_export_public_download`). Then
+  on for every public project (`..._PUBLIC_DOWNLOAD_DEFAULT`, true) unless its owner says otherwise:
+  the server-owned `Project.public_offline_download` (`None` = the default; `public_bundle.offered`),
+  written only by `PUT /projects/{id}/public_offline_download` (owner, `acknowledged` to enable, 409
+  on a private project, GUARDED). Startup queues the missing copies (`schedule_missing`), as does
+  making a project public. `depictio/serverless/public_bundle.py`: one `public_bundles` doc per family
   (`_id` = main tab, no index), `serverless-public/<main>/<key>.html`, current + previous kept. The
   key hashes the family snapshot (not the version id: an autosave folds into it), each collection's
   newest aggregation, the MultiQC report set and the runtime build
-- A public build runs as the owner with `email=""`, `python_runtime="off"`, no state and `public=True`:
-  `export_static` refuses anything else, and code-mode figures are frozen without `code_content`.
+- A public build runs as the owner with `email=""`, `python_runtime="off"` and `public=True`:
+  `export_static` refuses Python, `check` or an email. Code-mode figures keep their transpiled
+  prologue (a closed JSON op list, never code) and lose `code_content`. A signed-in viewer of an
+  offering project (a guest too, never an anonymous caller) may `POST /export-static` their view:
+  the same public build at their state (pins: 400), per-IP limit on top of the per-user one,
+  the job row theirs; `can-export` answers `public: true`.
   Rebuilds are queued, coalesced (`public_rebuild_delay_s`), from `capture_dashboard_version`,
   `invalidate_data_collection_cache` and MultiQC report writes; the previous file is served with
   `rebuilding` meanwhile. A new content or data path that skips those funnels serves a stale copy
@@ -443,7 +449,9 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   dashboard file and its PDF (`public_report.py`: owner token minted and revoked, `exported_by`
   None, default state, `author_code=False` and `code_content` stripped, public manifest), served
   by `/download?file=report|pdf`. A failed PDF keeps the report; the previous report is served
-  while the next renders, and a report never runs ahead of its bundle
+  while the next renders, and a report never runs ahead of its bundle. A render on request stays
+  owners' and editors' when code-mode figures are present: `NotebookPreflight.render_reason`
+  says so before the click
 - `GET /serverless/public-bundle/{id}[/download]` (own router, 404 alike for every refusal) reads only:
   per-IP Redis limit, fail closed (503), presigned 5-min 302 else streamed, counted in
   `usage_dashboard_views.downloads`. Private, deleted project or dashboard drop the copies.

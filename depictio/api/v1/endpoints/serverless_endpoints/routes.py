@@ -473,7 +473,39 @@ def can_export_static(
     the button is enabled exactly when the export would be accepted (project
     owner), whoever owns the dashboard document. Reads two documents, no data.
     """
-    return {"can_export": export_denial(dashboard_id, current_user, "owner") is None}
+    if export_denial(dashboard_id, current_user, "owner") is None:
+        return {"can_export": True}
+    if _visitor_export_owner(dashboard_id, current_user) is not None:
+        # A visitor of a project that offers its copies exports their view as
+        # a public build (no Python runtime to offer them).
+        return {"can_export": True, "public": True}
+    return {"can_export": False}
+
+
+def _visitor_export_owner(dashboard_id: str, user: Any) -> Any:
+    """The project owner a visitor's export is built as, or ``None`` when this
+    caller may not export (#1480).
+
+    A visitor of a public project whose copies are offered (the owner's choice,
+    else the instance default) may export the view they have: the data are the
+    project's public data, and the build is the public one (no Python, no email,
+    no figure source). An anonymous caller is everyone at once and keeps the
+    ready copies; a guest account is a caller like any other.
+    """
+    if user is None or getattr(user, "is_anonymous", False):
+        return None
+    from depictio.serverless import public_bundle
+
+    if not public_bundle.enabled():
+        return None
+    if export_denial(dashboard_id, user, "viewer") is not None:
+        return None
+    main_id = public_bundle.main_tab_id(dashboard_id)
+    project = public_bundle.project_of(main_id) if main_id else None
+    if not public_bundle.eligible(project):
+        return None
+    assert project is not None
+    return public_bundle._owner_id(project)
 
 
 #: Only recent pending jobs count towards the queue cap. A build stuck long
@@ -513,8 +545,11 @@ def dispatch_export_static(
 ) -> dict[str, Any]:
     """Enqueue a static-bundle build; poll ``/export-static/status/{job_id}``.
 
-    Owner-gated (RFC §8 — a bundle is bulk data exfiltration). Denials return 404
-    rather than 403 so the endpoint cannot be used to enumerate dashboards.
+    Owner-gated (RFC §8 — a bundle is bulk data exfiltration), with one door for
+    visitors: on a public project that offers its copies (#1480), a signed-in
+    viewer (a guest account too) exports their view as a public build, limited
+    per address as well, and never of pinned data. Denials return 404 rather
+    than 403 so the endpoint cannot be used to enumerate dashboards.
 
     Two guards run before anything is enqueued. A per-user limit
     (``static_export.build_per_user_max`` per ``build_per_user_window_s``)
@@ -529,11 +564,19 @@ def dispatch_export_static(
     (or a ``null`` state) keeps the dashboard's own interactive defaults.
     """
     denial = export_denial(dashboard_id, current_user, "owner")
+    visitor_owner = None
     if denial is not None:
-        logger.info(f"Static export refused for {dashboard_id}: {denial}")
-        raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
+        visitor_owner = _visitor_export_owner(dashboard_id, current_user)
+        if visitor_owner is None:
+            logger.info(f"Static export refused for {dashboard_id}: {denial}")
+            raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
 
     state = body.state if body is not None else None
+    if visitor_owner is not None and state is not None and state.pins.body():
+        raise HTTPException(
+            status_code=400,
+            detail="A visitor's export is drawn from the live data: leave the version first.",
+        )
     if state is not None:
         from depictio.serverless import report
 
@@ -552,6 +595,17 @@ def dispatch_export_static(
         detail="Too many exports started; try again in a few minutes.",
         unavailable_detail="Exports are temporarily unavailable; please retry in a moment.",
     )
+    if visitor_owner is not None:
+        # Guest accounts are made at will: an address gets its own limit too.
+        enforce_rate_limit(
+            request,
+            "public_static_export",
+            max_calls=settings.static_export.public_export_per_ip_max,
+            window_s=settings.static_export.public_export_window_s,
+            fail_closed=True,
+            detail="Too many exports from this address; try again in a few minutes.",
+            unavailable_detail="Exports are temporarily unavailable; please retry in a moment.",
+        )
     pending_builds = _pending_builds()
     if pending_builds >= settings.static_export.queue_max_pending:
         logger.warning(
@@ -576,7 +630,7 @@ def dispatch_export_static(
         }
     )
 
-    payload = {
+    payload: dict[str, Any] = {
         "job_id": job_id,
         "dashboard_id": str(dashboard_id),
         "user": {
@@ -587,6 +641,17 @@ def dispatch_export_static(
         },
         "python_runtime": python_runtime,
     }
+    if visitor_owner is not None:
+        # The public build, as the cached copy is made: the owner's identity
+        # without their email, no Python runtime, no figure source.
+        payload["user"] = {
+            "id": str(visitor_owner),
+            "email": "",
+            "is_admin": False,
+            "is_anonymous": False,
+        }
+        payload["python_runtime"] = "off"
+        payload["public"] = True
     if state is not None:
         payload["state"] = state.model_dump(mode="json")
     async_result = export_static_bundle_task.apply_async(args=[payload])

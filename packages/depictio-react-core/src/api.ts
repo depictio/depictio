@@ -1355,6 +1355,9 @@ export interface NotebookPreflight {
   combined_available?: boolean;
   /** Why not, when it cannot (the export then defaults to the dashboard alone). */
   combined_reason?: string | null;
+  /** Why this reader cannot have the report rendered (HTML / PDF), when the
+   *  server renders reports; the .qmd stays theirs. */
+  render_reason?: string | null;
 }
 
 /** What a render produces: the report alone, or the report and the dashboard
@@ -3883,6 +3886,8 @@ export interface ServerInfo {
     /** Visitors of a public project may download a pre-built offline copy
      *  (#1480): both `DEPICTIO_STATIC_EXPORT_*` switches. */
     static_export_public_download?: boolean;
+    /** What a public project offers its visitors until its owner decides. */
+    static_export_public_download_default?: boolean;
     notebook_export?: boolean;
     report_editor?: boolean;
   };
@@ -5547,7 +5552,9 @@ export interface ProjectListEntry {
   is_public?: boolean;
   /** Visitors may download its dashboards' offline copy (#1480). Written only
    *  by `setPublicOfflineDownload`. */
-  public_offline_download?: boolean;
+  /** The owner's choice; null/absent: the instance default
+   *  (`features.static_export_public_download_default`). */
+  public_offline_download?: boolean | null;
   /** Creation time, UTC "YYYY-MM-DD HH:MM:SS". */
   registration_time?: string;
   /** Last modification time, UTC. Empty when never edited since creation. */
@@ -9358,6 +9365,33 @@ export async function downloadStaticExport(
  *  current user: the very rule `dispatchStaticExport` is held to (project
  *  owner), so the button is enabled exactly when the export would go through.
  *  Any failure reads as "no". */
+/** The filters an offline bundle opens on (its manifest's `initial_filters`,
+ *  the view it was exported at). Always null on a server: the static runtime's
+ *  shim answers it in a bundle. */
+export function bundleOpeningFilters(): InteractiveFilter[] | null {
+  return null;
+}
+
+/** Who may export this dashboard: an owner, or (`public`) a visitor of a
+ *  public project that offers its copies, whose export is a public build. */
+export interface StaticExportAccess {
+  allowed: boolean;
+  public: boolean;
+}
+
+export async function getStaticExportAccess(dashboardId: string): Promise<StaticExportAccess> {
+  try {
+    const res = await authFetch(
+      `${API_BASE}/serverless/export-static/${dashboardId}/can-export`,
+    );
+    if (!res.ok) return { allowed: false, public: false };
+    const body = (await res.json()) as { can_export?: unknown; public?: unknown };
+    return { allowed: body.can_export === true, public: body.public === true };
+  } catch {
+    return { allowed: false, public: false };
+  }
+}
+
 export async function canExportStatic(dashboardId: string): Promise<boolean> {
   try {
     const res = await authFetch(

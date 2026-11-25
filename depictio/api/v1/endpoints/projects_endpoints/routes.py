@@ -1798,15 +1798,13 @@ async def toggle_public_private(
     # flag (read by listings and badges) that must follow the project.
     cascade_counts = cascade_project_visibility(project_id, is_public_bool)
 
-    # A private project offers visitors no offline copy (#1480): the download
-    # goes off and its bundles are deleted, so making it public again does not
-    # silently reopen it.
-    if not is_public_bool and project.get("public_offline_download"):
-        projects_collection.update_one(
-            {"_id": ObjectId(project_id)}, {"$set": {"public_offline_download": False}}
-        )
+    # A private project offers visitors no offline copy (#1480): its bundles are
+    # deleted. The owner's choice is kept, so making it public again offers
+    # them again only if it was (or the instance default) on.
     if not is_public_bool:
         _drop_public_bundles(project_id)
+    else:
+        _schedule_public_bundles(project_id)
 
     return {
         "success": True,
@@ -1823,6 +1821,16 @@ def _drop_public_bundles(project_id: object) -> None:
         public_bundle.drop_project(str(project_id))
     except Exception as exc:  # noqa: BLE001 - cleanup must not fail the caller
         logger.warning(f"Could not drop the public bundles of project {project_id}: {exc}")
+
+
+def _schedule_public_bundles(project_id: object) -> None:
+    """Queue the offline copies of a project that just became public. Never raises."""
+    try:
+        from depictio.serverless import public_bundle
+
+        public_bundle.schedule_for_project(str(project_id), delay=0)
+    except Exception as exc:  # noqa: BLE001 - a broker outage must not fail the toggle
+        logger.warning(f"Could not queue the public bundles of project {project_id}: {exc}")
 
 
 class PublicOfflineDownloadRequest(BaseModel):

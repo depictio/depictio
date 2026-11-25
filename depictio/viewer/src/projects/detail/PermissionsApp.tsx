@@ -31,7 +31,10 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 import type { ColDef, ICellRendererParams, CellValueChangedEvent } from 'ag-grid-community';
 import { GlassPage, STROKE, useGlassPages } from '../../chrome/variants/glass/pages';
 import PublicDownloadRow from '../../components/publicDownload/PublicDownloadRow';
-import { usePublicDownloadEnabled } from '../../hooks/usePublicDownloadEnabled';
+import {
+  usePublicDownloadDefault,
+  usePublicDownloadEnabled,
+} from '../../hooks/usePublicDownloadEnabled';
 import '../../chrome/variants/glass/pages/permissions.css';
 import {
   ArrowRight,
@@ -272,6 +275,7 @@ const PermissionsApp: React.FC = () => {
   const { user } = useCurrentUser();
   const migrationUi = useMigrationUi();
   const publicDownloadUi = usePublicDownloadEnabled();
+  const publicDownloadDefault = usePublicDownloadDefault();
   const { colorScheme } = useMantineColorScheme();
   const primary = useMantineTheme().primaryColor;
   const isDark = colorScheme === 'dark';
@@ -903,7 +907,8 @@ const PermissionsApp: React.FC = () => {
         projectId: projectId ?? '',
         projectName: project.name,
         isPublic: Boolean(project.is_public),
-        enabled: Boolean(project.public_offline_download),
+        // The owner's choice, else what the instance offers by default.
+        enabled: project.public_offline_download ?? publicDownloadDefault,
         canManage,
         // A locked (published) project meets the same rule as its visibility:
         // only an administrator may change it.

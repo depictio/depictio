@@ -93,6 +93,7 @@ import {
   AdvancedVizPlacementDefaultProvider,
   HighlightProvider,
   GenomeDebugPanel,
+  bundleOpeningFilters,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -234,12 +235,14 @@ const App: React.FC = () => {
   // hydration reads storage and decodes the URL fragment.
   const hydrationRef = useRef<InitialFilterHydration | null>(null);
   // The dashboard view of a combined report + dashboard file opens on the
-  // filters its report is showing (null everywhere else). That state is the
+  // filters its report is showing, a bundle on the view it was exported at
+  // (null everywhere else). That state is the
   // exported one, authoritative: no declared default is added on top of it.
   const sharedOpeningRef = useRef(false);
   if (hydrationRef.current === null) {
     hydrationRef.current = hydrateInitialFilters(extractDashboardId(), extractPreviewVersionId());
-    const shared = combinedInitialFilters();
+    // A plain bundle exported at a filtered view opens on it the same way.
+    const shared = combinedInitialFilters() ?? bundleOpeningFilters();
     if (shared) {
       hydrationRef.current = { ...hydrationRef.current, filters: shared };
       sharedOpeningRef.current = true;

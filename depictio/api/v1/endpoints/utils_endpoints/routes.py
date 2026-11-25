@@ -177,6 +177,10 @@ async def server_info(
             "static_export_public_download": (
                 settings.static_export.enabled and settings.static_export.public_download_enabled
             ),
+            # What a public project offers until its owner decides.
+            "static_export_public_download_default": (
+                settings.static_export.public_download_default
+            ),
             "notebook_export": settings.notebook_export.enabled,
             # The report layer's editor, which only exists when export does.
             "report_editor": (

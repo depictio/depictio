@@ -630,3 +630,51 @@ def test_a_public_report_has_no_exporter_and_no_author_code(monkeypatch: pytest.
     assert seen["user"].email == ""
     assert seen["state"].filters_as_payload() == []
     assert seen["kwargs"]["embed_runtime"] is True and seen["kwargs"]["pdf"] is True
+
+
+# ---------------------------------------------------------------------------
+# The offer: on by default, the owner's choice wins
+# ---------------------------------------------------------------------------
+
+
+def test_a_public_project_offers_its_copies_until_its_owner_decides(
+    mongo, monkeypatch: pytest.MonkeyPatch
+):
+    project = mongo["projects_collection"].find_one({"_id": PROJECT_OID})
+    project.pop("public_offline_download")
+    monkeypatch.setattr(settings.static_export, "public_download_default", True)
+    assert public_bundle.eligible(project) is True
+    assert public_bundle.eligible({**project, "public_offline_download": False}) is False
+    monkeypatch.setattr(settings.static_export, "public_download_default", False)
+    assert public_bundle.eligible(project) is False
+    assert public_bundle.eligible({**project, "public_offline_download": True}) is True
+    assert public_bundle.eligible(
+        {**project, "public_offline_download": True, "is_public": False}
+    ) is (False)
+
+
+def test_an_ingestion_reaches_a_project_offering_by_default(
+    built, dispatched, mongo, monkeypatch: pytest.MonkeyPatch
+):
+    mongo["projects_collection"].update_one(
+        {"_id": PROJECT_OID}, {"$unset": {"public_offline_download": ""}}
+    )
+    monkeypatch.setattr(settings.static_export, "public_download_default", True)
+    public_bundle.notify_data_changed(str(DC_OID))
+    assert dispatched == [(str(MAIN_OID), 120)]
+
+
+def test_missing_copies_are_queued_once(built, dispatched, mongo, monkeypatch: pytest.MonkeyPatch):
+    """At startup: every offered public dashboard without a copy, once, whatever
+    the number of API workers that ask."""
+    mongo["projects_collection"].update_one(
+        {"_id": PROJECT_OID}, {"$unset": {"public_offline_download": ""}}
+    )
+    monkeypatch.setattr(settings.static_export, "public_download_default", True)
+    assert public_bundle.schedule_missing() == 1
+    assert public_bundle.schedule_missing() == 0
+    assert dispatched == [(str(MAIN_OID), 120)]
+    public_bundle.build(str(MAIN_OID))
+    dispatched.clear()
+    assert public_bundle.schedule_missing() == 0
+    assert dispatched == []

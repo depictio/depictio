@@ -372,13 +372,17 @@ not in the hover-revealed action row, since a viewer must see it without hoverin
 **Permissions (producers A and C).** `viewer` for preflight, **`owner`** for the build itself: a
 bundle is bulk data exfiltration and should not be available to every viewer.
 
-**Public download (#1480).** A public project's owner may let visitors download the offline
-copy. The rule above still holds: the visitor downloads a file an owner rule built, at the
-default state, and the route that serves it does no work (no build, no enqueue). What changes
-is who holds the file, so the owner sees what it carries first (the binding preflight lists
-each collection's columns and rows, and which tables ship whole) and confirms. A public build
-names no one (`exported_by` is null), embeds no Python runtime and freezes code-mode figures
-without their source, so no author code reaches a stranger. Copies are rebuilt after a save
+**Public download (#1480).** The data of a public project are public already: every figure a
+visitor sees carries them. So once the instance enables it, a public project offers its
+visitors offline files by default (an instance setting), and its owner may turn that off, or
+review at any time what each file carries (the binding preflight lists each collection's
+columns and rows, and which tables ship whole). The ready copies are drawn at the default
+state, and the route that serves them does no work (no build, no enqueue). A signed-in visitor
+(a guest account too) may also export the view they have filtered: the same public build at
+their state, limited per user and per address, never of a pinned version. A public build
+names no one (`exported_by` is null) and embeds no Python runtime. Code-mode figures keep the
+transpiled prologue, a closed list of JSON operations the runtime interprets (never runnable
+code), and lose their source, so they still follow filters offline. Copies are rebuilt after a save
 or an ingestion, keyed on content rather than time, and deleted when the project goes private,
 the option goes off or the dashboard is deleted. The download is rate-limited per address and
 refuses (503) when the limiter cannot count, rather than letting requests through.
