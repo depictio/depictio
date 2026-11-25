@@ -30,6 +30,8 @@ import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import type { ColDef, ICellRendererParams, CellValueChangedEvent } from 'ag-grid-community';
 import { GlassPage, STROKE, useGlassPages } from '../../chrome/variants/glass/pages';
+import PublicDownloadRow from '../../components/publicDownload/PublicDownloadRow';
+import { usePublicDownloadEnabled } from '../../hooks/usePublicDownloadEnabled';
 import '../../chrome/variants/glass/pages/permissions.css';
 import {
   ArrowRight,
@@ -269,6 +271,7 @@ const PermissionsApp: React.FC = () => {
   const projectId = readProjectIdFromPath();
   const { user } = useCurrentUser();
   const migrationUi = useMigrationUi();
+  const publicDownloadUi = usePublicDownloadEnabled();
   const { colorScheme } = useMantineColorScheme();
   const primary = useMantineTheme().primaryColor;
   const isDark = colorScheme === 'dark';
@@ -893,6 +896,19 @@ const PermissionsApp: React.FC = () => {
   );
 
   const shownPublic = pendingPublic !== null ? pendingPublic : Boolean(project?.is_public);
+  // The visitors' offline copy (#1480): read from the stored project, so a
+  // pending visibility flip does not move it until it is confirmed.
+  const publicDownloadProps = project
+    ? {
+        projectId: projectId ?? '',
+        projectName: project.name,
+        isPublic: Boolean(project.is_public),
+        enabled: Boolean(project.public_offline_download),
+        canManage,
+        onChanged: (enabled: boolean) =>
+          setProject((prev) => (prev ? { ...prev, public_offline_download: enabled } : prev)),
+      }
+    : null;
   const VisMark = shownPublic ? Globe : Lock;
 
   // Editing lock (#1303), beside visibility: visibility says who may view,
@@ -960,6 +976,9 @@ const PermissionsApp: React.FC = () => {
             data-testid="project-editing-switch"
           />
         </div>
+        )}
+        {publicDownloadUi && publicDownloadProps && (
+          <PublicDownloadRow {...publicDownloadProps} variant="glass" iconStroke={STROKE} />
         )}
       </section>
 
@@ -1265,6 +1284,9 @@ const PermissionsApp: React.FC = () => {
                 disabled={!isAdmin}
                 data-testid="project-editing-switch"
               />
+              )}
+              {publicDownloadUi && publicDownloadProps && (
+                <PublicDownloadRow {...publicDownloadProps} />
               )}
             </Stack>
           </Paper>

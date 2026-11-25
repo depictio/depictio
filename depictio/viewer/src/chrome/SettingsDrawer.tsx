@@ -52,6 +52,8 @@ import { CONTENT_WIDTHS, type ContentWidth, useContentWidthPref } from '../hooks
 import { useReportEditorEnabled } from '../hooks/useReportEditorEnabled';
 import { useNotebookExportEnabled } from '../hooks/useNotebookExportEnabled';
 import { useStaticExportEnabled } from '../hooks/useStaticExportEnabled';
+import { usePublicDownloadEnabled } from '../hooks/usePublicDownloadEnabled';
+import PublicCopyCard from '../components/publicDownload/PublicCopyCard';
 
 /** Client-side mirror of the server's upload cap (routes.py). */
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
@@ -1172,6 +1174,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   // until it answers: a switched-off export is absent, not disabled.
   const staticExportEnabled = useStaticExportEnabled();
   const notebookExportEnabled = useNotebookExportEnabled();
+  const publicDownloadEnabled = usePublicDownloadEnabled();
   const staticExportAllowed = useCanExportStatic(
     onExportStatic && !isStaticBundle && staticExportEnabled ? (dashboardId ?? null) : null,
   );
@@ -1329,6 +1332,10 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
             : 'The report, or its Quarto source',
       body: (
         <Stack gap="lg">
+          {/* A reader who may not build gets the copy the owner offers (#1480). */}
+          {publicDownloadEnabled && staticExportAllowed === false && dashboardId && (
+            <PublicCopyCard dashboardId={dashboardId} />
+          )}
           {showNotebookExport && getAnalysisState ? (
             <ExportBlock
               dashboard={dashboard}

@@ -648,6 +648,9 @@ export {
   pollStaticExport,
   downloadStaticExport,
   canExportStatic,
+  getPublicBundleStatus,
+  publicBundleDownloadUrl,
+  setPublicOfflineDownload,
   // Project management
   fetchProject,
   fetchIngestionReport,
@@ -1281,6 +1284,8 @@ export type {
   StaticExportLinkRow,
   StaticExportSizeEstimate,
   StaticExportPreflight,
+  StaticExportCollection,
+  PublicBundleStatus,
   StaticExportPythonRuntime,
   PythonRuntimeMode,
   StaticExportResult,

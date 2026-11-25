@@ -3880,6 +3880,9 @@ export interface ServerInfo {
     migration?: boolean;
     changes_since?: boolean;
     static_export?: boolean;
+    /** Visitors of a public project may download a pre-built offline copy
+     *  (#1480): both `DEPICTIO_STATIC_EXPORT_*` switches. */
+    static_export_public_download?: boolean;
     notebook_export?: boolean;
     report_editor?: boolean;
   };
@@ -5542,6 +5545,9 @@ export interface ProjectListEntry {
   /** User override of the detected layout; null/absent = detect. */
   layout?: 'runs' | 'pipeline' | 'tables' | null;
   is_public?: boolean;
+  /** Visitors may download its dashboards' offline copy (#1480). Written only
+   *  by `setPublicOfflineDownload`. */
+  public_offline_download?: boolean;
   /** Creation time, UTC "YYYY-MM-DD HH:MM:SS". */
   registration_time?: string;
   /** Last modification time, UTC. Empty when never edited since creation. */
@@ -9189,6 +9195,69 @@ export interface StaticExportPreflight {
   counts: { live: number; partial: number; frozen: number; omitted: number };
   size_estimate?: StaticExportSizeEstimate | null;
   python_runtime?: StaticExportPythonRuntime | null;
+  /** What the file would hold, per collection (empty when not bound). */
+  collections?: StaticExportCollection[];
+}
+
+/** One collection a bundle carries, as the binding preflight reads it. */
+export interface StaticExportCollection {
+  dc_id: string;
+  name: string;
+  type?: string | null;
+  /** The columns its Parquet holds (runtime-derived companions left out). */
+  columns: string[];
+  rows: number;
+  /** Read by a live table: ships every column, not just the ones named. */
+  whole: boolean;
+}
+
+/** The visitor's offline copy of a public dashboard (#1480), or null when none
+ *  can be downloaded (either switch off, private project, download off, or not
+ *  built yet: the server answers all of them alike). */
+export interface PublicBundleStatus {
+  dashboard_id: string;
+  available: boolean;
+  built_at?: string | null;
+  size_bytes?: number | null;
+  /** A newer copy is being built; the one offered is the previous. */
+  rebuilding: boolean;
+  /** Owners only: built from the dashboard and data as they are now. */
+  fresh?: boolean;
+  status?: string | null;
+  error?: string | null;
+}
+
+export async function getPublicBundleStatus(
+  dashboardId: string,
+): Promise<PublicBundleStatus | null> {
+  try {
+    const res = await authFetch(`${API_BASE}/serverless/public-bundle/${dashboardId}`);
+    if (!res.ok) return null;
+    return (await res.json()) as PublicBundleStatus;
+  } catch {
+    return null;
+  }
+}
+
+/** Where a visitor's browser downloads the offline copy: a plain link, since the
+ *  route needs no credentials and answers with a redirect or an attachment. */
+export function publicBundleDownloadUrl(dashboardId: string): string {
+  return `${API_BASE}/serverless/public-bundle/${dashboardId}/download`;
+}
+
+/** Let visitors of a public project download its offline copies, or stop. */
+export async function setPublicOfflineDownload(
+  projectId: string,
+  enabled: boolean,
+  acknowledged = false,
+): Promise<{ public_offline_download: boolean; queued: number }> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/public_offline_download`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled, acknowledged }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to change the offline download');
+  return res.json();
 }
 
 export interface StaticExportResult {
