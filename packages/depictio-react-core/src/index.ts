@@ -1286,6 +1286,8 @@ export type {
   StaticExportPreflight,
   StaticExportCollection,
   PublicBundleStatus,
+  PublicReportStatus,
+  PublicCopyFile,
   StaticExportPythonRuntime,
   PythonRuntimeMode,
   StaticExportResult,

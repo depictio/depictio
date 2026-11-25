@@ -438,6 +438,12 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   Rebuilds are queued, coalesced (`public_rebuild_delay_s`), from `capture_dashboard_version`,
   `invalidate_data_collection_cache` and MultiQC report writes; the previous file is served with
   `rebuilding` meanwhile. A new content or data path that skips those funnels serves a stale copy
+- Where reports render (`DEPICTIO_NOTEBOOK_EXPORT_ENABLED` + its render), each built bundle queues
+  its report under the same key (`build_public_report`, one report slot): the combined report +
+  dashboard file and its PDF (`public_report.py`: owner token minted and revoked, `exported_by`
+  None, default state, `author_code=False` and `code_content` stripped, public manifest), served
+  by `/download?file=report|pdf`. A failed PDF keeps the report; the previous report is served
+  while the next renders, and a report never runs ahead of its bundle
 - `GET /serverless/public-bundle/{id}[/download]` (own router, 404 alike for every refusal) reads only:
   per-IP Redis limit, fail closed (503), presigned 5-min 302 else streamed, counted in
   `usage_dashboard_views.downloads`. Private, deleted project or dashboard drop the copies.

@@ -98,6 +98,8 @@ def switches(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings.static_export, "public_download_enabled", True)
     monkeypatch.setattr(settings.static_export, "public_download_per_ip_per_minute", 10)
     monkeypatch.setattr(settings.static_export, "public_rebuild_delay_s", 120)
+    # The rendered report is its own switch (its tests turn it on).
+    monkeypatch.setattr(settings.notebook_export, "render_enabled", False)
 
 
 @pytest.fixture
@@ -170,6 +172,23 @@ def dispatched(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, int]]:
         public_bundle, "_dispatch", lambda main_id, delay: calls.append((main_id, delay))
     )
     return calls
+
+
+@pytest.fixture
+def reports(monkeypatch: pytest.MonkeyPatch, built) -> dict[str, Any]:
+    """The report switches on; renders run in-process with a stand-in that records
+    its call, and queued renders are recorded rather than sent."""
+    monkeypatch.setattr(settings.notebook_export, "enabled", True)
+    monkeypatch.setattr(settings.notebook_export, "render_enabled", True)
+    state: dict[str, Any] = {"queued": [], "renders": [], "pdf": b"%PDF-1.7 report"}
+
+    def fake_render(main_id, owner_id):
+        state["renders"].append({"main_id": main_id, "owner_id": owner_id})
+        return b"<html>report</html>", state["pdf"], "overview"
+
+    monkeypatch.setattr(public_bundle, "_dispatch_report", state["queued"].append)
+    monkeypatch.setattr(public_bundle, "_render_report", fake_render)
+    return state
 
 
 @pytest.fixture
@@ -455,3 +474,159 @@ def test_dropping_a_project_removes_its_bundles(built, mongo, s3):
     public_bundle.drop_project(str(PROJECT_OID))
     assert s3.objects == {}
     assert mongo["public_bundles_collection"].count_documents({}) == 0
+
+
+# ---------------------------------------------------------------------------
+# The report and its PDF
+# ---------------------------------------------------------------------------
+
+
+def test_no_report_is_queued_while_the_instance_does_not_render_reports(
+    client, built, redis, monkeypatch: pytest.MonkeyPatch
+):
+    queued: list[str] = []
+    monkeypatch.setattr(public_bundle, "_dispatch_report", queued.append)
+    public_bundle.build(str(MAIN_OID))
+    assert queued == []
+    _as(client, None)
+    assert "report" not in client.get(f"/serverless/public-bundle/{MAIN_OID}").json()
+    assert client.get(f"/serverless/public-bundle/{MAIN_OID}/download?file=report").status_code == (
+        404
+    )
+
+
+def test_a_built_bundle_queues_its_report_once(reports):
+    public_bundle.build(str(MAIN_OID))
+    assert reports["queued"] == [str(MAIN_OID)]
+    # The same content again: the render already queued covers it.
+    public_bundle.build(str(MAIN_OID))
+    assert reports["queued"] == [str(MAIN_OID)]
+
+
+def test_a_visitor_downloads_the_report_and_its_pdf_and_nothing_is_queued(
+    client, reports, dispatched, redis
+):
+    public_bundle.build(str(MAIN_OID))
+    public_bundle.build_report(str(MAIN_OID))
+    assert reports["renders"] == [{"main_id": str(MAIN_OID), "owner_id": OWNER_OID}]
+    dispatched.clear()
+    reports["queued"].clear()
+    _as(client, None)
+
+    status = client.get(f"/serverless/public-bundle/{MAIN_OID}").json()
+    assert status["report"]["available"] is True
+    assert status["report"]["pdf_available"] is True
+    assert status["report"]["rebuilding"] is False
+    assert "status" not in status["report"]
+
+    report = client.get(f"/serverless/public-bundle/{MAIN_OID}/download?file=report")
+    assert report.status_code == 200
+    assert report.content == b"<html>report</html>"
+    assert "-report-dashboard.html" in report.headers["content-disposition"]
+    pdf = client.get(f"/serverless/public-bundle/{MAIN_OID}/download?file=pdf")
+    assert pdf.status_code == 200
+    assert pdf.headers["content-type"] == "application/pdf"
+    assert pdf.content.startswith(b"%PDF")
+    assert dispatched == [] and reports["queued"] == []
+
+
+def test_a_failed_pdf_leaves_the_report(client, reports, redis):
+    reports["pdf"] = None
+    public_bundle.build(str(MAIN_OID))
+    public_bundle.build_report(str(MAIN_OID))
+    _as(client, None)
+    status = client.get(f"/serverless/public-bundle/{MAIN_OID}").json()
+    assert status["report"]["available"] is True
+    assert status["report"]["pdf_available"] is False
+    assert client.get(f"/serverless/public-bundle/{MAIN_OID}/download?file=pdf").status_code == 404
+    assert client.get(f"/serverless/public-bundle/{MAIN_OID}/download?file=report").status_code == (
+        200
+    )
+
+
+def test_a_report_waits_for_its_bundle(reports, dispatched, mongo):
+    public_bundle.build(str(MAIN_OID))
+    mongo["dashboards_collection"].update_one(
+        {"dashboard_id": MAIN_OID}, {"$set": {"title": "Edited"}}
+    )
+    result = public_bundle.build_report(str(MAIN_OID))
+    assert result["status"] == "waiting for the bundle"
+    assert reports["renders"] == []
+    assert dispatched == [(str(MAIN_OID), 0)]
+
+
+def test_the_previous_report_is_served_while_the_next_one_renders(
+    client, reports, redis, mongo, s3
+):
+    public_bundle.build(str(MAIN_OID))
+    public_bundle.build_report(str(MAIN_OID))
+    mongo["dashboards_collection"].update_one(
+        {"dashboard_id": MAIN_OID}, {"$set": {"title": "Edited"}}
+    )
+    public_bundle.build(str(MAIN_OID))
+    _as(client, None)
+    status = client.get(f"/serverless/public-bundle/{MAIN_OID}").json()
+    assert status["report"]["available"] is True
+    assert status["report"]["rebuilding"] is True
+
+    public_bundle.build_report(str(MAIN_OID))
+    status = client.get(f"/serverless/public-bundle/{MAIN_OID}").json()
+    assert status["report"]["rebuilding"] is False
+    # Two bundles, two reports and two PDFs: the served ones and those before.
+    assert len([k for k in s3.objects if k.startswith(f"serverless-public/{MAIN_OID}/")]) == 6
+
+
+def test_turning_the_render_off_withdraws_the_report(client, reports, redis, monkeypatch):
+    public_bundle.build(str(MAIN_OID))
+    public_bundle.build_report(str(MAIN_OID))
+    monkeypatch.setattr(settings.notebook_export, "render_enabled", False)
+    _as(client, None)
+    assert "report" not in client.get(f"/serverless/public-bundle/{MAIN_OID}").json()
+    assert client.get(f"/serverless/public-bundle/{MAIN_OID}/download?file=pdf").status_code == 404
+
+
+def test_dropping_a_project_removes_its_reports(reports, s3):
+    public_bundle.build(str(MAIN_OID))
+    public_bundle.build_report(str(MAIN_OID))
+    assert any(k.endswith("-report.pdf") for k in s3.objects)
+    public_bundle.drop_project(str(PROJECT_OID))
+    assert s3.objects == {}
+
+
+def test_a_public_report_has_no_exporter_and_no_author_code(monkeypatch: pytest.MonkeyPatch):
+    """The visitor's report plan: default state, no "exported by", the server
+    never runs the author's Python and the document carries none of it."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import notebook_export
+    from depictio.api.v1.services.notebook_export.generator import ExportPlan
+    from depictio.serverless import public_report
+
+    secret = "import os; os.environ['SECRET']"
+    seen: dict[str, Any] = {}
+
+    def fake_plan(dashboard_id, state, user, token, **kwargs):
+        seen.update(state=state, user=user, kwargs=kwargs)
+        return ExportPlan(
+            tabs=[
+                {
+                    "dashboard_id": str(MAIN_OID),
+                    "stored_metadata": [
+                        {"component_type": "figure", "mode": "code", "code_content": secret}
+                    ],
+                }
+            ],
+            project=None,
+            state=state,
+            stages=[],
+            title="Overview",
+            exported_by="owner@example.com",
+        )
+
+    monkeypatch.setattr(notebook_export, "build_export_plan", fake_plan)
+    plan = public_report.public_plan(str(MAIN_OID), public_report._Owner(id=OWNER_OID), "t")
+
+    assert plan.exported_by is None
+    assert plan.author_code is False
+    assert secret not in repr(plan.tabs)
+    assert seen["user"].email == ""
+    assert seen["state"].filters_as_payload() == []
+    assert seen["kwargs"]["embed_runtime"] is True and seen["kwargs"]["pdf"] is True

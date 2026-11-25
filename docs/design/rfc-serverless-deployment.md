@@ -382,6 +382,11 @@ without their source, so no author code reaches a stranger. Copies are rebuilt a
 or an ingestion, keyed on content rather than time, and deleted when the project goes private,
 the option goes off or the dashboard is deleted. The download is rate-limited per address and
 refuses (503) when the limiter cannot count, rather than letting requests through.
+Where the instance renders reports, each copy also has its report: the combined report +
+dashboard file and its PDF, rendered on a worker after the bundle and under the same key, by
+the same rules (the owner's rights without their email, the default state, the public
+manifest). The render never runs the author's Python, as an owner's render does not, and the
+document leaves code-mode figures' source out.
 
 ### 8.1 Size envelope for `single-file`
 

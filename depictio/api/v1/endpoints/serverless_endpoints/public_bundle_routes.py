@@ -8,7 +8,9 @@ public_bundle``) and never queue, compute or build anything:
   owner also learns whether it is ``fresh`` (built from the content as it is).
 * ``GET /public-bundle/{dashboard_id}/download``: the file, as a redirect to a
   short presigned URL when object storage has a public endpoint, else streamed
-  from S3. Rate-limited per address in Redis, refused (503) when Redis cannot
+  from S3. ``?file=dashboard`` (the default) is the bundle; ``report`` the
+  report + dashboard file and ``pdf`` its PDF, where the instance renders
+  reports and a worker has rendered them. Rate-limited per address in Redis, refused (503) when Redis cannot
   be reached: a door open to the whole internet does not open wider during an
   outage.
 
@@ -19,9 +21,9 @@ was built yet: nothing tells a caller which of these it met.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
 
 from depictio.api.v1.configs.config import settings
@@ -96,17 +98,49 @@ def public_bundle_status(
         "size_bytes": entry.get("size_bytes"),
         "rebuilding": public_bundle.rebuilding(doc),
     }
+    if public_bundle.report_enabled():
+        report = public_bundle.served_report(doc)
+        payload["report"] = {
+            "available": report is not None,
+            "built_at": (report or {}).get("built_at"),
+            "size_bytes": (report or {}).get("size_bytes"),
+            "pdf_available": bool((report or {}).get("pdf_s3_key")),
+            "pdf_size_bytes": (report or {}).get("pdf_size_bytes"),
+            "rebuilding": public_bundle.report_rebuilding(doc),
+        }
     if _is_owner(project, current_user):
         current = doc.get("current") or {}
         payload["fresh"] = current.get("key") == public_bundle.content_key(main_id, project)
         payload["status"] = doc.get("status")
         payload["error"] = doc.get("error")
+        if "report" in payload:
+            report_doc = doc.get("report") or {}
+            payload["report"]["status"] = report_doc.get("status")
+            payload["report"]["error"] = report_doc.get("error")
     return payload
 
 
+def _file_of(doc: dict[str, Any], entry: dict[str, Any], file: str) -> tuple[str, str, str, str]:
+    """``(S3 key, media type, file name suffix, extension)`` of the asked file, or a 404."""
+    if file == "dashboard":
+        return entry["s3_key"], "text/html", "", "html"
+    report = public_bundle.served_report(doc)
+    if report is None:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND)
+    if file == "report":
+        return report["s3_key"], "text/html", "-report-dashboard", "html"
+    if not report.get("pdf_s3_key"):
+        raise HTTPException(status_code=404, detail=_NOT_FOUND)
+    return report["pdf_s3_key"], "application/pdf", "-report", "pdf"
+
+
 @public_bundle_router.get("/public-bundle/{dashboard_id}/download")
-def public_bundle_download(dashboard_id: str, request: Request):
-    """The pre-built bundle. Never builds: 404 until a worker has built one."""
+def public_bundle_download(
+    dashboard_id: str,
+    request: Request,
+    file: Literal["dashboard", "report", "pdf"] = Query("dashboard"),
+):
+    """A pre-built file. Never builds: 404 until a worker has made it."""
     enforce_rate_limit(
         request,
         "public_bundle_download",
@@ -115,7 +149,8 @@ def public_bundle_download(dashboard_id: str, request: Request):
         detail="Too many downloads from this address; please wait a minute.",
         unavailable_detail="Downloads are temporarily unavailable; please retry in a moment.",
     )
-    main_id, project, _doc, entry = _resolve(dashboard_id)
+    main_id, project, doc, entry = _resolve(dashboard_id)
+    key, media_type, suffix, ext = _file_of(doc, entry, file)
     try:
         _record_download(main_id, request)
     except Exception as exc:  # noqa: BLE001 - counting must never block a download
@@ -123,17 +158,16 @@ def public_bundle_download(dashboard_id: str, request: Request):
 
     name = "".join(c if c.isalnum() else "-" for c in str(project.get("name") or "dashboard"))
     stamp = str(entry.get("built_at") or "")[:10]
-    filename = f"depictio-{name.strip('-').lower() or 'dashboard'}-{main_id[-6:]}-{stamp}.html"
+    slug = name.strip("-").lower() or "dashboard"
+    filename = f"depictio-{slug}-{main_id[-6:]}-{stamp}{suffix}.{ext}"
     bucket = settings.s3.bucket
-    url = _presigned_download_url(
-        bucket, entry["s3_key"], expires_in=PRESIGN_SECONDS, filename=filename
-    )
+    url = _presigned_download_url(bucket, key, expires_in=PRESIGN_SECONDS, filename=filename)
     if url:
         return RedirectResponse(url, status_code=302)
     try:
-        response = _s3().get_object(Bucket=bucket, Key=entry["s3_key"])
+        response = _s3().get_object(Bucket=bucket, Key=key)
     except Exception as exc:
-        logger.error(f"public bundle: {entry['s3_key']} unreadable: {exc}")
+        logger.error(f"public bundle: {key} unreadable: {exc}")
         raise HTTPException(status_code=404, detail=_NOT_FOUND)
 
     def iterfile():
@@ -141,7 +175,7 @@ def public_bundle_download(dashboard_id: str, request: Request):
 
     return StreamingResponse(
         iterfile(),
-        media_type="text/html",
+        media_type=media_type,
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "Cache-Control": "no-store",

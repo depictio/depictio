@@ -27,6 +27,14 @@ and the download route hands out what is already there.
   owner but without their email (``exported_by`` stays empty), without the
   Python runtime, without a state, code-mode figures frozen and their source
   left out.
+* **The report.** Where the instance renders reports (the notebook export and
+  its render on), each built bundle is followed by its report (``report`` in
+  the same document): the combined report + dashboard file and its PDF, under
+  the same key, rendered by Quarto as the owner without their email, at the
+  report layer's state, without running an author's Python, with the public
+  manifest. It is a separate task (:data:`REPORT_TASK`), since a render takes
+  minutes and holds one of the deployment's report slots; until it is done
+  the previous report is served.
 """
 
 from __future__ import annotations
@@ -51,6 +59,8 @@ PUBLIC_PREFIX = "serverless-public/"
 KEY_SCHEMA = 1
 #: The Celery task that builds one family's bundle (``celery_tasks``).
 BUILD_TASK = "depictio.serverless.build_public_bundle"
+#: The Celery task that renders one family's report and PDF after its bundle.
+REPORT_TASK = "depictio.serverless.build_public_report"
 
 
 # ---------------------------------------------------------------------------
@@ -82,6 +92,20 @@ def _dispatch(main_id: str, delay: int) -> None:
     celery_app.send_task(BUILD_TASK, args=[main_id], countdown=delay)
 
 
+def _dispatch_report(main_id: str) -> None:
+    from depictio.api.celery_app import celery_app
+
+    celery_app.send_task(REPORT_TASK, args=[main_id])
+
+
+def _render_report(main_id: str, owner_id: Any) -> tuple[bytes, bytes | None, str]:
+    """The combined report + dashboard file, its PDF (``None`` when the PDF
+    failed) and the report's file stem, rendered for a visitor's copy."""
+    from depictio.serverless.public_report import render_public_report
+
+    return render_public_report(main_id, owner_id)
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -101,6 +125,12 @@ def _oid(value: Any) -> ObjectId | None:
 def enabled() -> bool:
     """Both switches: the static export and its public download."""
     return bool(settings.static_export.enabled and settings.static_export.public_download_enabled)
+
+
+def report_enabled() -> bool:
+    """Whether visitors' copies include the rendered report and its PDF."""
+    nb = settings.notebook_export
+    return bool(enabled() and nb.enabled and nb.render_enabled)
 
 
 def eligible(project: dict[str, Any] | None) -> bool:
@@ -372,6 +402,7 @@ def build(main_id: str) -> dict[str, Any]:
     doc = coll.find_one({"_id": main_id}) or {}
     if (doc.get("current") or {}).get("key") == key:
         coll.update_one({"_id": main_id}, {"$set": {"status": "ready"}})
+        schedule_report(main_id, key)
         return {"status": "unchanged"}
 
     coll.update_one(
@@ -413,11 +444,138 @@ def build(main_id: str) -> dict[str, Any]:
         {"_id": main_id},
         {"$set": {"status": "ready", "error": None, "current": entry, "previous": old}},
     )
-    _delete_others(main_id, keep={object_key, (old or {}).get("s3_key")})
+    _delete_others(main_id)
     # A change that landed while this build ran is in neither bundle.
     if content_key(main_id, project) != key:
         schedule(main_id, project["_id"])
+    else:
+        schedule_report(main_id, key)
     return {"status": "built", **entry}
+
+
+# ---------------------------------------------------------------------------
+# The report
+# ---------------------------------------------------------------------------
+
+
+def report_s3_key(main_id: str, key: str, ext: str) -> str:
+    return f"{PUBLIC_PREFIX}{main_id}/{key[:32]}-report.{ext}"
+
+
+def schedule_report(main_id: str, key: str) -> bool:
+    """Queue the render of the report of the bundle built under ``key``,
+    unless that report exists or a render is queued already."""
+    if not report_enabled():
+        return False
+    coll = _db().public_bundles_collection
+    try:
+        queued = coll.find_one_and_update(
+            {
+                "_id": main_id,
+                "report.scheduled": {"$ne": True},
+                "report.current.key": {"$ne": key},
+            },
+            {"$set": {"report.scheduled": True, "report.scheduled_at": _now()}},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"public bundle: could not queue the report of {main_id}: {exc}")
+        return False
+    if queued is None:
+        return False
+    try:
+        _dispatch_report(main_id)
+    except Exception as exc:  # noqa: BLE001 - a dead broker must not fail the bundle
+        logger.warning(f"public bundle: could not queue the report of {main_id}: {exc}")
+        coll.update_one({"_id": main_id}, {"$set": {"report.scheduled": False}})
+        return False
+    return True
+
+
+def build_report(main_id: str) -> dict[str, Any]:
+    """Render ``main_id``'s report and PDF if its content key moved (the task body).
+
+    Rendered after the bundle, under the same key: a report of other content
+    than the bundle beside it is never offered as current.
+    """
+    coll = _db().public_bundles_collection
+    coll.update_one({"_id": main_id}, {"$set": {"report.scheduled": False}}, upsert=True)
+    project = project_of(main_id)
+    if not eligible(project) or not report_enabled():
+        _drop_report(main_id)
+        return {"status": "skipped"}
+    assert project is not None
+    owner_id = _owner_id(project)
+    if owner_id is None:
+        return {"status": "skipped", "reason": "the project has no owner"}
+
+    key = content_key(main_id, project)
+    doc = coll.find_one({"_id": main_id}) or {}
+    report = doc.get("report") or {}
+    if (report.get("current") or {}).get("key") == key:
+        coll.update_one({"_id": main_id}, {"$set": {"report.status": "ready"}})
+        return {"status": "unchanged"}
+    if (doc.get("current") or {}).get("key") != key:
+        # The bundle is behind: its build renders the report once it is done.
+        schedule(main_id, project["_id"], delay=0)
+        return {"status": "waiting for the bundle"}
+
+    coll.update_one(
+        {"_id": main_id}, {"$set": {"report.status": "building", "report.started_at": _now()}}
+    )
+    try:
+        html, pdf, stem = _render_report(main_id, owner_id)
+        html_key = report_s3_key(main_id, key, "html")
+        _s3().put_object(
+            Bucket=settings.s3.bucket,
+            Key=html_key,
+            Body=html,
+            ContentType="text/html; charset=utf-8",
+        )
+        pdf_key = None
+        if pdf is not None:
+            pdf_key = report_s3_key(main_id, key, "pdf")
+            _s3().put_object(
+                Bucket=settings.s3.bucket, Key=pdf_key, Body=pdf, ContentType="application/pdf"
+            )
+    except Exception as exc:
+        logger.error(f"public bundle: report of {main_id} failed: {exc}")
+        coll.update_one(
+            {"_id": main_id},
+            {"$set": {"report.status": "failed", "report.error": str(exc)[:500]}},
+        )
+        raise
+
+    entry = {
+        "key": key,
+        "stem": stem,
+        "s3_key": html_key,
+        "size_bytes": len(html),
+        "pdf_s3_key": pdf_key,
+        "pdf_size_bytes": len(pdf) if pdf is not None else None,
+        "built_at": _now().isoformat(),
+    }
+    coll.update_one(
+        {"_id": main_id},
+        {
+            "$set": {
+                "report.status": "ready",
+                "report.error": None,
+                "report.current": entry,
+                "report.previous": report.get("current"),
+            }
+        },
+    )
+    _delete_others(main_id)
+    if content_key(main_id, project) != key:
+        schedule(main_id, project["_id"])
+    return {"status": "built", **entry}
+
+
+def _drop_report(main_id: str) -> None:
+    """Forget a family's report while keeping its bundle (the render is off)."""
+    coll = _db().public_bundles_collection
+    coll.update_one({"_id": main_id}, {"$unset": {"report": ""}})
+    _delete_others(main_id)
 
 
 def _keys_under(main_id: str) -> list[str]:
@@ -436,8 +594,25 @@ def _delete_keys(keys: list[str]) -> None:
         )
 
 
-def _delete_others(main_id: str, keep: set[str | None]) -> None:
+def _referenced_keys(doc: dict[str, Any] | None) -> set[str]:
+    """Every object a family's document still serves: the current and previous
+    bundle, report and PDF."""
+    doc = doc or {}
+    entries = [doc.get("current"), doc.get("previous")]
+    report = doc.get("report") or {}
+    entries += [report.get("current"), report.get("previous")]
+    keys: set[str] = set()
+    for entry in entries:
+        for field in ("s3_key", "pdf_s3_key"):
+            if entry and entry.get(field):
+                keys.add(entry[field])
+    return keys
+
+
+def _delete_others(main_id: str) -> None:
+    """Delete the family's files its document no longer serves."""
     try:
+        keep = _referenced_keys(_db().public_bundles_collection.find_one({"_id": main_id}))
         _delete_keys([k for k in _keys_under(main_id) if k not in keep])
     except Exception as exc:  # noqa: BLE001 - a stale file is harmless
         logger.warning(f"public bundle: could not prune old bundles of {main_id}: {exc}")
@@ -476,3 +651,25 @@ def served(doc: dict[str, Any] | None) -> dict[str, Any] | None:
 
 def rebuilding(doc: dict[str, Any]) -> bool:
     return bool(doc.get("scheduled") or doc.get("status") == "building")
+
+
+def served_report(doc: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The report a download hands out: the newest one rendered, else the one
+    before. ``None`` when the instance does not render reports."""
+    if not doc or not report_enabled():
+        return None
+    report = doc.get("report") or {}
+    return report.get("current") or report.get("previous") or None
+
+
+def report_rebuilding(doc: dict[str, Any]) -> bool:
+    """A newer report is on its way: the bundle or the report is being made."""
+    report = (doc or {}).get("report") or {}
+    current = report.get("current") or {}
+    bundle = (doc or {}).get("current") or {}
+    return bool(
+        rebuilding(doc)
+        or report.get("scheduled")
+        or report.get("status") == "building"
+        or (bundle.get("key") and current.get("key") != bundle.get("key"))
+    )

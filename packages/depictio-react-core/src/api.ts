@@ -9225,7 +9225,25 @@ export interface PublicBundleStatus {
   fresh?: boolean;
   status?: string | null;
   error?: string | null;
+  /** Present where the instance renders reports: the report + dashboard file
+   *  and its PDF, rendered after the bundle. */
+  report?: PublicReportStatus;
 }
+
+export interface PublicReportStatus {
+  available: boolean;
+  built_at?: string | null;
+  size_bytes?: number | null;
+  pdf_available: boolean;
+  pdf_size_bytes?: number | null;
+  /** A newer report is on its way (the bundle or the report is being made). */
+  rebuilding: boolean;
+  status?: string | null;
+  error?: string | null;
+}
+
+/** Which pre-built file a visitor downloads. */
+export type PublicCopyFile = 'dashboard' | 'report' | 'pdf';
 
 export async function getPublicBundleStatus(
   dashboardId: string,
@@ -9241,8 +9259,12 @@ export async function getPublicBundleStatus(
 
 /** Where a visitor's browser downloads the offline copy: a plain link, since the
  *  route needs no credentials and answers with a redirect or an attachment. */
-export function publicBundleDownloadUrl(dashboardId: string): string {
-  return `${API_BASE}/serverless/public-bundle/${dashboardId}/download`;
+export function publicBundleDownloadUrl(
+  dashboardId: string,
+  file: PublicCopyFile = 'dashboard',
+): string {
+  const query = file === 'dashboard' ? '' : `?file=${file}`;
+  return `${API_BASE}/serverless/public-bundle/${dashboardId}/download${query}`;
 }
 
 /** Let visitors of a public project download its offline copies, or stop. */

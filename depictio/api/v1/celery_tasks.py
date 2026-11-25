@@ -3716,6 +3716,40 @@ def build_public_bundle(main_id: str) -> dict:
     return public_bundle.build(str(main_id))
 
 
+#: A visitor's report waits this long for a free report slot before asking again.
+_PUBLIC_REPORT_SLOT_RETRY_S = 60
+
+
+@celery_app.task(
+    bind=True,
+    name="depictio.serverless.build_public_report",
+    soft_time_limit=600 + 2 * settings.notebook_export.render_timeout_s + 60,
+    time_limit=600 + 2 * settings.notebook_export.render_timeout_s + 120,
+    max_retries=None,
+)
+def build_public_report(self, main_id: str) -> dict:
+    """Render the report + dashboard file and the PDF of a public project's
+    visitors' copy (#1480), once its bundle is built.
+
+    Queued by ``public_bundle.schedule_report``; never by a visitor. It takes
+    one of the deployment's report slots (``report_concurrency``), as an
+    owner's report does, and waits for one without holding a worker.
+    """
+    from depictio.api.v1.services.notebook_export import jobs
+    from depictio.serverless import public_bundle
+
+    holder = f"public:{main_id}"
+    hold_s = 600 + 2 * settings.notebook_export.render_timeout_s + 120
+    if not jobs.acquire_slot(
+        "report", holder, capacity=settings.notebook_export.report_concurrency, hold_s=hold_s
+    ):
+        raise self.retry(countdown=_PUBLIC_REPORT_SLOT_RETRY_S)
+    try:
+        return public_bundle.build_report(str(main_id))
+    finally:
+        jobs.release_slot("report", holder)
+
+
 __all__: list[str] = [
     "build_figure_preview",
     "analyze_figure_code",
@@ -3731,6 +3765,7 @@ __all__: list[str] = [
     "manifest_refresh_dc_task",
     "export_static_bundle",
     "build_public_bundle",
+    "build_public_report",
 ]
 
 
