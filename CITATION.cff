@@ -1,0 +1,26 @@
+# Citation metadata for Depictio. GitHub reads it for the "Cite this repository"
+# button, and Zenodo reads it when it archives a release.
+# `version` is kept in sync by bump2version (.bumpversion.cfg).
+cff-version: 1.2.0
+message: "If you use Depictio in your research, please cite it using the metadata below, with the version you used."
+type: software
+title: "Depictio"
+abstract: >-
+  Depictio is an open-source, self-hosted platform that turns the outputs of
+  bioinformatics workflows into interactive, shareable dashboards, built with
+  or without writing code.
+authors:
+  - family-names: Weber
+    given-names: Thomas
+    affiliation: European Molecular Biology Laboratory (EMBL)
+repository-code: "https://github.com/depictio/depictio"
+url: "https://depictio.github.io/depictio-docs/latest/"
+license: MIT
+version: 1.24.0
+keywords:
+  - bioinformatics
+  - data visualization
+  - dashboards
+  - workflows
+  - nf-core
+  - FAIR
