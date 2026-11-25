@@ -372,6 +372,17 @@ not in the hover-revealed action row, since a viewer must see it without hoverin
 **Permissions (producers A and C).** `viewer` for preflight, **`owner`** for the build itself: a
 bundle is bulk data exfiltration and should not be available to every viewer.
 
+**Public download (#1480).** A public project's owner may let visitors download the offline
+copy. The rule above still holds: the visitor downloads a file an owner rule built, at the
+default state, and the route that serves it does no work (no build, no enqueue). What changes
+is who holds the file, so the owner sees what it carries first (the binding preflight lists
+each collection's columns and rows, and which tables ship whole) and confirms. A public build
+names no one (`exported_by` is null), embeds no Python runtime and freezes code-mode figures
+without their source, so no author code reaches a stranger. Copies are rebuilt after a save
+or an ingestion, keyed on content rather than time, and deleted when the project goes private,
+the option goes off or the dashboard is deleted. The download is rate-limited per address and
+refuses (503) when the limiter cannot count, rather than letting requests through.
+
 ### 8.1 Size envelope for `single-file`
 
 Measured on the five reference families (v1.5.0, 2026-08-06):
