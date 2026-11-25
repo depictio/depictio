@@ -13,6 +13,7 @@ authors:
   - family-names: Weber
     given-names: Thomas
     affiliation: European Molecular Biology Laboratory (EMBL)
+    orcid: "https://orcid.org/0000-0002-0807-6363"
 repository-code: "https://github.com/depictio/depictio"
 url: "https://depictio.github.io/depictio-docs/latest/"
 license: MIT
