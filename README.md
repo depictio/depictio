@@ -57,4 +57,8 @@ Depictio is a self-hosrd modern, interactive platform that enables dashboards cr
 
 **Homepage**: [depictio.github.io](https://depictio.github.io/depictio-docs/latest/)
 
+## Citing Depictio
+
+If you use Depictio in your research, please cite it with the version you used. GitHub's **Cite this repository** button (right sidebar) gives APA and BibTeX, from [`CITATION.cff`](CITATION.cff). See also [Citing Depictio](https://depictio.github.io/depictio-docs/latest/more/citing/) in the docs.
+
 Copyright(c) 2023-2026 Thomas Weber <thomas.weber@embl.de> (see LICENSE)
