@@ -29,7 +29,13 @@ import RefetchOverlay from './RefetchOverlay';
 import { usePlotAnnotationLayer } from './annotations/usePlotAnnotationLayer';
 import ComponentSkeleton from './ComponentSkeleton';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
+import GroupStatusBadge from './GroupStatusBadge';
+import type { GroupRenderState } from '../selectionGroups';
 import { collapseMapAttribution } from './map/collapseMapAttribution';
+import MapSplit from './map/MapSplit';
+import type { MapPanelShared } from './map/MapSplit';
+import { figureSignature, mapGroupBadgeReasons, mapGroupPlan } from './map/split';
+import type { MapGroupBadgeReason } from './map/split';
 import {
   AppliedFit,
   MapFitSpec,
@@ -68,6 +74,10 @@ interface MapRendererProps {
   /** Overrides for hosts that supply their own chrome. The floating panel draws
    *  its own bordered card and header, so it asks for `bare` to avoid a card
    *  inside a card. */
+  /** The dashboard's Analysis mode. In Split the map becomes one small map per
+   *  group, all framed the same way; in Overlay it is drawn as it was and
+   *  badged "not grouped". Absent means no grouping. */
+  groupRender?: GroupRenderState;
   presentation?: {
     /** Render into a plain box instead of a bordered Paper, and skip the title.
      *  Also what moves the legend / colour bar onto the map: it marks the hosts
@@ -78,6 +88,16 @@ interface MapRendererProps {
      *  list covers the tiles it is meant to explain. */
     showLegend?: boolean;
   };
+}
+
+/** What `MapPanelRenderer` takes beyond what the host passes. */
+interface MapPanelProps extends Omit<MapRendererProps, 'groupRender'> {
+  /** Set when this map is one panel of a split: read-only, framed by the split
+   *  rather than by itself, and reporting to it. */
+  shared?: MapPanelShared;
+  /** The "not grouped" badge, when the tile is drawn whole against a grouping
+   *  the map did not honour. */
+  groupBadge?: React.ReactNode;
 }
 
 /** Below this tile width a map floats its legend over the basemap. */
@@ -95,7 +115,7 @@ const NARROW_MAP_PX = 560;
  * don't cover, mirroring Dash's behavior.
  */
 
-const MapRenderer: React.FC<MapRendererProps> = ({
+const MapPanelRenderer: React.FC<MapPanelProps> = ({
   dashboardId,
   metadata,
   filters,
@@ -104,7 +124,16 @@ const MapRenderer: React.FC<MapRendererProps> = ({
   onLegendPresence,
   onSettingsNode,
   presentation,
+  shared,
+  groupBadge,
 }) => {
+  // A panel of a split is a small multiple: selecting in one would filter the
+  // others out from under it, so it takes no selection and draws no tools.
+  const isPanel = shared != null;
+  const sharedView = shared?.view ?? null;
+  const sharedKey = shared?.key;
+  const reportToSplit = shared?.report;
+  const holding = Boolean(shared?.hold) && sharedView == null;
   const plotRef = useRef<HTMLDivElement | null>(null);
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
   const [fitSpec, setFitSpec] = useState<MapFitSpec | null>(null);
@@ -126,7 +155,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
   const definitionKey = renderDefinitionKey(metadata, definitionVersionId);
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
 
-  const selectionEnabled = isMapSelectionEnabled(metadata, !!onFilterChange);
+  const selectionEnabled = !isPanel && isMapSelectionEnabled(metadata, !!onFilterChange);
   const selectionColumn =
     typeof metadata.selection_column === 'string'
       ? (metadata.selection_column as string)
@@ -200,10 +229,20 @@ const MapRenderer: React.FC<MapRendererProps> = ({
 
   // Report load status to the dashboard registry (maps fetch on mount, no
   // viewport gate — so no deferred state).
+  // A panel leaves the registry to its split, which reports once for the tile:
+  // N panels writing one index would mark it ready as soon as the first landed.
   useReportLoadStatus(
-    metadata.index,
-    figure != null ? 'ready' : error ? 'error' : 'loading',
+    isPanel ? `${metadata.index}::panel::${sharedKey}` : metadata.index,
+    isPanel ? null : figure != null ? 'ready' : error ? 'error' : 'loading',
   );
+  useEffect(() => {
+    if (!reportToSplit || sharedKey == null) return;
+    reportToSplit(sharedKey, {
+      status: figure != null ? 'ready' : error ? 'error' : 'loading',
+      busy: loading,
+      signature: figureSignature(figure),
+    });
+  }, [reportToSplit, sharedKey, figure, error, loading]);
 
   const emitSelection = (values: string[]) => {
     if (!onFilterChange) return;
@@ -270,7 +309,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
   }, [isInitialLoad]);
 
   useEffect(() => {
-    if (userMovedRef.current || !fitSpec || !boxSize) return;
+    if (!boxSize) return;
     // Plotly's margins come off the container before the map subplot gets what
     // is left, so the fit has to be against the drawing area rather than the
     // div. The top margin is always given back (see the layout below).
@@ -278,7 +317,15 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     const width = boxSize.width - numberOr(margin.l, 0) - numberOr(margin.r, 0);
     const height = boxSize.height - numberOr(margin.b, 0);
     if (width < 1 || height < 1) return;
-    const next = computeMapFit(fitSpec, width, height);
+    // A panel says how big it is even after the viewer has moved it: the split
+    // frames every panel against the smallest.
+    if (reportToSplit && sharedKey != null) reportToSplit(sharedKey, { box: { width, height } });
+    if (userMovedRef.current) return;
+    // In a split the framing is the split's, not this panel's own fit: the same
+    // extent and zoom in every panel is the point. Without one (the unsplit
+    // data had no extent) the panel frames itself like any map.
+    if (!sharedView && !fitSpec) return;
+    const next = sharedView ?? computeMapFit(fitSpec as MapFitSpec, width, height);
     // The last fit is mirrored in a ref rather than read out of state, so the
     // comparison happens once here instead of inside a state updater React is
     // free to call more than once.
@@ -287,7 +334,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     const applied: AppliedFit = { ...next, revision: `fit-${fitRevRef.current}` };
     appliedFitRef.current = applied;
     setAppliedFit(applied);
-  }, [fitSpec, boxSize, figure]);
+  }, [fitSpec, boxSize, figure, sharedView, reportToSplit, sharedKey]);
 
   /** Plotly reports every user pan / zoom / rotate through relayout, keyed
    *  under the map subplot. Our own re-fits go through props and reach the map
@@ -489,9 +536,11 @@ const MapRenderer: React.FC<MapRendererProps> = ({
   // Two effects rather than one with a cleanup: a cleanup keyed on the node
   // would publish null between every control change, and the host re-rendering
   // without the popover would close it mid-adjustment.
+  // A panel publishes none: the controls restyle one figure, and a popover that
+  // changed one panel of several would be a trap.
   useEffect(() => {
-    onSettingsNode?.(settingsNode);
-  }, [onSettingsNode, settingsNode]);
+    if (!isPanel) onSettingsNode?.(settingsNode);
+  }, [onSettingsNode, settingsNode, isPanel]);
   useEffect(() => () => onSettingsNode?.(null), [onSettingsNode]);
 
   // A legend beside the map takes a column of its own, which a narrow tile (a
@@ -713,7 +762,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
       : undefined;
   const annotations = usePlotAnnotationLayer({
     componentIndex: String(metadata.index),
-    enabled: mapAnnotatable,
+    enabled: mapAnnotatable && !isPanel,
     data,
     layout,
     surface: 'map',
@@ -752,6 +801,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
             {metadata.title}
           </Text>
           {annotations.badges}
+          {groupBadge}
         </Group>
       )}
       {showInitialLoader && <ComponentSkeleton variant="block" />}
@@ -762,6 +812,11 @@ const MapRenderer: React.FC<MapRendererProps> = ({
       )}
       {figure && (
         <div ref={plotRef} style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+          {holding && (
+            <div style={{ position: 'absolute', inset: 0, zIndex: 2 }}>
+              <ComponentSkeleton variant="block" />
+            </div>
+          )}
           <Plot
             data={annotations.data as any[]}
             layout={annotations.layout}
@@ -775,7 +830,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
               // corner of the map to buttons nobody is reaching for.
               displayModeBar: 'hover',
             }}
-            style={{ width: '100%', height: '100%' }}
+            style={{ width: '100%', height: '100%', visibility: holding ? 'hidden' : 'visible' }}
             useResizeHandler
             {...annotations.plotProps({
               onRelayout: handleRelayout,
@@ -785,9 +840,10 @@ const MapRenderer: React.FC<MapRendererProps> = ({
             })}
           />
           {annotations.toolbar}
-          {(bare || !metadata.title) && annotations.badges.length > 0 && (
+          {(bare || !metadata.title) && (annotations.badges.length > 0 || groupBadge) && (
             <Group gap={4} style={{ position: 'absolute', bottom: 4, left: 4, zIndex: 1 }}>
               {annotations.badges}
+              {groupBadge}
             </Group>
           )}
           <RefetchOverlay visible={showRefetchOverlay} />
@@ -795,6 +851,67 @@ const MapRenderer: React.FC<MapRendererProps> = ({
       )}
     </Shell>
   );
+};
+
+/**
+ * The map tile: whole, or one small map per group when the dashboard's Analysis
+ * mode is Split.
+ *
+ * Mirrors what the advanced_viz dispatch does for its kinds. A Split with
+ * between two and `MAX_PANELS` cells deals the map into panels (`MapSplit`);
+ * anything the map cannot honour (an Overlay, too many groups, groups that do
+ * not reach this dataset) draws it whole under a "not grouped" badge, so the
+ * tile does not pass for one that took the groups.
+ */
+const MapRenderer: React.FC<MapRendererProps> = ({ groupRender, ...rest }) => {
+  const { dashboardId, metadata, filters } = rest;
+  const plan = useMemo(() => mapGroupPlan(groupRender, filters), [groupRender, filters]);
+  // Keyed on the cells rather than the filters: the split is judged ineffective
+  // by the groups, and a lasso on the whole map must not send it round again.
+  const panelKey = plan.kind === 'split' ? JSON.stringify(plan.panels) : null;
+  const [ineffectiveKey, setIneffectiveKey] = useState<string | null>(null);
+  const onIneffective = useCallback(() => setIneffectiveKey(panelKey), [panelKey]);
+
+  const badgeReason: MapGroupBadgeReason | null =
+    plan.kind === 'split'
+      ? panelKey !== null && ineffectiveKey === panelKey
+        ? 'ineffective'
+        : null
+      : plan.badge;
+  const groupBadge = badgeReason ? (
+    <GroupStatusBadge
+      key="map-group-badge"
+      label="not grouped"
+      colored={false}
+      reasons={mapGroupBadgeReasons(badgeReason)}
+    />
+  ) : null;
+
+  if (plan.kind === 'split' && badgeReason == null) {
+    return (
+      <MapSplit
+        dashboardId={dashboardId}
+        metadata={metadata}
+        filters={filters}
+        panels={plan.panels}
+        refreshTick={rest.refreshTick}
+        bare={Boolean(rest.presentation?.bare)}
+        onIneffective={onIneffective}
+        renderPanel={(panelFilters, shared) => (
+          <MapPanelRenderer
+            key={shared.key}
+            dashboardId={dashboardId}
+            metadata={metadata}
+            filters={panelFilters}
+            refreshTick={rest.refreshTick}
+            presentation={{ ...rest.presentation, bare: true }}
+            shared={shared}
+          />
+        )}
+      />
+    );
+  }
+  return <MapPanelRenderer {...rest} groupBadge={groupBadge} />;
 };
 
 /** Opacity applied to points outside the selection. Matches Plotly's own

@@ -45,12 +45,45 @@ import InlineAnnotationEditor from '../annotations/InlineAnnotationEditor';
 import DiffSummaryChip from '../chrome/DiffSummaryChip';
 import { useChangeMark } from '../../changeMarks';
 import { useComponentDiff } from '../../hooks/useComponentDiff';
+import { panelFilters } from '../../splitPanels';
+import type { PanelSpec } from '../../splitPanels';
+import { bandRows, bandsReach } from './multiqcGroups';
+
+/** Rows banded by analysis group: the Overlay of Analysis mode on this table. */
+export interface GeneralStatsBands {
+  /** One per group, in the groups' order. */
+  panels: PanelSpec[];
+  /** Whether the samples in none of the groups are listed, last, as "Other". */
+  showOther: boolean;
+}
 
 interface MultiQCGeneralStatsProps {
   dashboardId: string;
   metadata: StoredMetadata;
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Band the rows by group (Overlay). Each group is read from the same
+   *  per-group render a Split panel uses, so the two agree on every sample. */
+  bands?: GeneralStatsBands | null;
+  /** A group status badge, drawn beside the title. */
+  badge?: React.ReactNode;
+  /** Whether the bands reached the rows (`null`: no bands, or not known yet). */
+  onBandsReach?: (reached: boolean | null) => void;
+  /** What this table holds, as a fingerprint; `null` while it loads. A Split
+   *  compares its panels' to find out whether the groups narrowed anything. */
+  onSignature?: (signature: string | null) => void;
+  /** One table of a Split: the height it needs, in px, goes to the split
+   *  (which sizes the tile to all of its tables) instead of the grid. 0 is a
+   *  table with no row, `null` one still loading. */
+  onContentHeight?: (px: number | null) => void;
+  /** A quadrant of a split: the group heads the table in place of its title
+   *  and controls, and the rows are denser, so a quadrant lists more samples. */
+  splitLabel?: { name: string; color?: string } | null;
+}
+
+/** Tint of a group's rows: its colour, light, over the page background. */
+function bandTint(color: string | undefined): string | undefined {
+  return color ? `color-mix(in srgb, ${color} 14%, var(--mantine-color-body))` : undefined;
 }
 
 type ReadMode = 'mean' | 'r1' | 'r2' | 'all';
@@ -67,7 +100,12 @@ const PAGE_SIZE = 50;
 const TABLE_CHROME_PX = 24 + 44;
 const TABLE_HEADER_PX = 34;
 const TABLE_ROW_PX = 31;
+/** A quadrant of a split: its header is the group, its rows are denser. */
+const COMPACT_HEADER_PX = 26;
+const COMPACT_ROW_PX = 23;
 const TABLE_PAGER_PX = 38;
+/** The violin view in one panel of a split: a plot, no content height. */
+const VIOLIN_SPLIT_PX = 320;
 
 interface DataBar {
   min: number;
@@ -180,6 +218,10 @@ const NO_ANNOTATIONS: RenderableAnnotation[] = [];
  *  faded but legible, the new rows stay as they are. */
 const SEEN_ROW_OPACITY = 0.35;
 
+/** A quadrant of a split lists more samples in the same room. */
+const COMPACT_HEADER_STYLE: React.CSSProperties = { ...HEADER_STYLE, fontSize: 11, padding: '4px 6px' };
+const COMPACT_CELL_STYLE: React.CSSProperties = { ...CELL_STYLE, fontSize: 11, padding: '3px 6px' };
+
 /** Narrow first column carrying the ①② badges of annotated rows. */
 const BADGE_CELL_STYLE: React.CSSProperties = {
   ...CELL_STYLE,
@@ -203,7 +245,16 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
   metadata,
   filters,
   refreshTick,
+  bands,
+  badge,
+  onBandsReach,
+  onSignature,
+  onContentHeight,
+  splitLabel,
 }) => {
+  const headerStyle = splitLabel ? COMPACT_HEADER_STYLE : HEADER_STYLE;
+  const cellBaseStyle = splitLabel ? COMPACT_CELL_STYLE : CELL_STYLE;
+  const badgeCellStyle = splitLabel ? { ...BADGE_CELL_STYLE, ...COMPACT_CELL_STYLE, width: 40, minWidth: 40 } : BADGE_CELL_STYLE;
   const [payload, setPayload] = useState<GeneralStatsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -264,6 +315,42 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dashboardId, metadata.index, filtersSig, inView, refreshTick, versionKey]);
 
+  // ── Bands (Overlay) ───────────────────────────────────────────────────────
+  // One render per group, with that group's constraint appended to the
+  // dashboard's filters: the samples that come back are the group's members.
+  // The table itself stays the unfiltered render above, so its data bars and
+  // columns are the whole report's.
+  const bandsKey = bands ? JSON.stringify([bands.panels, filtersSig]) : '';
+  const [bandPayloads, setBandPayloads] = useState<{
+    key: string;
+    payloads: GeneralStatsPayload[] | null;
+  } | null>(null);
+  useEffect(() => {
+    if (!bands || !inView) return;
+    let cancelled = false;
+    Promise.all(
+      bands.panels.map((panel) =>
+        enqueueFetch(
+          () =>
+            renderMultiQCGeneralStats(dashboardId, metadata.index, panelFilters(filters ?? [], panel), versionBody),
+          metadata.layout?.y ?? 0,
+        ),
+      ),
+    )
+      .then((payloads) => {
+        if (!cancelled) setBandPayloads({ key: bandsKey, payloads });
+      })
+      .catch((err) => {
+        if (cancelled || isStaleFetch(err)) return;
+        // No banding without the groups' samples: the table stays as it is.
+        setBandPayloads({ key: bandsKey, payloads: null });
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dashboardId, metadata.index, bandsKey, inView, refreshTick, versionKey]);
+
   const titleText = (metadata.title as string | undefined) || 'MultiQC General Statistics';
 
   const mode: GeneralStatsModeData | null = useMemo(() => {
@@ -280,30 +367,126 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
     return [...rows].sort((a, b) => dir * compareCell(a[sortKey], b[sortKey]));
   }, [mode, sortKey, sortDir]);
 
-  const totalPages = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE));
+  // Members of each group in the read mode on screen, then the table's rows
+  // ordered by group (the sort applies inside each group).
+  const members = useMemo(() => {
+    if (!bands || bandPayloads?.key !== bandsKey || !bandPayloads.payloads) return null;
+    if (bandPayloads.payloads.length !== bands.panels.length) return null;
+    return bandPayloads.payloads.map((p) => {
+      const m = p.modes[readMode] ?? p.modes.mean;
+      const set = new Set<string>();
+      for (const row of m?.table_data ?? []) {
+        const sample = rowSample(row);
+        if (sample != null) set.add(String(sample));
+      }
+      return set as ReadonlySet<string>;
+    });
+  }, [bands, bandPayloads, bandsKey, readMode]);
+  const bandsReached = useMemo(() => {
+    if (!bands || !members) return null;
+    const samples: string[] = [];
+    for (const row of mode?.table_data ?? []) {
+      const sample = rowSample(row);
+      if (sample != null) samples.push(String(sample));
+    }
+    return bandsReach(samples, members);
+  }, [bands, members, mode]);
+  // Failed (payloads null) or not yet answered: not known, the table stays plain.
+  const bandsFailed = Boolean(bands && bandPayloads?.key === bandsKey && !bandPayloads.payloads);
+  const reportBandsReach = React.useRef(onBandsReach);
+  reportBandsReach.current = onBandsReach;
+  const bandsOutcome = !bands ? null : bandsFailed ? false : bandsReached;
+  useEffect(() => {
+    reportBandsReach.current?.(bandsOutcome);
+  }, [bandsOutcome]);
+
+  const bandMeta = useMemo(
+    () => (bands ? [...bands.panels.map((p) => ({ name: p.name, color: p.color })), { name: 'Other', color: undefined as string | undefined }] : []),
+    [bands],
+  );
+  const banded = useMemo(
+    () =>
+      bands && members && bandsReached
+        ? bandRows(
+            sortedRows,
+            (r) => {
+              const sample = rowSample(r);
+              return sample == null ? null : String(sample);
+            },
+            members,
+            bands.showOther,
+          )
+        : null,
+    [bands, members, bandsReached, sortedRows],
+  );
+  const displayed = useMemo(
+    () => banded ?? sortedRows.map((row) => ({ row, band: null as number | null })),
+    [banded, sortedRows],
+  );
+  const bandCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const d of banded ?? []) counts.set(d.band, (counts.get(d.band) ?? 0) + 1);
+    return counts;
+  }, [banded]);
+
+  const totalPages = Math.max(1, Math.ceil(displayed.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const visibleRows = useMemo(
-    () => sortedRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
-    [sortedRows, safePage],
+    () => displayed.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [displayed, safePage],
   );
+  // A header row where a page, or a group, starts.
+  const bandHeaderRows = banded
+    ? visibleRows.filter((d, i) => d.band !== visibleRows[i - 1]?.band).length
+    : 0;
+
+  // What this table holds, for a Split to compare its panels by.
+  const reportSignature = React.useRef(onSignature);
+  reportSignature.current = onSignature;
+  const signature = useMemo(
+    () =>
+      payload && !loading
+        ? `${(payload.modes.mean?.table_data ?? []).length}:${(payload.modes.mean?.table_data ?? [])
+            .map((r) => String(rowSample(r) ?? ''))
+            .join('|')}`
+        : null,
+    [payload, loading],
+  );
+  useEffect(() => {
+    reportSignature.current?.(signature);
+  }, [signature]);
 
   // Height the table asks the grid for. Nothing in the violin view: a plot
   // keeps the height its author gave it.
+  const contentPx =
+    mode && view === 'table' && visibleRows.length > 0
+      ? TABLE_CHROME_PX +
+        (splitLabel ? COMPACT_HEADER_PX : TABLE_HEADER_PX) +
+        (visibleRows.length + bandHeaderRows) * (splitLabel ? COMPACT_ROW_PX : TABLE_ROW_PX) +
+        (totalPages > 1 ? TABLE_PAGER_PX : 0)
+      : null;
   const contentDemand = useMemo(
-    () =>
-      mode && view === 'table' && visibleRows.length > 0
-        ? {
-            rows: rowsForHeight(
-              TABLE_CHROME_PX +
-                TABLE_HEADER_PX +
-                visibleRows.length * TABLE_ROW_PX +
-                (totalPages > 1 ? TABLE_PAGER_PX : 0),
-            ),
-          }
-        : null,
-    [mode, view, visibleRows.length, totalPages],
+    () => (contentPx != null ? { rows: rowsForHeight(contentPx) } : null),
+    [contentPx],
   );
-  useContentDemand(metadata.index, contentDemand);
+  // A table of a Split tells the split, which publishes for the whole tile:
+  // each table publishing under the tile's index would size it to one of them.
+  useContentDemand(onContentHeight ? undefined : metadata.index, contentDemand);
+  const reportContentHeight = React.useRef(onContentHeight);
+  reportContentHeight.current = onContentHeight;
+  // To a split: 0 for a table loaded with no row, the violin plot's own
+  // height, else the table's; `null` while it loads.
+  const reportedPx =
+    payload == null || loading
+      ? null
+      : view !== 'table'
+        ? VIOLIN_SPLIT_PX
+        : visibleRows.length === 0
+          ? 0
+          : contentPx;
+  useEffect(() => {
+    reportContentHeight.current?.(reportedPx);
+  }, [reportedPx]);
 
   // ── Annotation layer ──────────────────────────────────────────────────────
   // Rows are marked by sample (the same `sample` ids as the MultiQC figures):
@@ -440,6 +623,31 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
   };
 
   const renderControls = () => {
+    if (splitLabel) {
+      // The group, where a reader looks first: a bar of its colour, its name
+      // and how many of its samples this table lists.
+      return (
+        <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+          <div
+            style={{
+              width: 4,
+              height: 16,
+              borderRadius: 2,
+              flexShrink: 0,
+              background: splitLabel.color ?? 'var(--mantine-color-gray-5)',
+            }}
+          />
+          <Text fw={700} size="sm" truncate style={{ color: splitLabel.color ?? 'inherit' }}>
+            {splitLabel.name}
+          </Text>
+          {payload && (
+            <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+              {displayed.length} {displayed.length === 1 ? 'sample' : 'samples'}
+            </Text>
+          )}
+        </Group>
+      );
+    }
     const pairedEnd = !!payload?.is_paired_end;
     // When the dataset isn't paired-end, only one set of values exists per
     // sample — there's no Mean/R1/R2 distinction to make. Surface that as the
@@ -448,6 +656,7 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
       <Group justify="space-between" align="center" wrap="nowrap">
         <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
           <Text fw={600} size="sm">{titleText}</Text>
+          {badge}
           {changeMark.comparing && (
             <DiffSummaryChip
               diff={diffState.diff}
@@ -511,7 +720,7 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
             <Table.Thead>
               <Table.Tr>
                 {hasRowAnnotations && (
-                  <Table.Th style={{ ...HEADER_STYLE, cursor: 'default', width: 40 }} title="Annotations" />
+                  <Table.Th style={{ ...headerStyle, cursor: 'default', width: 40 }} title="Annotations" />
                 )}
                 {columns.map((col) => {
                   const isSort = sortKey === col.id;
@@ -519,7 +728,7 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
                   return (
                     <Table.Th
                       key={col.id}
-                      style={HEADER_STYLE}
+                      style={headerStyle}
                       onClick={() => onHeaderClick(col.id)}
                     >
                       {col.name}{arrow}
@@ -529,7 +738,7 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {visibleRows.map((row, rowIdx) => {
+              {visibleRows.flatMap(({ row, band }, rowIdx) => {
                 const sample = rowSample(row);
                 const mark = sample == null ? undefined : rowAnnotations.get(String(sample));
                 const picked = annotating && sample != null && annotateSelected.has(String(sample));
@@ -542,7 +751,31 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
                   matchedNew > 0 &&
                   sample != null &&
                   !newSamples.has(String(sample));
-                return (
+                const meta = band != null ? bandMeta[band] : undefined;
+                const tint = bandTint(meta?.color);
+                // A header where a group starts, and again at the top of a page
+                // so a page never opens on rows of an unnamed group.
+                const header =
+                  meta && band !== visibleRows[rowIdx - 1]?.band ? (
+                    <Table.Tr key={`band-${rowIdx}`} data-group-band={meta.name}>
+                      <Table.Td
+                        colSpan={columns.length + (hasRowAnnotations ? 1 : 0)}
+                        style={{
+                          ...cellBaseStyle,
+                          fontWeight: 700,
+                          backgroundColor: bandTint(meta.color) ?? 'var(--mantine-color-default-hover)',
+                          borderLeft: `4px solid ${meta.color ?? 'var(--mantine-color-gray-5)'}`,
+                          color: meta.color ?? 'var(--mantine-color-dimmed)',
+                        }}
+                      >
+                        {meta.name}
+                        <span style={{ fontWeight: 400, marginLeft: 8, color: 'var(--mantine-color-dimmed)' }}>
+                          {bandCounts.get(band as number) ?? 0}
+                        </span>
+                      </Table.Td>
+                    </Table.Tr>
+                  ) : null;
+                const rowEl = (
                   <Table.Tr
                     key={rowIdx}
                     onClick={annotating ? () => toggleAnnotateRow(row) : undefined}
@@ -558,7 +791,8 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
                     {hasRowAnnotations && (
                       <Table.Td
                         style={{
-                          ...BADGE_CELL_STYLE,
+                          ...badgeCellStyle,
+                          ...(tint ? { backgroundColor: tint } : {}),
                           ...tone,
                           ...(stripe
                             ? {
@@ -577,15 +811,16 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
                       const value = row[col.id];
                       const bar = col.id === 'Sample Name' ? null : findDataBar(dataBars.get(col.id), value);
                       const cellStyle: React.CSSProperties = {
-                        ...CELL_STYLE,
+                        ...cellBaseStyle,
                         ...(col.id === 'Sample Name'
                           ? { fontWeight: 600, minWidth: 200 }
                           : {}),
+                        ...(tint ? { backgroundColor: tint } : {}),
                         ...(bar
                           ? {
                               backgroundImage: bar.backgroundImage,
-                              paddingTop: bar.paddingTop ?? CELL_STYLE.padding,
-                              paddingBottom: bar.paddingBottom ?? CELL_STYLE.padding,
+                              paddingTop: bar.paddingTop ?? cellBaseStyle.padding,
+                              paddingBottom: bar.paddingBottom ?? cellBaseStyle.padding,
                             }
                           : {}),
                         ...tone,
@@ -600,6 +835,7 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
                     })}
                   </Table.Tr>
                 );
+                return header ? [header, rowEl] : [rowEl];
               })}
             </Table.Tbody>
           </Table>
@@ -660,7 +896,7 @@ const MultiQCGeneralStats: React.FC<MultiQCGeneralStatsProps> = ({
   return (
     <Paper
       ref={containerRef}
-      p="sm"
+      p={splitLabel ? 6 : 'sm'}
       withBorder
       radius="md"
       style={{

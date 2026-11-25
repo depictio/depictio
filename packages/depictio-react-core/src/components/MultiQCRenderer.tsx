@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { InteractiveFilter, StoredMetadata } from '../api';
+import type { GroupRenderState } from '../selectionGroups';
 import MultiQCFigure from './multiqc/MultiQCFigure';
 
 interface MultiQCRendererProps {
@@ -9,6 +10,9 @@ interface MultiQCRendererProps {
   filters: InteractiveFilter[];
   /** Counter to force refetch on realtime updates even when filters are unchanged. */
   refreshTick?: number;
+  /** Analysis mode's groups: a plot or General Stats is split per group,
+   *  and General Stats rows are banded by group in the Overlay. */
+  groupRender?: GroupRenderState;
 }
 
 /**
@@ -24,6 +28,7 @@ const MultiQCRenderer: React.FC<MultiQCRendererProps> = ({
   metadata,
   filters,
   refreshTick,
+  groupRender,
 }) => (
   // MultiQCFigure routes General Stats itself, and owns the "what's new"
   // split, so both kinds go through it.
@@ -32,6 +37,7 @@ const MultiQCRenderer: React.FC<MultiQCRendererProps> = ({
     metadata={metadata}
     filters={filters}
     refreshTick={refreshTick}
+    groupRender={groupRender}
   />
 );
 

@@ -396,6 +396,7 @@ const ComponentRendererBody: React.FC<ComponentRendererProps> = ({
         refreshTick={refreshTick}
         extraActions={chromeExtras}
         showDragHandle={showDragHandle}
+        groupRender={groupRender}
       />
     );
   }
@@ -446,6 +447,7 @@ const ComponentRendererBody: React.FC<ComponentRendererProps> = ({
           metadata={metadata}
           filters={filters}
           refreshTick={refreshTick}
+          groupRender={groupRender}
         />
       </LazyMount>,
       { extraActions, showDragHandle },
@@ -582,6 +584,7 @@ const MapBlock: React.FC<{
   refreshTick?: number;
   extraActions?: React.ReactNode;
   showDragHandle?: boolean;
+  groupRender?: GroupRenderState;
 }> = ({
   dashboardId,
   metadata,
@@ -590,6 +593,7 @@ const MapBlock: React.FC<{
   refreshTick,
   extraActions,
   showDragHandle,
+  groupRender,
 }) => {
   // MapRenderer builds the display-settings popover, because it is the one
   // that restyles the figure and reads the current values back off it, and
@@ -640,6 +644,7 @@ const MapBlock: React.FC<{
         onFilterChange={onFilterChange}
         refreshTick={refreshTick}
         onSettingsNode={setSettingsNode}
+        groupRender={groupRender}
       />
     </Suspense>,
     {
