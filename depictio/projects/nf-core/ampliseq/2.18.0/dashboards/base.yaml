@@ -641,6 +641,9 @@ tabs:
     index: mqc-sample-filter
     title: Sample ID
     layout: {x: 0, y: 0, w: 1, h: 3}
+  # QC overview tiles span the row: under Analysis > Split each one draws a panel
+  # per group plus Other, which a half-width tile would squeeze to unreadable.
+  # General Stats is taller: a table per group in Split, banded rows in Overlay.
   - component_type: multiqc
     workflow_tag: ampliseq
     data_collection_tag: multiqc_data
@@ -649,7 +652,7 @@ tabs:
     selected_plot: general_stats
     section: QC overview
     tag: am-mqc-general-stats
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: multiqc
     workflow_tag: ampliseq
     data_collection_tag: multiqc_data
@@ -658,7 +661,7 @@ tabs:
     selected_plot: Filtered Reads
     section: QC overview
     tag: am-mqc-cutadapt-filtered-reads
-    layout: {x: 0, y: 4, w: 8, h: 4}
+    layout: {x: 0, y: 6, w: 8, h: 4}
   - component_type: multiqc
     workflow_tag: ampliseq
     data_collection_tag: multiqc_data
@@ -667,7 +670,7 @@ tabs:
     selected_plot: Sequence Counts
     section: QC overview
     tag: am-mqc-fastqc-sequence-counts
-    layout: {x: 0, y: 8, w: 4, h: 4}
+    layout: {x: 0, y: 10, w: 8, h: 5}
   - component_type: multiqc
     workflow_tag: ampliseq
     data_collection_tag: multiqc_data
@@ -676,7 +679,7 @@ tabs:
     selected_plot: Sequence Quality Histograms
     section: QC overview
     tag: am-mqc-fastqc-quality-histograms
-    layout: {x: 4, y: 8, w: 4, h: 4}
+    layout: {x: 0, y: 15, w: 8, h: 5}
   # No `Per Sequence GC Content` panel. FastQC forces its x domain to 0-100 %GC
   # with 101 points per sample, but amplicon reads sit in a narrow GC band, so
   # most points lie at y=0 and the panel reads as a flat line at any size.
@@ -942,6 +945,7 @@ tabs:
     layout: {x: 0, y: 0, w: 8, h: 6}
   # Takes the pieces of the group kwargs rather than spreading them: the box
   # colours by its own x axis, which the spread would name a second time.
+  # Split takes facet_col too, one box per panel.
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
@@ -955,8 +959,10 @@ tabs:
       colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('{GROUP_COL}') or {}
       d = df if grp in df.columns else df.with_columns(pl.lit('All samples').alias(grp))
       d = d.filter(pl.col('shannon').is_not_null() & pl.col(grp).is_not_null()).sort(grp)
-      fig = px.box(d.to_pandas(), x=grp, y='shannon', color=grp, color_discrete_map=colors, category_orders=depictio_group_kwargs.get('category_orders') or {}, points='all', hover_data=['sample_id'], labels={grp: '', 'shannon': 'Shannon'})
+      fig = px.box(d.to_pandas(), x=grp, y='shannon', color=grp, color_discrete_map=colors, category_orders=depictio_group_kwargs.get('category_orders') or {}, facet_col=depictio_group_kwargs.get('facet_col'), facet_col_wrap=depictio_group_kwargs.get('facet_col_wrap', 0), points='all', hover_data=['sample_id'], labels={grp: '', 'shannon': 'Shannon'})
       fig.update_layout(showlegend=False)
+      if depictio_group_kwargs.get('facet_col'):
+          fig.update_xaxes(matches=None, categoryorder='trace', showticklabels=False)
     section: Group comparison
     tag: am-alpha-boxplot-by-group
     index: alpha-boxplot-by-group
@@ -1224,7 +1230,7 @@ tabs:
       (low) through white to red (high), and no cut-off is drawn.
 
       Source: Ward 1963, https://doi.org/10.1080/01621459.1963.10500845
-    layout: {x: 0, y: 0, w: 8, h: 5}
+    layout: {x: 0, y: 0, w: 8, h: 8}
 - title: Community & Diversity
   subtitle: Which taxa make up the samples, and which do groups share?
   tab_group: Taxa
@@ -1436,7 +1442,8 @@ tabs:
     description: Distinct families present in the samples in view.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # One 100% bar per group. Colour is the phylum, so the figure takes the group
-  # column and its order from the kwargs and never spreads them.
+  # column and its order from the kwargs and never spreads them. Split takes
+  # facet_col too, one bar per panel.
   - component_type: figure
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -1452,9 +1459,12 @@ tabs:
       d = d.filter(pl.col(grp).is_not_null()).with_columns(pl.when(pl.col('Phylum').is_in(top)).then(pl.col('Phylum')).otherwise(pl.lit('Other')).alias('Phylum'))
       shares = d.group_by([grp, 'Phylum']).agg(pl.col('rel_abundance').sum().alias('n')).with_columns((pl.col('n') / pl.col('n').sum().over(grp) * 100).alias('share')).sort(grp)
       orders = dict(depictio_group_kwargs.get('category_orders') or {}, Phylum=top + ['Other'])
-      fig = px.bar(shares.to_pandas(), x='share', y=grp, color='Phylum', orientation='h', category_orders=orders, color_discrete_map=depictio_category_colors.get('Phylum') or {}, labels={grp: '', 'share': 'Share of the community (%)'})
+      fig = px.bar(shares.to_pandas(), x='share', y=grp, color='Phylum', orientation='h', category_orders=orders, facet_col=depictio_group_kwargs.get('facet_col'), facet_col_wrap=depictio_group_kwargs.get('facet_col_wrap', 0), color_discrete_map=depictio_category_colors.get('Phylum') or {}, labels={grp: '', 'share': 'Share of the community (%)'})
       fig.update_layout(barmode='stack', xaxis_range=[0, 100], margin=dict(t=10))
       fig.update_yaxes(automargin=True)
+      if depictio_group_kwargs.get('facet_col'):
+          fig.update_yaxes(matches=None, categoryorder='trace', showticklabels=False)
+          fig.update_layout(margin=dict(t=30))
     section: Composition
     tag: am-comm-composition-by-group
     index: comm-composition-by-group
@@ -1486,9 +1496,12 @@ tabs:
       d = d.filter(pl.col(grp).is_not_null()).with_columns(pl.when(pl.col('Phylum').is_in(top)).then(pl.col('Phylum')).otherwise(pl.lit('Other')).alias('Phylum'))
       shares = d.group_by([grp, 'Phylum']).agg(pl.col('rel_abundance').sum().alias('n')).with_columns((pl.col('n') / pl.col('n').sum().over(grp) * 100).alias('share')).sort(grp)
       orders = dict(depictio_group_kwargs.get('category_orders') or {}, Phylum=top + ['Other'])
-      fig = px.bar(shares.to_pandas(), x='share', y=grp, color='Phylum', orientation='h', category_orders=orders, color_discrete_map=depictio_category_colors.get('Phylum') or {}, labels={grp: '', 'share': 'Share of the community (%)'})
+      fig = px.bar(shares.to_pandas(), x='share', y=grp, color='Phylum', orientation='h', category_orders=orders, facet_col=depictio_group_kwargs.get('facet_col'), facet_col_wrap=depictio_group_kwargs.get('facet_col_wrap', 0), color_discrete_map=depictio_category_colors.get('Phylum') or {}, labels={grp: '', 'share': 'Share of the community (%)'})
       fig.update_layout(barmode='stack', xaxis_range=[0, 100], margin=dict(t=10))
       fig.update_yaxes(automargin=True)
+      if depictio_group_kwargs.get('facet_col'):
+          fig.update_yaxes(matches=None, categoryorder='trace', showticklabels=False)
+          fig.update_layout(margin=dict(t=30))
     section: Composition
     tag: am-comm-sintax-composition
     index: comm-sintax-composition

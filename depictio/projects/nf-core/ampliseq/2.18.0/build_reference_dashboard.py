@@ -248,7 +248,8 @@ def _group_colors(group_col: str) -> str:
     Colours by Analysis mode's groups when there are some, else by the
     pipeline's group column in the family's category colours. The figures name
     their own `color`, so they take the pieces of `depictio_group_kwargs`
-    rather than spreading it.
+    rather than spreading it: the colours, `category_orders`, and `facet_col`
+    with `facet_col_wrap` so that Split draws one panel per group.
     """
     return (
         f"grp_col = depictio_group_by[0] if depictio_group_by else '{group_col}'\n"
@@ -517,10 +518,13 @@ fig = px.scatter(
     x='sampling_date', y='city', color=grp_col,
     color_discrete_map=colors,
     hover_name='{id_col}',
+    category_orders=depictio_group_kwargs.get('category_orders') or {{}},
+    facet_col=depictio_group_kwargs.get('facet_col'), facet_col_wrap=depictio_group_kwargs.get('facet_col_wrap', 0),
 )
 fig.update_traces(marker={{'size': 14}})
+fig.update_xaxes(title_text='Sampling date')
 fig.update_layout(
-    xaxis_title='Sampling date', yaxis_title=None, legend_title_text=None if depictio_group_by else '{group_display}',
+    yaxis_title=None, legend_title_text=None if depictio_group_by else '{group_display}',
     margin={{'t': 24, 'l': 8, 'r': 8, 'b': 40}},
 )
 """,
@@ -540,9 +544,12 @@ fig = px.bar(
     df_modified.to_pandas(),
     x='city', y='samples', color=grp_col,
     color_discrete_map=colors, barmode='stack',
+    category_orders=depictio_group_kwargs.get('category_orders') or {{}},
+    facet_col=depictio_group_kwargs.get('facet_col'), facet_col_wrap=depictio_group_kwargs.get('facet_col_wrap', 0),
 )
+fig.update_xaxes(title_text=None)
 fig.update_layout(
-    xaxis_title=None, yaxis_title='Samples', legend_title_text=None if depictio_group_by else '{group_display}',
+    yaxis_title='Samples', legend_title_text=None if depictio_group_by else '{group_display}',
     margin={{'t': 24, 'l': 56, 'r': 16, 'b': 60}},
 )
 """,
@@ -653,10 +660,13 @@ def environment_tab(group_col: str, group_display: str, id_col: str, order: int)
     df.to_pandas(),
     x='ctd_temperature_c', y='ctd_conductivity_us_cm', color=grp_col,
     color_discrete_map=colors, hover_name='city', custom_data=['{id_col}'],
+    category_orders=depictio_group_kwargs.get('category_orders') or {{}},
+    facet_col=depictio_group_kwargs.get('facet_col'), facet_col_wrap=depictio_group_kwargs.get('facet_col_wrap', 0),
 )
 fig.update_traces(marker={{'size': 14}})
+fig.update_xaxes(title_text='Temperature (°C)')
 fig.update_layout(
-    xaxis_title='Temperature (°C)', yaxis_title='Conductivity (µS/cm)',
+    yaxis_title='Conductivity (µS/cm)',
     legend_title_text=None if depictio_group_by else '{group_display}', margin={{'t': 24, 'l': 64, 'r': 16, 'b': 48}},
 )
 """,
@@ -676,11 +686,16 @@ fig.update_layout(
     df.to_pandas(),
     x=grp_col, y='ctd_do_mg_l', color=grp_col,
     color_discrete_map=colors, points='all',
+    category_orders=depictio_group_kwargs.get('category_orders') or {{}},
+    facet_col=depictio_group_kwargs.get('facet_col'), facet_col_wrap=depictio_group_kwargs.get('facet_col_wrap', 0),
 )
+fig.update_xaxes(title_text=None)
 fig.update_layout(
-    xaxis_title=None, yaxis_title='Dissolved O₂ (mg/L)', showlegend=False,
+    yaxis_title='Dissolved O₂ (mg/L)', showlegend=False,
     margin={{'t': 24, 'l': 64, 'r': 16, 'b': 48}},
 )
+if depictio_group_kwargs.get('facet_col'):
+    fig.update_xaxes(matches=None, categoryorder='trace', showticklabels=False)
 """,
                 4,
                 0,
@@ -698,9 +713,12 @@ fig.update_layout(
     x='ctd_nitrate_mg_l', y='ctd_doc_mg_l', color=grp_col,
     size='ctd_turbidity_ntu', color_discrete_map=colors, hover_name='city', size_max=26,
     custom_data=['{id_col}'],
+    category_orders=depictio_group_kwargs.get('category_orders') or {{}},
+    facet_col=depictio_group_kwargs.get('facet_col'), facet_col_wrap=depictio_group_kwargs.get('facet_col_wrap', 0),
 )
+fig.update_xaxes(title_text='Nitrate (mg/L)')
 fig.update_layout(
-    xaxis_title='Nitrate (mg/L)', yaxis_title='Dissolved organic carbon (mg/L)',
+    yaxis_title='Dissolved organic carbon (mg/L)',
     legend_title_text=None if depictio_group_by else '{group_display}', margin={{'t': 24, 'l': 64, 'r': 16, 'b': 48}},
 )
 """,
@@ -724,11 +742,16 @@ fig.update_layout(
     df.to_pandas(),
     x=grp_col, y='shannon', color=grp_col,
     color_discrete_map=colors, points='all',
+    category_orders=depictio_group_kwargs.get('category_orders') or {{}},
+    facet_col=depictio_group_kwargs.get('facet_col'), facet_col_wrap=depictio_group_kwargs.get('facet_col_wrap', 0),
 )
+fig.update_xaxes(title_text=None)
 fig.update_layout(
-    xaxis_title=None, yaxis_title='Shannon index', showlegend=False,
+    yaxis_title='Shannon index', showlegend=False,
     margin={{'t': 24, 'l': 64, 'r': 16, 'b': 48}},
 )
+if depictio_group_kwargs.get('facet_col'):
+    fig.update_xaxes(matches=None, categoryorder='trace', showticklabels=False)
 """,
                 0,
                 0,

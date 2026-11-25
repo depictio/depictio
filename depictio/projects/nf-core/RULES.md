@@ -366,8 +366,9 @@ A KPI strip is four different readings, not four numbers in one style:
   read it.
 - Code figures read the same colours, and follow Analysis mode's groups when it has some. With
   grouping on, `depictio_group_kwargs` holds `color`, `color_discrete_map` and `category_orders`,
-  so a figure either spreads it (and names no colour of its own) or takes the pieces, never both:
-  the spread would pass `color` twice.
+  plus `facet_col` and `facet_col_wrap` when the reader picks Split, so a figure either spreads it
+  (and names no colour of its own) or takes the pieces, never both: the spread would pass `color`
+  twice. A figure that takes the pieces takes the facet ones too, or Split changes nothing.
   ```python
   # Colours by the group column: the groups' column and colours when grouped.
   grp = depictio_group_by[0] if depictio_group_by else "{GROUP_COL}"
@@ -376,7 +377,12 @@ A KPI strip is four different readings, not four numbers in one style:
       or depictio_category_colors.get("{GROUP_COL}")
       or {}
   )
-  fig = px.box(df.to_pandas(), x=grp, y="shannon", color=grp, color_discrete_map=colors)
+  fig = px.box(
+      df.to_pandas(), x=grp, y="shannon", color=grp, color_discrete_map=colors,
+      category_orders=depictio_group_kwargs.get("category_orders") or {},
+      facet_col=depictio_group_kwargs.get("facet_col"),
+      facet_col_wrap=depictio_group_kwargs.get("facet_col_wrap", 0),
+  )
   # Colours by nothing else: spread the kwargs.
   fig = px.scatter(df.to_pandas(), x="dim_1", y="dim_2", **depictio_group_kwargs)
   ```
