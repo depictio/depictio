@@ -269,6 +269,10 @@ class NotebookPreflight(BaseModel):
     # if not, why (the export UI then defaults to the dashboard alone).
     combined_available: bool = False
     combined_reason: str | None = None
+    # Why this caller cannot have the report rendered (HTML / PDF) when the
+    # server could render it: the render's own refusal, given before the click.
+    # The notebook itself (.qmd) stays theirs to download.
+    render_reason: str | None = None
 
 
 class NotebookRenderStatus(BaseModel):

@@ -718,6 +718,39 @@ def test_the_preflight_says_whether_the_combined_file_is_on(patched_env):
     assert pre.combined_available is True and pre.combined_reason is None
 
 
+def test_the_preflight_says_why_a_viewer_cannot_have_the_code_figures_rendered(patched_env):
+    """The render's refusal is said before the click (#1480): a viewer of a
+    dashboard with code-mode figures reads it in the preflight; an editor reads
+    nothing; and a server that does not render says nothing either."""
+    routes_mod = "depictio.api.v1.endpoints.dashboards_endpoints.routes"
+
+    def _preflight(state):  # as a signed-in reader
+        return nbx.notebook_export_preflight(
+            dashboard_id=DASHBOARD_ID,  # type: ignore[arg-type]
+            request=NotebookExportRequest(state=state),
+            current_user=_RenderUser(),  # type: ignore[arg-type]
+            access_token=None,
+        )
+
+    with (
+        patch.object(nbx.settings.notebook_export, "render_enabled", True),
+        patch.object(type(nbx.settings.auth), "is_single_user_mode", False),
+    ):
+        with patch(
+            f"{routes_mod}.check_project_permission",
+            lambda project_id, user, required="viewer": required != "editor",
+        ):
+            pre = _preflight(_state(FILTERS))
+        assert pre.render_reason and "code-mode" in pre.render_reason
+        with patch(
+            f"{routes_mod}.check_project_permission",
+            lambda project_id, user, required="viewer": True,
+        ):
+            assert _preflight(_state(FILTERS)).render_reason is None
+    with patch.object(nbx.settings.notebook_export, "render_enabled", False):
+        assert _preflight(_state(FILTERS)).render_reason is None
+
+
 def test_a_render_job_of_another_user_is_not_found(patched_env):
     class _Result:
         state = "SUCCESS"

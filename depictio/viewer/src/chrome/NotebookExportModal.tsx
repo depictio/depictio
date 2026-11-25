@@ -149,7 +149,13 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     setFormat(initialOutput);
     const controller = new AbortController();
     fetchNotebookPreflight(dashboardId, snapshot, controller.signal)
-      .then((res) => setPreflight(res))
+      .then((res) => {
+        setPreflight(res);
+        // A render this reader may not have: the notebook is what they can take.
+        if (res.render_available && res.render_reason) {
+          setFormat((f) => (f === 'report' ? 'qmd' : f));
+        }
+      })
       .catch((err) => {
         if (!controller.signal.aborted) {
           setError(err instanceof Error ? err.message : String(err));
@@ -239,7 +245,10 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     }
   };
 
-  const renderAvailable = preflight?.render_available ?? false;
+  // The server renders reports, but not for this reader (a guest, or a viewer
+  // of a dashboard with code-mode figures): said here, before the click.
+  const renderReason = preflight?.render_available ? (preflight?.render_reason ?? null) : null;
+  const renderAvailable = (preflight?.render_available ?? false) && !renderReason;
   const combinedAvailable = preflight?.combined_available ?? false;
   const counts = preflight?.counts ?? {};
   const isCombined = format === 'combined';
@@ -289,6 +298,17 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
               Cover, introduction, captions and what each tile contributes.
             </Text>
           </Group>
+        )}
+
+        {renderReason && (format === 'report' || format === 'qmd') && (
+          <Alert
+            color="yellow"
+            variant="light"
+            title="The rendered report is not available to you"
+            data-testid="export-render-refused"
+          >
+            <Text size="sm">{renderReason}</Text>
+          </Alert>
         )}
 
         {combinedFallback && (
@@ -482,7 +502,8 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
                 />
                 <Text size="xs" c="dimmed">
                   {FORMAT_HINT[format]}
-                  {!renderAvailable && ' Rendered reports are off on this server.'}
+                  {!renderAvailable &&
+                    (renderReason ? '' : ' Rendered reports are off on this server.')}
                 </Text>
                 {onExportDashboardOnly && (
                   <Group gap="xs">
@@ -496,7 +517,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
                       Dashboard only…
                     </Button>
                     <Text size="xs" c="dimmed">
-                      The interactive dashboard alone, as one offline HTML file (owners).
+                      The interactive dashboard alone, as one offline HTML file.
                     </Text>
                   </Group>
                 )}

@@ -946,6 +946,8 @@ def notebook_export_preflight(
     reason = _combined_refusal(dashboard_id, state, current_user)
     preflight.combined_available = reason is None
     preflight.combined_reason = reason
+    if preflight.render_available:
+        preflight.render_reason = _render_refusal(plan, current_user)
     return preflight
 
 
@@ -1005,6 +1007,26 @@ def _require_render_enabled() -> None:
                 "(DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED)."
             ),
         )
+
+
+def _authored_code_refusal(plan: ExportPlan, current_user: User) -> str | None:
+    """Why this caller may not have ``plan`` rendered for its authored code, or
+    ``None``: the rule of :func:`_require_owner_for_authored_code`, for the
+    preflight to say before anyone clicks."""
+    try:
+        _require_owner_for_authored_code(plan, current_user)
+    except HTTPException as exc:
+        return str(exc.detail)
+    return None
+
+
+def _render_refusal(plan: ExportPlan, current_user: User) -> str | None:
+    """Why the render would refuse this caller, or ``None``."""
+    try:
+        _require_signed_in(current_user)
+    except HTTPException as exc:
+        return str(exc.detail)
+    return _authored_code_refusal(plan, current_user)
 
 
 def _require_owner_for_authored_code(plan: ExportPlan, current_user: User) -> None:
