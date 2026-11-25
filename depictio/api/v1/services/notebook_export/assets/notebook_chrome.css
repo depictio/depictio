@@ -85,8 +85,11 @@ a:has(> span[data-dpx-accent]) { display: flex; align-items: center; }
 .dpx-body > .dpx-body { margin-bottom: .8rem; }
 /* A card is built to stand on its own — inline-block, with a minimum width
    that keeps its number readable. In a row it is a grid cell instead, and
-   has to give that width up or three cards will not share one line. */
-.dpx-cards > div {
+   has to give that width up or three cards will not share one line. Each
+   card sits in its own slot (the report editor reads one thumbnail per slot):
+   the slot and the card inside it both fill the column. */
+.dpx-cards > div,
+.dpx-cards > .dpx-card-slot > .dpx-card {
   display: block !important; width: 100% !important;
   min-width: 0 !important; margin: 0 !important; box-sizing: border-box;
 }

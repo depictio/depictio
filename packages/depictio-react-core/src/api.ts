@@ -9117,6 +9117,15 @@ export async function exportDashboardJson(
 /** One row of the preflight per-component liveness verdict. `tier` mirrors
  *  `StaticTierEntry` in StaticBadgeContext (the badge the bundle itself
  *  renders); `reason`/`detail` explain non-live verdicts. */
+/** One tab of a static export's family, as its preflight lists it. */
+export interface StaticExportTab {
+  id: string;
+  title?: string | null;
+  tab_order?: number | null;
+  is_main_tab?: boolean;
+  counts?: Record<string, number>;
+}
+
 export interface StaticExportTierRow {
   component_id: string;
   title?: string | null;
@@ -9204,6 +9213,8 @@ export interface StaticExportPreflight {
   python_runtime?: StaticExportPythonRuntime | null;
   /** What the file would hold, per collection (empty when not bound). */
   collections?: StaticExportCollection[];
+  /** The tabs of the family the bundle carries; tier rows name theirs by id. */
+  tabs?: StaticExportTab[];
 }
 
 /** One collection a bundle carries, as the binding preflight reads it. */

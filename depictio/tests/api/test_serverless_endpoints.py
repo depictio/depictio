@@ -834,7 +834,8 @@ def test_a_viewer_exports_their_view_as_a_public_build(
     assert resp.status_code == 200
     [payload] = task.calls[0]
     assert payload["public"] is True
-    assert payload["python_runtime"] == "off"
+    # The Python runtime is the visitor's to ask for, as an owner's.
+    assert payload["python_runtime"] == "on"
     assert payload["user"] == {
         "id": str(OWNER_OID),
         "email": "",
@@ -915,6 +916,36 @@ def test_a_viewer_export_fails_closed_without_redis(
     _as_user(client, stranger)
     assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 503
     assert task.calls == []
+
+
+def test_a_visitor_previews_the_public_build_they_would_get(
+    client, stranger, offering, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    """A visitor who may export reads what their file would hold: the binding
+    preflight of the public build (the owner's rights, no email), so the
+    collections, the size and the Python runtime's offer are the real ones.
+    It reads data, so it counts against their address too."""
+    seen: list[dict[str, Any]] = []
+
+    def fake_export_static(
+        dashboard_id, check=False, user=None, python_runtime="off", bind=True, public=False
+    ):
+        seen.append({"user": user, "bind": bind, "public": public, "check": check})
+        return _fake_export_result()
+
+    monkeypatch.setattr(routes_mod, "export_static", fake_export_static)
+    monkeypatch.setattr(settings.static_export, "public_export_per_ip_max", 2)
+    _as_user(client, stranger)
+
+    resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight?python_runtime=auto")
+    assert resp.status_code == 200
+    assert resp.json()["bound"] is True
+    [call] = seen
+    assert call["public"] is True and call["bind"] is True and call["check"] is True
+    assert str(call["user"].id) == str(OWNER_OID) and call["user"].email == ""
+    # Preflights and exports from one address share their own window.
+    assert client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight").status_code == 200
+    assert client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight").status_code == 429
 
 
 def test_can_export_tells_a_viewer_they_export_publicly(client, stranger, owner, offering):

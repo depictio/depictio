@@ -3076,6 +3076,18 @@ class NotebookExportConfig(BaseSettings):
     render_max_per_hour: int = Field(
         default=20, description="Report renders one user may start in an hour (429 past it)."
     )
+    render_per_ip_max: int = Field(
+        default=6,
+        ge=1,
+        description=(
+            "Report renders a reader who is not a project editor may start from one address "
+            "per `render_window_s`, on top of the per-user limits: guest accounts are made at "
+            "will. Fail closed (503 when the limiter cannot count)."
+        ),
+    )
+    render_window_s: int = Field(
+        default=3600, ge=1, description="Window of the per-address render limit, in seconds."
+    )
     report_concurrency: int = Field(
         default=1,
         description=(

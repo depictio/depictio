@@ -2928,19 +2928,24 @@ def test_a_public_bundle_names_no_one_and_ships_no_author_code(
     assert not (result.python or {}).get("embedded")
 
 
-def test_a_public_bundle_refuses_python_or_an_email(tmp_path: Path):
-    """The ways a public bundle could carry more than a visitor's view: the
-    Python runtime, or the name of who it was built as. The refusal comes
-    before any read."""
-    user = ExportUser(id=ObjectId(), email="")
-    for kwargs in (
-        {"python_runtime": "auto"},
-        {"python_runtime": "on"},
-    ):
-        with pytest.raises(ProducerAError):
-            export_static(
-                str(DASHBOARD_OID), out_path=tmp_path / "b.html", user=user, public=True, **kwargs
-            )
+def test_a_public_bundle_may_carry_python_but_never_names_anyone(
+    offline_stack: dict[str, list], tmp_path: Path
+):
+    """A visitor may ask for the Python runtime (#1480): the figures it serves
+    carry their code in their job, as for any reader of the live dashboard, and
+    nothing else gains a source. The name of who it was built as, or a check
+    stays refused."""
+    result = export_manifest(
+        str(DASHBOARD_OID),
+        ExportUser(id=ObjectId(), is_admin=True),
+        python_runtime="auto",
+        public=True,
+    )
+    assert result.manifest is not None
+    assert (result.python or {}).get("mode") == "auto"
+    shipped = result.manifest.model_dump_json()
+    assert "code_content" not in shipped
+    assert _EMAIL_RE.search(shipped) is None
     with pytest.raises(ProducerAError):
         export_static(
             str(DASHBOARD_OID),

@@ -270,9 +270,10 @@ def mark_public_code_hidden(tabs: list["FamilyTab"]) -> None:
     figure of a public bundle out.
 
     The figure itself is drawn as in any bundle: replayed from its transpiled
-    prologue (the closed IR, no code) when it has one, else frozen from the
-    server pipeline. Nothing in a public bundle runs Python: it is built with
-    ``python_runtime="off"``.
+    prologue (the closed IR, no code) when it has one, else served by the
+    Python runtime when the visitor asked for it (its job carries the code, as
+    the live dashboard hands it to any visitor), else frozen from the server
+    pipeline. The ready copy is built without the runtime.
     """
     for tab in tabs:
         for comp in tab.components:
@@ -5096,14 +5097,13 @@ def export_static(
             (``report.ineligibility``); the export itself applies the filters
             it is handed.
         public: A bundle for a public project's visitors (#1480): code-mode
-            figures ship without their source (:func:`mark_public_code_hidden`),
-            and it requires ``python_runtime="off"`` and a ``user`` without an
-            email, so nothing names the person it was built as. ``state`` is
+            figures ship without their source (:func:`mark_public_code_hidden`;
+            the Python runtime's jobs carry the code of the figures they serve),
+            and it requires a ``user`` without an email, so nothing names the
+            person it was built as. ``state`` is
             the visitor's view for an export they ask for, ``None`` for the
             cached copy.
     """
-    if public and (python_runtime != "off" or check):
-        raise ProducerAError("a public bundle is built without Python")
     if python_runtime not in ("auto", "on", "off"):
         raise ProducerAError(f"python_runtime must be auto, on or off, got {python_runtime!r}")
     bundle_mode = BundleMode(mode) if not isinstance(mode, BundleMode) else mode

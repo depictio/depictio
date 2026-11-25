@@ -380,9 +380,11 @@ columns and rows, and which tables ship whole). The ready copies are drawn at th
 state, and the route that serves them does no work (no build, no enqueue). A signed-in visitor
 (a guest account too) may also export the view they have filtered: the same public build at
 their state, limited per user and per address, never of a pinned version. A public build
-names no one (`exported_by` is null) and embeds no Python runtime. Code-mode figures keep the
-transpiled prologue, a closed list of JSON operations the runtime interprets (never runnable
-code), and lose their source, so they still follow filters offline. Copies are rebuilt after a save
+names no one (`exported_by` is null). Code-mode figures keep the transpiled prologue, a closed
+list of JSON operations the runtime interprets (never runnable code), and lose their source, so
+they still follow filters offline. The ready copies embed no Python runtime; a visitor's own
+export may (the option is checked when some tile needs it): the figures it serves then carry
+their code in their job, the same code any visitor of the live dashboard already reads. Copies are rebuilt after a save
 or an ingestion, keyed on content rather than time, and deleted when the project goes private,
 the option goes off or the dashboard is deleted. The download is rate-limited per address and
 refuses (503) when the limiter cannot count, rather than letting requests through.

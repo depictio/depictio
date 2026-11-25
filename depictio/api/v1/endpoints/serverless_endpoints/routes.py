@@ -62,6 +62,7 @@ from depictio.serverless.producer_a import (
     BYTES_PER_MB,
     BundleSize,
     BundleTooLargeError,
+    ExportUser,
     ProducerAError,
     export_denial,
     export_static,
@@ -302,32 +303,61 @@ class _PreflightBusy(Exception):
     """Every data-reading preflight slot of this process is taken."""
 
 
-def _run_preflight(dashboard_id: str, user: Any, python_runtime: str) -> tuple[Any, bool]:
+def _run_preflight(
+    dashboard_id: str, user: Any, python_runtime: str, request: Any = None
+) -> tuple[Any, bool]:
     """``(ExportResult, bound)``: the binding preflight for whoever may export,
     the data-free plan for everyone else.
 
     The binding preflight reads data (see :func:`preflight_export_static`), and
-    its only reader is the export modal, which only a project owner can open.
-    A viewer (anonymous in public mode) gets the instant plan instead: the same
-    rows, figures still ``provisional``, no size and no data read.
+    its only reader is the export modal, opened by whoever may export: a
+    project owner, or a visitor of a project that offers its copies (#1480),
+    who reads the preflight of the public build they would get (the owner's
+    rights, no email), counted against their address like their exports.
+    Anyone else (anonymous in public mode) gets the instant plan instead: the
+    same rows, figures still ``provisional``, no size and no data read.
     """
+    extra: dict[str, Any] = {}
     if export_denial(dashboard_id, user, "owner") is not None:
-        result = export_static(
-            dashboard_id, check=True, bind=False, user=user, python_runtime=python_runtime
-        )
-        return result, False
+        visitor_owner = _visitor_export_owner(dashboard_id, user)
+        if visitor_owner is None:
+            result = export_static(
+                dashboard_id, check=True, bind=False, user=user, python_runtime=python_runtime
+            )
+            return result, False
+        if request is not None:
+            _limit_visitor_exports(request)
+        user = ExportUser(id=visitor_owner, email="", is_admin=False, is_anonymous=False)
+        extra["public"] = True
     if not _preflight_slots.acquire(blocking=False):
         raise _PreflightBusy()
     try:
-        result = export_static(dashboard_id, check=True, user=user, python_runtime=python_runtime)
+        result = export_static(
+            dashboard_id, check=True, user=user, python_runtime=python_runtime, **extra
+        )
     finally:
         _preflight_slots.release()
     return result, True
 
 
+def _limit_visitor_exports(request: Any) -> None:
+    """A visitor's exports and their previews, per address (guest accounts are
+    made at will). Fail closed."""
+    enforce_rate_limit(
+        request,
+        "public_static_export",
+        max_calls=settings.static_export.public_export_per_ip_max,
+        window_s=settings.static_export.public_export_window_s,
+        fail_closed=True,
+        detail="Too many exports from this address; try again in a few minutes.",
+        unavailable_detail="Exports are temporarily unavailable; please retry in a moment.",
+    )
+
+
 @serverless_endpoint_router.get("/export-static/{dashboard_id}/preflight")
 async def preflight_export_static(
     dashboard_id: str,
+    request: Request,
     python_runtime: Literal["auto", "on", "off"] = DEFAULT_PYTHON_RUNTIME,
     current_user=Depends(get_user_or_anonymous),
 ) -> dict[str, Any]:
@@ -378,7 +408,7 @@ async def preflight_export_static(
     """
     try:
         result, bound = await anyio.to_thread.run_sync(
-            functools.partial(_run_preflight, dashboard_id, current_user, python_runtime)
+            functools.partial(_run_preflight, dashboard_id, current_user, python_runtime, request)
         )
     except _PreflightBusy:
         raise HTTPException(
@@ -477,7 +507,7 @@ def can_export_static(
         return {"can_export": True}
     if _visitor_export_owner(dashboard_id, current_user) is not None:
         # A visitor of a project that offers its copies exports their view as
-        # a public build (no Python runtime to offer them).
+        # a public build.
         return {"can_export": True, "public": True}
     return {"can_export": False}
 
@@ -488,8 +518,8 @@ def _visitor_export_owner(dashboard_id: str, user: Any) -> Any:
 
     A visitor of a public project whose copies are offered (the owner's choice,
     else the instance default) may export the view they have: the data are the
-    project's public data, and the build is the public one (no Python, no email,
-    no figure source). An anonymous caller is everyone at once and keeps the
+    project's public data, and the build is the public one (no email, no
+    figure source beyond the Python runtime's, when they ask for it). An anonymous caller is everyone at once and keeps the
     ready copies; a guest account is a caller like any other.
     """
     if user is None or getattr(user, "is_anonymous", False):
@@ -597,15 +627,7 @@ def dispatch_export_static(
     )
     if visitor_owner is not None:
         # Guest accounts are made at will: an address gets its own limit too.
-        enforce_rate_limit(
-            request,
-            "public_static_export",
-            max_calls=settings.static_export.public_export_per_ip_max,
-            window_s=settings.static_export.public_export_window_s,
-            fail_closed=True,
-            detail="Too many exports from this address; try again in a few minutes.",
-            unavailable_detail="Exports are temporarily unavailable; please retry in a moment.",
-        )
+        _limit_visitor_exports(request)
     pending_builds = _pending_builds()
     if pending_builds >= settings.static_export.queue_max_pending:
         logger.warning(
@@ -642,15 +664,14 @@ def dispatch_export_static(
         "python_runtime": python_runtime,
     }
     if visitor_owner is not None:
-        # The public build, as the cached copy is made: the owner's identity
-        # without their email, no Python runtime, no figure source.
+        # The public build: the owner's identity without their email, and no
+        # figure source beyond what the Python runtime, if asked for, serves.
         payload["user"] = {
             "id": str(visitor_owner),
             "email": "",
             "is_admin": False,
             "is_anonymous": False,
         }
-        payload["python_runtime"] = "off"
         payload["public"] = True
     if state is not None:
         payload["state"] = state.model_dump(mode="json")

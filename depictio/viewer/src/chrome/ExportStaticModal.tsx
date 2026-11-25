@@ -36,6 +36,7 @@ import type {
   StaticExportTierRow,
 } from 'depictio-react-core';
 import CollectionInventory from '../components/export/CollectionInventory';
+import TileSummary, { type TileGroup, type TileStatus } from '../components/export/TileSummary';
 
 /** 'live' is deliberately absent from the shared maps — the in-bundle badge
  *  only renders non-live tiers. The preflight table shows every component, so
@@ -47,6 +48,16 @@ const TIER_COLOR: Record<string, string> = { live: 'green', ...STATIC_TIER_BADGE
  *  One word, because it shares the narrow Tier column with 'Live'/'Frozen';
  *  the note spells out that the verdict comes with the build. */
 const UNDECIDED_LABEL = 'Undecided';
+
+/** The tile list's statuses: the shared tier vocabulary, plus undecided. */
+const TILE_STATUSES: Record<string, TileStatus> = {
+  live: { label: TIER_LABEL.live, color: TIER_COLOR.live },
+  partial: { label: TIER_LABEL.partial ?? 'Partial', color: TIER_COLOR.partial ?? 'yellow' },
+  frozen: { label: TIER_LABEL.frozen ?? 'Frozen', color: TIER_COLOR.frozen ?? 'blue' },
+  omitted: { label: TIER_LABEL.omitted ?? 'Omitted', color: TIER_COLOR.omitted ?? 'gray' },
+  undecided: { label: 'Undecided', color: 'gray' },
+};
+const TILE_ORDER = ['live', 'partial', 'frozen', 'omitted', 'undecided'];
 const UNDECIDED_COLOR = 'gray';
 const UNDECIDED_NOTE =
   'Depictio tries to redraw this chart in your browser while it builds the bundle. ' +
@@ -226,7 +237,11 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
     });
     preflightStaticExport(dashboardId)
       .then((pf) => {
-        if (!cancelledRef.current) setPreflight(pf);
+        if (cancelledRef.current) return;
+        setPreflight(pf);
+        // On when some tile needs it: the reader sees what it adds and can
+        // turn it off (#1480).
+        setPythonChoice((pf.python_runtime?.candidates.length ?? 0) > 0);
       })
       .catch((err: unknown) => {
         if (!cancelledRef.current) {
@@ -341,7 +356,31 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
       (isProvisional(b) ? -1 : (TIER_ORDER[b.tier] ?? 4)),
   );
   const pythonInfo = preflight?.python_runtime;
-  const pythonOffered = !visitor && Boolean(pythonInfo && pythonInfo.candidates.length > 0);
+  const pythonOffered = Boolean(pythonInfo && pythonInfo.candidates.length > 0);
+  // The tiles by tab, those that lose something first within each (the
+  // preflight's order, `tableRows`).
+  const tabTitles = new Map((preflight?.tabs ?? []).map((t) => [t.id, t.title || 'Tab']));
+  const tileGroups: TileGroup[] = [];
+  for (const row of tableRows) {
+    const groupId = row.tab_id ?? '';
+    let group = tileGroups.find((g) => g.id === groupId);
+    if (!group) {
+      group = { id: groupId, title: tabTitles.get(groupId) ?? 'Tiles', items: [] };
+      tileGroups.push(group);
+    }
+    const undecided = isProvisional(row);
+    group.items.push({
+      id: row.component_id,
+      title: row.title || row.component_id,
+      kind: row.component_type,
+      status: undecided ? 'undecided' : row.tier,
+      // Never the producer's `detail` nor the raw `reason` token: what the
+      // reader will lose, in the words the bundle's own badge uses.
+      note: undecided ? UNDECIDED_NOTE : staticTierExplanation(row.tier, row.reason),
+    });
+  }
+  const tabOrder = new Map((preflight?.tabs ?? []).map((t, i) => [t.id, t.tab_order ?? i]));
+  tileGroups.sort((a, b) => (tabOrder.get(a.id) ?? 0) - (tabOrder.get(b.id) ?? 0));
   const collections = preflight?.collections ?? [];
   const interactive = decidedCounts.live + decidedCounts.partial;
   const fixed = decidedCounts.frozen + decidedCounts.omitted;
@@ -489,56 +528,12 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
                 </Accordion.Control>
                 <Accordion.Panel>
                   <ScrollArea.Autosize mah="45vh" type="auto">
-                  <Table.ScrollContainer minWidth={480}>
-                    <Table verticalSpacing={6} fz="xs" striped highlightOnHover stickyHeader>
-                      <Table.Thead>
-                        <Table.Tr>
-                          <Table.Th>Component</Table.Th>
-                          <Table.Th>Type</Table.Th>
-                          {/* Fixed: auto layout hands the Note column everything and
-                              ellipsises the tier badge down to "Und…". */}
-                          <Table.Th w={104}>Tier</Table.Th>
-                          <Table.Th>Note</Table.Th>
-                        </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>
-                        {tableRows.map((row) => {
-                          const undecided = isProvisional(row);
-                          return (
-                            <Table.Tr key={row.component_id}>
-                              <Table.Td>{row.title || row.component_id}</Table.Td>
-                              <Table.Td style={{ whiteSpace: 'nowrap' }}>
-                                {row.component_type || '—'}
-                              </Table.Td>
-                              <Table.Td style={{ whiteSpace: 'nowrap' }}>
-                                <Badge
-                                  size="xs"
-                                  variant={undecided ? 'outline' : 'light'}
-                                  color={
-                                    undecided ? UNDECIDED_COLOR : (TIER_COLOR[row.tier] ?? 'gray')
-                                  }
-                                  style={{ textTransform: 'none' }}
-                                  data-static-tier={undecided ? 'provisional' : row.tier}
-                                >
-                                  {undecided ? UNDECIDED_LABEL : (TIER_LABEL[row.tier] ?? row.tier)}
-                                </Badge>
-                              </Table.Td>
-                              <Table.Td>
-                                {/* Never the producer's `detail` and never the raw
-                                    `reason` token: the note says what the reader will
-                                    lose, in the words the bundle's own badge uses. */}
-                                <Text size="xs" c="dimmed">
-                                  {undecided
-                                    ? UNDECIDED_NOTE
-                                    : (staticTierExplanation(row.tier, row.reason) ?? '')}
-                                </Text>
-                              </Table.Td>
-                            </Table.Tr>
-                          );
-                        })}
-                      </Table.Tbody>
-                    </Table>
-                  </Table.ScrollContainer>
+                    <TileSummary
+                      groups={tileGroups}
+                      statuses={TILE_STATUSES}
+                      order={TILE_ORDER}
+                      testId="export-static-tiles"
+                    />
                   </ScrollArea.Autosize>
                 </Accordion.Panel>
               </Accordion.Item>

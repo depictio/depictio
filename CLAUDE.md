@@ -366,9 +366,12 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   extraction via the viewer's `/embed/{dashboard}/{component}` route (`services/embed/`)
 - The rendered HTML report is that same `.qmd` run by `quarto render` on a worker, behind
   `DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED` (on, once the export is). The server render never runs an author's Python:
-  code-mode figures come from the API's sandbox (`ExportPlan.author_code=False`), and a dashboard
-  carrying them renders for project owners and editors only (project role, not ownership of a
-  duplicated document); anonymous visitors cannot render
+  code-mode figures come from the API's sandbox (`ExportPlan.author_code=False`). A dashboard
+  carrying them renders for project editors, and for any signed-in reader when its code is the
+  project's own: every owner of each code tab's document is a project editor
+  (`_code_written_by_project`). A viewer's duplicated copy stays theirs to download as `.qmd` only.
+  Readers who are not editors are also limited per address (`render_per_ip_max`, fail closed);
+  anonymous visitors cannot render
 - **Nothing dynamic reaches the `.qmd` raw**: Quarto runs inline `` `{python}` ``, chunk fences and
   `{{< shortcodes >}}` (in prose, raw HTML/typst, code-cell strings and cell *output*). Every site
   writes through `depictio/notebook/qmd_safe.py` (`esc`, `defuse`, `comment`, `typst_str`,
@@ -410,7 +413,8 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   `combined-runtime.mjs` its JS twin (byte parity: `test_runtime_compose_parity.py`). The
   generator wraps each tile in `data-depictio-tile="<tab>:<index>"` with its own output as
   `.depictio-fallback`; `depictio/serverless/report.py` builds the block (owner-only, like a static
-  export); `POST /serverless/report-manifest/{id}` is a Celery job
+  export; a visitor of an offering project gets the public build, `runtime.public`);
+  `POST /serverless/report-manifest/{id}` is a Celery job
   (202, then `GET .../job/{job_id}`)
 - Which tile mounts: `static-core/src/reportMount.ts` (live always, frozen only at the exported state)
 - Exported state: `/export-static` takes the `AnalysisState` shown at click time; every freeze is
@@ -435,12 +439,15 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   (`_id` = main tab, no index), `serverless-public/<main>/<key>.html`, current + previous kept. The
   key hashes the family snapshot (not the version id: an autosave folds into it), each collection's
   newest aggregation, the MultiQC report set and the runtime build
-- A public build runs as the owner with `email=""`, `python_runtime="off"` and `public=True`:
-  `export_static` refuses Python, `check` or an email. Code-mode figures keep their transpiled
-  prologue (a closed JSON op list, never code) and lose `code_content`. A signed-in viewer of an
-  offering project (a guest too, never an anonymous caller) may `POST /export-static` their view:
-  the same public build at their state (pins: 400), per-IP limit on top of the per-user one,
-  the job row theirs; `can-export` answers `public: true`.
+- A public build runs as the owner with `email=""` and `public=True` (`export_static` refuses an
+  email). Code-mode figures keep their transpiled prologue (a closed JSON op list, never code) and
+  lose `code_content`. A signed-in viewer of an offering project (a guest too, never an anonymous
+  caller) may `POST /export-static` their view: the same public build at their state (pins: 400),
+  per-IP limit on top of the per-user one, the job row theirs; `can-export` answers `public: true`.
+  Their preflight is the public build's binding one, counted in the same per-IP window. They may
+  ask for the Python runtime (the modal checks it when some tile needs it): the figures it serves
+  carry their code in their job, code any visitor already reads from `/dashboards/get`. The ready
+  copies are built with `python_runtime="off"`.
   Rebuilds are queued, coalesced (`public_rebuild_delay_s`), from `capture_dashboard_version`,
   `invalidate_data_collection_cache` and MultiQC report writes; the previous file is served with
   `rebuilding` meanwhile. A new content or data path that skips those funnels serves a stale copy

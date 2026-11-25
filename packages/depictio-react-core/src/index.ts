@@ -1291,6 +1291,7 @@ export type {
   PublicReportStatus,
   PublicCopyFile,
   StaticExportAccess,
+  StaticExportTab,
   StaticExportPythonRuntime,
   PythonRuntimeMode,
   StaticExportResult,
