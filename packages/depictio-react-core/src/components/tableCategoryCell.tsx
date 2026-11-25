@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { createContext, useContext } from 'react';
 import type { ICellRendererParams } from 'ag-grid-community';
 
 import { hasPinnedColors, pinnedCategoryColor } from '../categoryColors';
@@ -23,6 +23,12 @@ export function pinnedColourColumns(
   return out;
 }
 
+/** How a coloured value is drawn: a dot before it (the dashboard), or a chip
+ *  tinted with its colour (a report, where a table is read rather than
+ *  worked in). */
+export type CategoryCellStyle = 'dot' | 'chip';
+export const CategoryCellStyleContext = createContext<CategoryCellStyle>('dot');
+
 /** Cell renderer reading the latest colour source through a ref, so a colour
  *  change repaints the cell without replacing the column definitions (which
  *  would reset the reader's sort). */
@@ -31,8 +37,34 @@ export function categoryDotCellRenderer(
   field: string,
 ) {
   const CategoryDotCell: React.FC<ICellRendererParams> = ({ value }) => {
+    const style = useContext(CategoryCellStyleContext);
     if (value === null || value === undefined || value === '') return null;
     const colour = pinnedCategoryColor(sourceRef.current, field, value);
+    if (colour && style === 'chip') {
+      return (
+        <span
+          data-testid="table-category-chip"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            maxWidth: '100%',
+            padding: '0 8px',
+            borderRadius: 999,
+            lineHeight: 1.7,
+            fontWeight: 500,
+            background: `color-mix(in srgb, ${colour} 14%, transparent)`,
+            color: `color-mix(in srgb, ${colour} 72%, var(--mantine-color-text))`,
+          }}
+        >
+          <span
+            aria-hidden
+            style={{ flex: '0 0 auto', width: 7, height: 7, borderRadius: '50%', background: colour }}
+          />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{String(value)}</span>
+        </span>
+      );
+    }
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
         {colour && (

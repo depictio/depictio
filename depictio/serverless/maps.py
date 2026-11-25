@@ -38,7 +38,7 @@ BASEMAP_HOSTS: tuple[str, ...] = (
 #: The tier detail every frozen map carries (producer A's planner, producer B's
 #: preflight and the manifest all say the same thing).
 MAP_FROZEN_DETAIL = (
-    "frozen at the default filter state with the dashboard's own basemap, which "
+    "frozen at the exported filter state with the dashboard's own basemap, which "
     "loads from its tile host when the reader is online; offline, the same "
     "markers draw on a blank background"
 )

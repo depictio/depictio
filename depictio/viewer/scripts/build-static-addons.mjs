@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Build the static runtime's conditional add-ons next to the template.
+ * Build the static runtime's conditional add-ons next to the runtime.
  *
  *   dist-static/addons/3dmol.js     3Dmol.js's own minified UMD build (BSD-3)
  *   dist-static/addons/jbrowse.js   JBrowse 2 + MUI + mobx (Apache-2.0 / MIT), the
@@ -8,10 +8,10 @@
  *                                   in the factory the runtime calls with its React
  *   dist-static/addons/addons.json  {name: {version, file, bytes, sha256}}
  *
- * The base runtime (static.html) never contains these; a producer appends an
+ * The base runtime (combined-runtime.js) never contains these; a producer appends an
  * add-on to one bundle's HTML only when a component needs it
  * (depictio/serverless/addons.py, and scripts/addons.mjs for the demos and the
- * offline specs). Run after both `vite build`s — the runtime's empties
+ * offline specs). Run after both `vite build`s — the runtime's writes
  * dist-static/, the add-on's writes dist-static/jbrowse-addon/.
  */
 import { createHash } from 'node:crypto';

@@ -231,6 +231,24 @@ def _record_card(tile: Tile) -> Any:
     return html_result(tile, inner, sub="One record, as the card shows it")
 
 
+#: Records a no-pick card lists, in the HTML report and the PDF alike.
+RECORD_LIST_ROWS = 25
+#: Columns of that list: the record's name, then the first fields of its blocks.
+RECORD_LIST_COLS = 7
+
+
+def _record_list_columns(cfg: dict[str, Any], fields: list[str], available: list[str]) -> list[str]:
+    """The few fields a list of records carries: the card's title column, then the
+    fields of its blocks in the order it draws them. The id column stays out when a
+    title names the record (it is the long lineage or path, a row of its own on the
+    card), and so does anything past ``RECORD_LIST_COLS``."""
+    id_col, title_col = str(cfg.get("id_col") or "id"), cfg.get("title_col")
+    lead = [title_col or id_col]
+    rest = [c for c in fields if c != id_col or not title_col]
+    keep = list(dict.fromkeys([*lead, *rest]))
+    return [c for c in keep if c in available][:RECORD_LIST_COLS]
+
+
 def _record_empty(
     tile: Tile,
     required: list[Any],
@@ -239,24 +257,28 @@ def _record_empty(
     note: str | None = None,
 ) -> Any:
     """No record picked: the live card waits for a pick. A report has no picking, so
-    it shows the records the card chooses from instead, and says so."""
+    it says so in one line and lists the records the card chooses from, a few key
+    fields each (a table in the HTML, a typst table in the PDF)."""
+    from ..components import MARKDOWN_MIME, page_orientation, static_figures
+    from ..typst import table as typst_table
+
     cfg = tile.config
-    source = cfg.get("linked_component") or "a selecting tile"
     id_col = str(cfg.get("id_col") or "id")
-    limit = 25
     df = tile.rows(required, roles={"id": id_col}, limit_rows=200)
-    shown = [c for c in dict.fromkeys([cfg.get("title_col") or id_col, *fields]) if c in df.columns]
-    lead = (
-        f"{esc(note) + ' ' if note else ''}No record was picked when this was exported; in the "
-        f"live dashboard the card shows the row picked in <b>{esc(source)}</b>."
-    )
-    if df.height == 0 or not shown:
+    shown = _record_list_columns(cfg, fields, df.columns)
+    total = df.height
+    count = f"{min(total, RECORD_LIST_ROWS):,} of {total:,}" if total > RECORD_LIST_ROWS else ""
+    lead = f"{note + ' ' if note else ''}No record was picked when this was exported."
+    if total == 0 or not shown:
+        lead += " No row is in view under the exported filters."
         inner = (
             f'<div style="border:1px dashed {HAIR};border-radius:12px;padding:14px 16px;'
-            f'color:{DIMMED};font-size:13px">{lead} No row is in view under the exported '
-            "filters.</div>"
+            f'color:{DIMMED};font-size:13px">{esc(lead)}</div>'
         )
-        return html_result(tile, inner, sub="Waiting for a pick")
+        result = html_result(tile, inner, sub="Waiting for a pick")
+        if static_figures():
+            result.bundle[MARKDOWN_MIME] = _record_empty_markdown(tile, lead)
+        return result
     head = "".join(
         f'<th style="text-align:left;font-size:11px;font-weight:600;color:{FAINT};'
         f'padding:4px 8px;border-bottom:1px solid {HAIR};white-space:nowrap">'
@@ -271,17 +293,37 @@ def _record_empty(
             for c in shown
         )
         + "</tr>"
-        for row in df.head(limit).iter_rows(named=True)
+        for row in df.head(RECORD_LIST_ROWS).iter_rows(named=True)
     )
-    more = f"; the first {limit} of {df.height}" if df.height > limit else ""
+    listing = f"The records in view{f', the first {count}' if count else ''}:"
     inner = (
-        f'<div style="font-size:12.5px;color:{DIMMED};margin:0 0 8px">{lead} The records it '
-        f"picks from{more}:</div>"
+        f'<div style="font-size:12.5px;color:{DIMMED};margin:0 0 8px">{esc(lead)} '
+        f"{esc(listing)}</div>"
         '<div style="overflow-x:auto;max-height:420px"><table class="dpx-plain" '
         f'style="border-collapse:collapse;width:100%"><thead><tr>{head}</tr></thead>'
         f"<tbody>{body}</tbody></table></div>"
     )
-    return html_result(tile, inner, sub="Waiting for a pick: the records in view")
+    result = html_result(tile, inner, sub="Waiting for a pick")
+    if static_figures():
+        view = df.select(shown).rename({c: str(labels.get(c) or c) for c in shown})
+        result.bundle[MARKDOWN_MIME] = _record_empty_markdown(
+            tile,
+            lead,
+            listing,
+            typst_table(view, rows=RECORD_LIST_ROWS, orientation=page_orientation()),
+        )
+    return result
+
+
+def _record_empty_markdown(tile: Tile, lead: str, listing: str = "", table: str = "") -> str:
+    """The PDF's version: two plain sentences, then the table as typst. The tile's
+    title is the figure caption the report draws, so it is not repeated."""
+    link = tile.live_url
+    live = f"[live dashboard](<{link}>)" if link else "live dashboard"
+    sentence = f"{lead} The card is interactive in the {live}."
+    # Left-aligned: a figure centres its body, and this is a sentence.
+    text = f"{sentence}{' ' + listing if listing else ''}"
+    return f"\n```{{=typst}}\n#align(left)[\n```\n\n{text}\n\n```{{=typst}}\n]\n```\n{table}"
 
 
 register(

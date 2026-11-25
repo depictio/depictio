@@ -579,6 +579,10 @@ SCHEMA_2_VALUES: dict[str, Any] = {
             "values": {"S1": "responder"},
         }
     ],
+    "report_layer": {
+        "revision": 1,
+        "tiles": [{"tab_id": "tab1", "component_id": "f1", "caption": "The one figure."}],
+    },
 }
 
 

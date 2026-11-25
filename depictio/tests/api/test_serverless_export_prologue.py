@@ -175,7 +175,7 @@ def offline_export(monkeypatch: pytest.MonkeyPatch) -> BundleManifest:
     monkeypatch.setattr(
         dtu_mod,
         "schema_deltatable_lite",
-        lambda workflow_id, data_collection_id, init_data: dict(_frame().schema),
+        lambda workflow_id, data_collection_id, init_data, **kw: dict(_frame().schema),
     )
     monkeypatch.setattr(
         dtu_mod,
@@ -351,7 +351,7 @@ def test_analyzable_but_unbindable_code_figure_freezes_with_binding_miss(
     assert entry.reason is TierReason.BINDING_MISS
     # The detail names which bail-out fired, not a generic "no binding".
     assert entry.detail and entry.detail.startswith("code analyzed, but ")
-    assert "frozen at the default filter state" in entry.detail
+    assert "frozen at the exported filter state" in entry.detail
     assert "fig-miss" not in offline_export.bindings
     # No half-state: a figure that did not bind ships no IR either, only the
     # frozen payload the pipeline already produced.
@@ -373,7 +373,7 @@ def test_no_data_bundled_when_no_code_figure_binds(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(
         dtu_mod,
         "schema_deltatable_lite",
-        lambda workflow_id, data_collection_id, init_data: dict(_frame().schema),
+        lambda workflow_id, data_collection_id, init_data, **kw: dict(_frame().schema),
     )
     monkeypatch.setattr(
         dtu_mod,

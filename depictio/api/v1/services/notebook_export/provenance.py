@@ -147,6 +147,7 @@ def header_markdown(
     project: dict[str, Any] | None,
     exported_by: str | None,
     exported_at: datetime,
+    date_only: bool = False,
     instance: str | None,
     api_url: str,
     dashboard_id: str,
@@ -157,6 +158,7 @@ def header_markdown(
     details_rows: list[tuple[str, str]] | None = None,
     details_icon: str = "",
     run_icon: str = "",
+    how_to_run: bool = True,
 ) -> str:
     parts = []
     # No ``# title`` / subtitle here: the front matter carries both and Quarto
@@ -187,7 +189,11 @@ def header_markdown(
 
     # A table scans faster than a run-on sentence.
     meta_rows = [("Live dashboard", f"[{dashboard_url}]({dashboard_url})")]
-    exported_line = f"{exported_at.strftime('%Y-%m-%d %H:%M UTC')}"
+    exported_line = (
+        # The day alone for a preview (a preview cache key must not move with
+        # the clock); to the minute for a report a reader downloads.
+        f"{exported_at:%Y-%m-%d} UTC" if date_only else f"{exported_at:%Y-%m-%d %H:%M} UTC"
+    )
     if exported_by:
         exported_line += f" by {_md_escape(exported_by)}"
     if instance:
@@ -236,11 +242,12 @@ def header_markdown(
         parts.append(_details_block("Export details", details_icon, details_table(details_rows)))
     # Folded like the rest of the header: a reader opens a report for its
     # results, and re-running it is a step for the few who will.
-    parts.append(
-        _details_block(
-            "How to run", run_icon, HOW_TO_RUN.format(api_url=api_url, stem=stem).strip()
+    if how_to_run:
+        parts.append(
+            _details_block(
+                "How to run", run_icon, HOW_TO_RUN.format(api_url=api_url, stem=stem).strip()
+            )
         )
-    )
     if warnings:
         parts.append("**Notes from the export**\n\n" + "\n".join(f"- {_esc(w)}" for w in warnings))
     return "\n\n".join(parts)

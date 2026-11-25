@@ -1,15 +1,15 @@
 """Conditional runtime add-ons for serverless bundles (RFC §13.4).
 
-The base runtime (``viewer/dist-static/static.html``) stays inside its byte
+The base runtime (``viewer/dist-static/combined-runtime.js``) stays inside its byte
 budget by leaving heavy, rarely needed libraries out. An add-on is a script the
 producer appends to one bundle's HTML only when one of its components needs it,
 and records in ``BundleManifest.addons`` so the tier table and the runtime can
 say what was embedded and why.
 
 * ``3dmol`` — 3Dmol.js (the package's own minified UMD build, BSD-3), for
-  ``molecule_3d``. Built next to the template by
+  ``molecule_3d``. Built next to the runtime by
   ``viewer/scripts/build-static-addons.mjs`` into ``dist-static/addons/``, which
-  ships in the wheel with the template. The runtime's ``3dmol`` module
+  ships in the wheel with the runtime. The runtime's ``3dmol`` module
   (``static-runtime/threeDmolAddon.ts``) reads the global the script defines and
   falls back to the stub's message when it is absent.
 
@@ -28,10 +28,11 @@ say what was embedded and why.
   export (``pyodide/assets.py``). The runtime boots it lazily, on the first
   tile that asks (``static-runtime/pyodide/runtime.ts``).
 
-The add-ons are inserted before ``</body>``: 3Dmol's classic ``<script>`` runs
-while the document parses, before the deferred module script of the runtime,
-so its global is in place when the runtime first imports ``3dmol``; the
-Pyodide blocks are inert data until a tile boots the runtime.
+A bundle places the add-ons before the runtime's own ``<script>``
+(``serverless.bundle_html``), and a legacy template gets them before its
+``</body>``: 3Dmol's classic ``<script>`` runs while the document parses, before
+the runtime, so its global is in place when the runtime first imports ``3dmol``;
+the Pyodide blocks are inert data until a tile boots the runtime.
 """
 
 from __future__ import annotations
@@ -52,11 +53,11 @@ REGISTRY_NAME = "addons.json"
 
 
 class AddonError(RuntimeError):
-    """An add-on a bundle needs is not available next to the template."""
+    """An add-on a bundle needs is not available next to the runtime."""
 
 
 def addons_dir() -> Path:
-    """``dist-static/addons`` beside the template in use (or the env override)."""
+    """``dist-static/addons`` beside the runtime in use (or the env override)."""
     override = os.environ.get(ADDONS_DIR_ENV)
     if override:
         return Path(override)

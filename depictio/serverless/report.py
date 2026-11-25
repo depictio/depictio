@@ -5,8 +5,9 @@ notebook export §3.9). A serverless bundle and a rendered report embed the same
 thing — one ``BundleManifest`` built by producer A, one static runtime — and
 differ only in the host page:
 
-* the bundle (``producer_a.export_static``) injects the manifest into
-  ``static.html``, which mounts the viewer App over the whole page;
+* the bundle (``producer_a.export_static``) is a page composed from that same
+  runtime and the manifest (``serverless.bundle_html``), which mounts the
+  viewer App over the whole page;
 * the report (this module, then ``combined.py``) carries the manifest, once,
   beside the static runtime (``dist-static/combined-runtime.{js,css}``,
   ``vite.combined.config.ts``), which mounts each tile into the placeholder the
@@ -20,12 +21,16 @@ as live as the bundle of the same dashboard would be and is refused on the same
 grounds: building one needs *owner* on the dashboard's project (RFC §8, a
 manifest carries the data), and the same size ceilings apply. The one addition
 is ``initial_filters``: the exported analysis state's filters, so the runtime
-opens on the view the document narrates.
+opens on the view the document narrates. Its selection groups, colour-by and
+split ride in ``initial_grouping`` (producer A fills it from the same state):
+the runtime recolours and splits the figures it draws, and derives the filters
+of the groups that are filtering from the groups themselves.
 
 A state the runtime cannot reproduce in the page is not embedded at all
-(:func:`ineligibility`): pinned data or definitions (the manifest holds current
-data), and selection groups / colour-by / split panels (the report runtime has
-no group store). Those reports keep every tile's own output, as before.
+(:func:`ineligibility`). Nothing is refused today: a pinned state ships the
+pinned version's data and definitions (named in ``pinned_version``), and
+selection groups, colour-by and split ride in ``initial_grouping``. The hook
+stays, so a future state field the runtime cannot draw is refused in one place.
 """
 
 from __future__ import annotations
@@ -49,7 +54,7 @@ class ReportRuntimeRefused(RuntimeError):
 
 
 def runtime_dir() -> Path:
-    """``dist-static/`` beside the static template in use (or the env override)."""
+    """``dist-static/`` of the runtime in use (or the env override)."""
     override = os.environ.get(RUNTIME_DIR_ENV)
     if override:
         return Path(override)
@@ -59,23 +64,24 @@ def runtime_dir() -> Path:
 
 
 def ineligibility(state: AnalysisState) -> str | None:
-    """Why the runtime cannot open on ``state``, or ``None`` when it can."""
-    if state.pins.active:
-        return (
-            "the export reads pinned data or definitions; the in-page runtime carries the "
-            "current data only"
-        )
-    if state.color_by.kind != "none" or state.split_panels:
-        return "the view is coloured or split by selection groups, which the in-page runtime does not draw"
-    if any(g.filter_active for g in state.groups) or any(
-        f.source == "group_filter" for f in state.filters
-    ):
-        return "a selection group filters the view, which the in-page runtime does not apply"
+    """Why the runtime cannot open on ``state``, or ``None`` when it can.
+
+    Every state the viewer builds is reproduced today: pinned data and
+    definitions ship in the manifest (``pinned_version``), and selection
+    groups, colour-by and split in ``initial_grouping``.
+    """
+    del state  # nothing left to refuse; see the module docstring
     return None
 
 
 def initial_filters(state: AnalysisState) -> list[dict[str, Any]]:
-    """The state's filters, in the wire shape the viewer's filter store holds."""
+    """The state's filters, in the wire shape the viewer's filter store holds.
+
+    Without the projections of its selection groups (``source == "group_filter"``):
+    the runtime opens with the groups (``initial_grouping``) and derives those
+    from them, as the viewer does, so listing them here too would apply each
+    twice and leave one the reader cannot clear.
+    """
     return [f for f in state.filters_as_payload() if f.get("source") != "group_filter"]
 
 
@@ -102,7 +108,7 @@ def build_report_manifest(
     from depictio.serverless import producer_a
 
     result = producer_a.export_manifest(
-        str(dashboard_id), producer_a.resolve_user(user), python_runtime=python_runtime
+        str(dashboard_id), producer_a.resolve_user(user), python_runtime=python_runtime, state=state
     )
     assert result.manifest is not None
     return result.manifest.model_copy(update={"initial_filters": initial_filters(state)})

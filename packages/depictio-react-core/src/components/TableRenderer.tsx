@@ -1297,7 +1297,15 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               rowHeight={metadata.compact ? Math.round(28 * uiScale) : undefined}
               headerHeight={metadata.compact ? Math.round(32 * uiScale) : undefined}
               onGridReady={onGridReady}
-              onFirstDataRendered={(e) => fitColumns(e.api)}
+              onFirstDataRendered={(e) => {
+                fitColumns(e.api);
+                // Again once the React cells have painted: the first pass
+                // measures a coloured value before its dot or chip is drawn,
+                // and cut it ("Riverwater...").
+                requestAnimationFrame(() => {
+                  if (!e.api.isDestroyed()) fitColumns(e.api);
+                });
+              }}
               onGridSizeChanged={(e) => fitColumns(e.api)}
               getRowClass={getRowClass}
               getRowStyle={getRowStyle}

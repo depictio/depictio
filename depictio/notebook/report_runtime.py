@@ -1,8 +1,8 @@
 """The report host of Depictio's static runtime: markup only, no server.
 
 A rendered report and a serverless bundle are two hosts of one runtime. The
-bundle (``static.html``) mounts the viewer App over a whole page; a report
-mounts the same renderers into the tiles its Quarto document laid out, from
+bundle (a page composed from that runtime, ``serverless/bundle_html.py``) mounts
+the viewer App over a whole page; a report mounts the same renderers into the tiles its Quarto document laid out, from
 the same manifest contract (``BundleManifest``, built by producer A). This
 module is the report's half of that contract, as text:
 
@@ -30,6 +30,8 @@ import re
 from html import escape
 from typing import Any
 
+from depictio.serverless.inject import script_text  # noqa: F401  (re-exported)
+
 TILE_ATTR = "data-depictio-tile"
 FILTERS_ATTR = "data-depictio-filters"
 FALLBACK_CLASS = "depictio-fallback"
@@ -45,21 +47,29 @@ COMBINED_KEY = "combined"
 # Set by the worker that renders a report: it embeds the runtime itself once
 # the render is done, so the document's last cell prints nothing.
 RUNTIME_DEFERRED_ENV = "DEPICTIO_REPORT_RUNTIME_DEFERRED"
+# A tile's own ref when it draws another component (a highlight), read by
+# the report editor's preview instead of the mounted ref.
+AS_REF_ATTR = "data-depictio-ref"
 
 
 def tile_ref(tab_id: str, index: str) -> str:
     return f"{tab_id}:{index}"
 
 
-def tile_open(refs: list[str]) -> str:
+def tile_open(refs: list[str], *, as_ref: str | None = None) -> str:
     """The fenced-div lines opening a tile placeholder and its fallback.
 
     Quarto (pandoc) turns ``::: {.cls key="v"}`` into ``<div class="cls"
     key="v">``, so the placeholder is plain markdown and the cells inside it
     stay ordinary cells: their output is the fallback.
+
+    ``as_ref``: the tile's own identity when it draws another component (a
+    highlight shows a figure of another tab): the runtime mounts ``refs``,
+    the report editor knows the tile by ``as_ref``.
     """
     value = escape(" ".join(refs), quote=True)
-    return f'::: {{.{TILE_CLASS} {TILE_ATTR}="{value}"}}\n::: {{.{FALLBACK_CLASS}}}'
+    own = f' {AS_REF_ATTR}="{escape(as_ref, quote=True)}"' if as_ref else ""
+    return f'::: {{.{TILE_CLASS} {TILE_ATTR}="{value}"{own}}}\n::: {{.{FALLBACK_CLASS}}}'
 
 
 def tile_close() -> str:
@@ -89,17 +99,6 @@ def json_script(element_id: str, payload: Any) -> str:
         blob = json.dumps(_json_safe(payload), default=str, separators=(",", ":"))
     blob = blob.replace("</", "<\\/").replace("<!--", "<\\u0021--")
     return f'<script type="application/json" id="{element_id}">{blob}</script>'
-
-
-def script_text(text: str) -> str:
-    """``text`` safe inside a ``<script>`` element (run, or inert ``text/plain``).
-
-    Inside script data, ``</script`` ends the element and ``<!--`` can switch
-    the tokenizer into its escaped states. In a minified bundle both only ever
-    sit in string or regex literals, where ``<\\/`` and ``<\\!`` read the
-    same; in CSS a ``\\/`` reads as ``/``.
-    """
-    return text.replace("</script", "<\\/script").replace("<!--", "<\\!--")
 
 
 def runtime_parts(

@@ -94,8 +94,13 @@
   gap: 2px;
 }
 
+/* Text-free: a tab link the renderer cannot resolve (the report editor's
+   thumbnails have no tab family) is plain text, not an element, and drew its
+   name over the next step's label. Only icons show here. */
 .depictio-step-link {
   display: inline-flex;
+  font-size: 0;
+  line-height: 0;
 }
 
 /* Whatever the link renders as: an anchor, a button, or (a tab link in the

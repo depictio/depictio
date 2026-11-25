@@ -20,15 +20,24 @@ import { Badge, Button, Group, Text } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import {
   AvailableFilterValuesProvider,
+  CategoryCellStyleContext,
   CategoryColorsContext,
   ComponentRenderer,
   FilterPanel,
+  COLOR_BY_NONE,
   FunnelView,
   activeFiltersFor,
   bulkComputeCards,
   enrichFilterWithDcId,
+  groupsRenderPayload,
+  groupsToFilters,
   hasLiveValues,
+  highlightMetadata,
+  isControlsPlacement,
   mergeFiltersBySource,
+  resolveGroupRender,
+  useCategoricalColumns,
+  useColorByColumnRender,
 } from 'depictio-react-core';
 import type {
   CategoryColorSource,
@@ -41,6 +50,7 @@ import {
   compactPanelSections,
   componentFor,
   formatTileRef,
+  parseTileRefs,
   reportCategorySource,
   tabDoc,
   type BundleManifest,
@@ -50,24 +60,66 @@ import {
 } from 'depictio-static-core';
 
 import { familyMetadata } from '../bundle';
+import { initialSelectionGroups } from '../selectionGroupsShim';
 
 /** Same pause as the viewer's (App.tsx `FILTER_DEBOUNCE_MS`). */
 const FILTER_DEBOUNCE_MS = 250;
 
 /** A tile's height in the document. The dashboard sizes tiles by its grid;
  *  a document stacks them full width, so plots get the height of a figure
- *  and cards and controls their own. An advanced viz is taller: at full width
- *  its controls open above the plot (thresholds, labels, search), and at
- *  480 px they left a volcano ~150 px to draw in. */
+ *  and cards and controls their own. An advanced viz is a little taller: its
+ *  controls sit behind the settings icon (see `withReportControls`), so the
+ *  whole box is the plot's. */
 const TILE_HEIGHT: Record<string, number> = {
   figure: 440,
-  advanced_viz: 680,
+  advanced_viz: 560,
   table: 460,
   multiqc: 460,
   map: 460,
   image: 420,
   jbrowse: 420,
 };
+
+const placed = new WeakMap<object, StoredMetadata>();
+
+/** Where the report's settings place an advanced viz's controls: the element
+ *  the export writes for its runtime (`SETTINGS_MARKER_ID` in the generator),
+ *  absent from reports exported before it. */
+function reportVizControls(): unknown {
+  if (typeof document === 'undefined') return undefined;
+  return document.getElementById('depictio-report-settings')?.dataset.vizControls;
+}
+
+/** Where an advanced viz draws its controls in a report: the report's
+ *  settings decide for every visualisation (a reader opens a report to read
+ *  it, and controls the dashboard keeps open took the room of the plot),
+ *  then the dashboard's default for reports exported without settings, then
+ *  behind the settings icon. Two fields carry it: `config.controls_placement`
+ *  (popover, rail or header) and, for the popover, `controls_placement` on the
+ *  component, the dock, set to `popover` so a full-width tile does not dock
+ *  the panel open beside the plot. The same object comes back for the same
+ *  tile, so a render does not hand the renderer new metadata. */
+function withReportControls(m: StoredMetadata, dashboardDefault: unknown): StoredMetadata {
+  if (m.component_type !== 'advanced_viz') return m;
+  let out = placed.get(m);
+  if (!out) {
+    const report = reportVizControls();
+    const placement = isControlsPlacement(report)
+      ? report
+      : isControlsPlacement(dashboardDefault)
+        ? dashboardDefault
+        : 'popover';
+    const config = { ...((m.config as Record<string, unknown> | undefined) ?? {}) };
+    config.controls_placement = placement;
+    out = {
+      ...m,
+      config,
+      ...(placement === 'popover' ? { controls_placement: 'popover' } : {}),
+    } as StoredMetadata;
+    placed.set(m, out);
+  }
+  return out;
+}
 
 export interface ReportTile {
   /** The placeholder the export wrote. */
@@ -201,6 +253,36 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
     [channel],
   );
 
+  // The exported selection groups, colour-by and split. A report has no group
+  // panel: they are the state the document narrates, fixed. The groups that
+  // were filtering project into filters here, composed after the reader's own
+  // (as the viewer's App does), so "Back to the exported state" and the
+  // filter panel never see them.
+  const seeded = useMemo(() => initialSelectionGroups(), [manifest]);
+  const groupFilters = useMemo(() => groupsToFilters(seeded?.groups ?? []), [seeded]);
+  const colorBy = seeded?.colorBy ?? COLOR_BY_NONE;
+  const colorByColumns = useCategoricalColumns(colorBy.kind === 'column' ? metadata : undefined);
+  const colorByColumnRender = useColorByColumnRender(colorBy, colorByColumns);
+  const groupRender = useMemo(
+    () =>
+      resolveGroupRender(
+        colorBy,
+        groupsRenderPayload(seeded?.groups ?? []),
+        colorByColumnRender,
+        seeded?.displayMode ?? 'color',
+        seeded?.showOther ?? true,
+      ),
+    [seeded, colorBy, colorByColumnRender],
+  );
+  const filtersWithGroups = useMemo(
+    () => (groupFilters.length > 0 ? [...filters, ...groupFilters] : filters),
+    [filters, groupFilters],
+  );
+  const deferredWithGroups = useMemo(
+    () => (groupFilters.length > 0 ? [...deferredFilters, ...groupFilters] : deferredFilters),
+    [deferredFilters, groupFilters],
+  );
+
   const onFilterChange = useCallback(
     (update: InteractiveFilter) => {
       setFilters((prev) => mergeFiltersBySource(prev, enrichFilterWithDcId(update, metadata)));
@@ -289,12 +371,12 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
   const [cardSecondary, setCardSecondary] = useState<Record<string, Record<string, unknown>>>({});
   const [cardsLoading, setCardsLoading] = useState(false);
   const cardRound = useRef(0);
-  const filterKey = JSON.stringify(deferredFilters);
+  const filterKey = JSON.stringify(deferredWithGroups);
   useEffect(() => {
     if (cardIds.length === 0) return;
     const round = ++cardRound.current;
     setCardsLoading(true);
-    bulkComputeCards(entryId, deferredFilters, cardIds)
+    bulkComputeCards(entryId, deferredWithGroups, cardIds)
       .then((res) => {
         if (round !== cardRound.current) return;
         setCardValues(res.values ?? {});
@@ -312,9 +394,29 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
   const [funnelEnabled, setFunnelEnabled] = useState(funnelDefault);
   const [funnelViewOpen, setFunnelViewOpen] = useState(false);
 
-  const renderComponent = (ref: TileRef) => {
-    const m = componentFor(manifest, ref) as unknown as StoredMetadata | null;
-    if (!m) return null;
+  /** The highlight a host stands for (`data-depictio-ref`, its own tile on
+   *  another tab), or null when the host is the component itself. */
+  const highlightOf = (host: HTMLElement): StoredMetadata | null => {
+    const refs = parseTileRefs(host.getAttribute('data-depictio-ref'));
+    if (refs.length !== 1) return null;
+    const h = componentFor(manifest, refs[0]) as unknown as StoredMetadata | null;
+    return h && h.component_type === 'highlight' ? h : null;
+  };
+
+  const renderComponent = (ref: TileRef, host?: HTMLElement) => {
+    const source = componentFor(manifest, ref) as unknown as StoredMetadata | null;
+    if (!source) return null;
+    // A highlight draws its source as the dashboard does (highlightTile.ts):
+    // under its own title, in the minimal style, not the source tab's full tile.
+    const highlight = host ? highlightOf(host) : null;
+    // The bundle keys what it froze for a component (figure payload, bound
+    // data, compute) by the source's index, so the copy keeps that index.
+    const own = highlight ? { ...highlightMetadata(highlight, source), index: source.index } : source;
+    const m = withReportControls(
+      own,
+      (tabDoc(manifest, ref.tabId) as { advanced_viz_controls?: unknown } | null)
+        ?.advanced_viz_controls,
+    );
     const type = String(m.component_type ?? '');
     const height = TILE_HEIGHT[type];
     return (
@@ -322,11 +424,14 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
         key={ref.index}
         className="depictio-report-tile-body"
         data-component-type={type}
-        style={height ? { height } : undefined}
+        // A renderer taller than its box (a gallery's grid) scrolls inside
+        // it instead of running over the caption below.
+        style={height ? { height, overflow: 'auto' } : undefined}
       >
         <ComponentRenderer
           metadata={m}
-          filters={type === 'card' ? deferredFilters : filters}
+          filters={type === 'card' ? deferredWithGroups : filtersWithGroups}
+          groupRender={groupRender}
           onFilterChange={onFilterChange}
           dashboardId={ref.tabId}
           cardValue={cardValues[ref.index]}
@@ -351,15 +456,18 @@ const ReportRuntime: React.FC<Props> = ({ manifest, tiles, panels, channel = nul
                   <CategoryColorsContext.Provider
                     value={colorSources.get(tile.refs[0]?.tabId ?? '') ?? null}
                   >
+                    {/* A report's tables show a coloured value as a chip. */}
+                    <CategoryCellStyleContext.Provider value="chip">
                     {/* `dashboard-content`: the Paper chrome styles a tile under
                         it (glass.css), as it does on the dashboard. */}
                     <div data-testid="dashboard-content" className="depictio-report-content">
                       {tile.refs.length > 1 ? (
-                        <div className="depictio-report-row">{tile.refs.map(renderComponent)}</div>
+                        <div className="depictio-report-row">{tile.refs.map((ref) => renderComponent(ref, tile.host))}</div>
                       ) : (
-                        renderComponent(tile.refs[0])
+                        renderComponent(tile.refs[0], tile.host)
                       )}
                     </div>
+                    </CategoryCellStyleContext.Provider>
                   </CategoryColorsContext.Provider>
                 </Mounted>
               </TileBoundary>,

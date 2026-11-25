@@ -24,6 +24,7 @@
  * Zero network, as the bundle: every api.ts call is shimmed.
  */
 import React from 'react';
+import { createPortal } from 'react-dom';
 import ReactDOM from 'react-dom/client';
 import { MantineProvider, Portal, mergeThemeOverrides, createTheme } from '@mantine/core';
 import { DatesProvider } from '@mantine/dates';
@@ -49,6 +50,7 @@ import paper from '../../chrome/variants/glass/glass';
 import { installInlineMultiqcLogos } from '../../chrome/multiqcLogo';
 import { installOfflineGenomeAssets } from '../genomeAssets';
 import { loadBundleFromDocument, setActiveTab } from '../bundle';
+import PinnedVersionBanner from '../PinnedVersionBanner';
 import ReportRuntime, { type ReportPanel, type ReportTile } from './ReportRuntime';
 import { readReportConfig, reportScheme, type Scheme } from './page';
 import type { FilterChannel } from 'depictio-static-core';
@@ -157,6 +159,15 @@ export function bootReport(options: BootReportOptions = {}): BootedReport | null
   const portalRoot = runtimeRoot('depictio-report-portal');
   document.body.append(reactRoot, portalRoot);
 
+  // A pinned export says so above the report's own text (which names the
+  // version too), with the collections it could not pin.
+  let bannerHost: HTMLDivElement | null = null;
+  if (manifest.pinned_version) {
+    bannerHost = runtimeRoot('depictio-report-version');
+    const flow = document.querySelector('main') ?? document.body;
+    flow.prepend(bannerHost);
+  }
+
   const config = readReportConfig();
   const theme = mergeThemeOverrides(
     buildDepictioTheme({ brand: config.brand ?? null }),
@@ -174,7 +185,20 @@ export function bootReport(options: BootReportOptions = {}): BootedReport | null
       >
         <BrandingContext.Provider value={config.brand ?? null}>
           <DatesProvider settings={{ locale: 'en', firstDayOfWeek: 1 }}>
-            <StaticBadgeProvider tiers={manifest.tiers as StaticTierMap}>
+            <StaticBadgeProvider
+              tiers={manifest.tiers as StaticTierMap}
+              exportedState={(manifest.initial_filters ?? []).length > 0}
+            >
+              {bannerHost &&
+                manifest.pinned_version &&
+                createPortal(
+                  <PinnedVersionBanner
+                    pinned={manifest.pinned_version}
+                    project={manifest.project}
+                    sticky={false}
+                  />,
+                  bannerHost,
+                )}
               <ReportRuntime
                 manifest={manifest}
                 tiles={tiles}

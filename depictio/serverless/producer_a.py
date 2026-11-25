@@ -47,16 +47,17 @@ kinds go ``live`` (their DC is bundled, pruned to the columns their ``config``
 binds, and the in-browser engine recomputes ``/advanced_viz/data`` at every
 filter state — no frozen payload); ``phylogenetic`` stays frozen, because its
 Newick tree DC is a second, non-tabular source one bundled table cannot carry;
-and the four Celery-computed kinds (embedding, complex_heatmap, upset, sankey)
-are *pre-exported*: the producer calls their task functions in-process and
+and the Celery-computed kinds (embedding, complex_heatmap, upset) are
+*pre-exported*: the producer calls their task functions in-process and
 ships the result as a frozen ``compute`` payload, which the runtime's
 dispatch/poll shim hands back as a finished job. They are badged as
 computed-at-export — no filter refreshes them — and degrade to ``omitted``
 (with the reason) when the compute fails or runs past its budget.
-``coverage_track`` dispatches server-side too but left that family in phase 8:
-its task is row-wise plus a per-(chromosome, sample) rolling mean, so the
-browser recomputes it live from the bundled Parquet like any data-path kind
-(see ``CELERY_VIZ_KINDS``).
+``coverage_track`` (phase 8) and ``sankey`` and ``contact_map`` dispatch
+server-side too but left that family: every step of their computes commutes
+with the dashboard filters, so the browser replays them live from the bundled
+Parquet (see ``CELERY_VIZ_KINDS`` and the ``compute_live`` entries in
+``SERVERLESS_KINDS``).
 
 One bundle carries a whole **tab family** (RFC §3.1 ``BundleManifest.tabs``):
 the requested dashboard is the entry tab, its main tab and siblings ride along,
@@ -103,7 +104,9 @@ from typing import Any
 
 import polars as pl
 from bson import ObjectId
+from fastapi import HTTPException
 
+from depictio.models.models.analysis_state import AnalysisState
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.serverless import (
     BindingTable,
@@ -117,6 +120,8 @@ from depictio.models.models.serverless import (
     FrozenPayload,
     LinksSection,
     LinkTable,
+    PinnedCollection,
+    PinnedVersion,
     Producer,
     PrologueOp,
     TabEntry,
@@ -220,6 +225,11 @@ def annotate_code_context(tabs: list["FamilyTab"]) -> None:
             colors = {}
         brand = tab.doc.get("brand_theme") or tab.doc.get("inherited_brand_theme")
         for comp in tab.components:
+            if comp.get("component_type") == "advanced_viz":
+                # An UpSet's annotation tracks wear the dashboard's pins, which
+                # its renderer sends with its compute (`pinsForColumns`).
+                comp[_FOLD_COLORS_KEY] = colors
+                continue
             if comp.get("component_type") != "figure":
                 continue
             comp[_FOLD_COLORS_KEY] = colors
@@ -386,6 +396,17 @@ class BundleTooLargeError(ProducerAError):
     caller may read it, the artifact is simply too big to hand over. The HTTP
     surface maps it to its own status so a preflight of an oversized dashboard
     does not answer "not found" (``serverless_endpoints/routes.py``).
+    """
+
+
+class VersionPinsError(ProducerAError):
+    """Raised when a state's version pin names a version that cannot be read.
+
+    A stale or foreign version id is a caller error, not a reason to ship
+    current data under a past version's label — the one outcome a pinned export
+    must never have (the render endpoints answer the same request 400 with the
+    same detail, ``data_versions.stale_version_detail``). Subclass so the HTTP
+    surface answers 400 rather than the generic producer 404.
     """
 
 
@@ -724,7 +745,7 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
                     ComponentTier.FROZEN,
                     TierReason.CODE_MODE,
                     f"code-mode figure not transpilable: {refusal}; frozen via the "
-                    "server figure pipeline (RestrictedPython) at the default filter state",
+                    "server figure pipeline (RestrictedPython) at the exported filter state",
                 )
             # The same two data-free bail-outs, read off the terminal ``px``
             # call rather than off stored_metadata: the code names its own
@@ -785,7 +806,7 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
         return PlannedTier(
             ComponentTier.FROZEN,
             TierReason.IMAGE,
-            "export-time snapshot: the gallery's images at the default filter state, read "
+            "export-time snapshot: the gallery's images at the exported filter state, read "
             "from S3 at export and shipped as thumbnails (up to "
             f"{IMAGE_SNAPSHOT_MAX}, longest side {IMAGE_THUMB_PX} px, within the bundle's "
             "object cap); filters do not reach it",
@@ -796,7 +817,7 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
             TierReason.JBROWSE,
             "the genome browser renders offline from its session's files, shipped in the "
             "bundle within the genome-browser budget (sliced to the opening locus when too "
-            "big to ship whole), frozen at the default filter state; when nothing fits, the "
+            "big to ship whole), frozen at the exported filter state; when nothing fits, the "
             "bundle shows the export-time session instead: assembly, locus and track table",
         )
     if ctype == "advanced_viz":
@@ -828,7 +849,7 @@ def classify_stored_component(comp: dict[str, Any]) -> PlannedTier:
                 TierReason.UNSUPPORTED,
                 f"advanced_viz '{kind}' also reads a non-tabular tree data collection "
                 "(Newick), which one bundled table cannot carry — it stays frozen at "
-                "the default filter state (tree merged in) while the other data-path "
+                "the exported filter state (tree merged in) while the other data-path "
                 "kinds went live in phase 4",
             )
         if cap.tier == "omitted":
@@ -1012,6 +1033,14 @@ def _dc_init_entry(comp: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+#: ``<base>_dc_id`` keys no renderer reads (``matrix_dc_id`` of an UpSet and a
+#: complex heatmap: both load the component's own ``dc_id``). Old seeds carry an
+#: id of the instance they were written on, which is no collection of this
+#: project: counted as a reference, it omitted the whole tile from every bundle
+#: and report, and the report fell back to the server's plain figure.
+_UNUSED_DC_ID_KEYS = frozenset({"matrix_dc_id"})
+
+
 def collection_refs(comp: dict[str, Any]) -> list[tuple[str, str]]:
     """Every ``(wf_id, dc_id)`` a component reads, ``wf_id`` ``""`` when unnamed.
 
@@ -1027,7 +1056,12 @@ def collection_refs(comp: dict[str, Any]) -> list[tuple[str, str]]:
     config = comp.get("config")
     if isinstance(config, dict):
         for key, value in config.items():
-            if key.endswith("_dc_id") and isinstance(value, (str, ObjectId)) and str(value):
+            if (
+                key.endswith("_dc_id")
+                and key not in _UNUSED_DC_ID_KEYS
+                and isinstance(value, (str, ObjectId))
+                and str(value)
+            ):
                 wf_id = config.get(f"{key[: -len('_dc_id')]}_wf_id")
                 refs.append((str(wf_id or ""), str(value)))
     if comp.get("component_type") == "text" and comp.get("values"):
@@ -1280,17 +1314,20 @@ def _freeze_cards(
     cards: list[dict[str, Any]],
     user: ExportUser,
     filters: list[dict[str, Any]] | None = None,
+    pins_body: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Fallback card payloads (bulk response shape) at the default filter state
     (``filters``: the tab's interactive defaults).
 
     Cards are live in the bundle; the frozen snapshot is the value the shim
     shows if the in-browser computation fails (live results win on merge).
+    ``pins_body`` carries the exported state's time-travel pins; the bulk
+    endpoint resolves them from the request body, as a pinned render would.
     """
     indexes = [str(c.get("index")) for c in cards]
     bulk = _routes().bulk_compute_cards(
         dashboard_oid,
-        {"filters": list(filters or []), "component_ids": indexes},
+        {"filters": list(filters or []), "component_ids": indexes, **(pins_body or {})},
         current_user=user,
         access_token=None,
     )
@@ -1303,9 +1340,11 @@ def _freeze_table(
     user: ExportUser,
     max_rows: int = TABLE_FROZEN_MAX_ROWS,
     filters: list[dict[str, Any]] | None = None,
+    pins_body: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The renderTable response shape, paged up to the shared row cap, at the
-    default filter state (``filters``)."""
+    default filter state (``filters``). ``pins_body`` carries the exported
+    state's time-travel pins, which the table endpoint resolves from the body."""
     routes = _routes()
     rows: list[dict[str, Any]] = []
     columns: list[dict[str, Any]] = []
@@ -1316,7 +1355,7 @@ def _freeze_table(
         page = routes.render_table_endpoint(
             dashboard_oid,
             component_id,
-            {"filters": list(filters or []), "start": start, "limit": limit},
+            {"filters": list(filters or []), "start": start, "limit": limit, **(pins_body or {})},
             _response(),
             current_user=user,
             access_token=None,
@@ -1336,6 +1375,8 @@ def _freeze_figure(
     comp: dict[str, Any],
     full_load: bool = False,
     filters: list[dict[str, Any]] | None = None,
+    grouping: dict[str, Any] | None = None,
+    delta_version: int | None = None,
 ) -> tuple[dict[str, Any], bool]:
     """Build a figure by calling the Celery task *function* directly.
 
@@ -1357,6 +1398,16 @@ def _freeze_figure(
     from the *whole* frame, since the runtime refills it from the whole bundled
     table. Sampling there would produce a scaffold whose traces no filtered view
     can reproduce.
+
+    ``grouping`` is the exported state's colour-by / split, in the render
+    request's own keys (``interactive_defaults.grouping_render_body``): a frozen
+    figure is coloured the way the bundle opens, as the live ones beside it.
+    A scaffold (``full_load``) never takes it: the runtime recolours that
+    itself, from the reader's groups.
+
+    ``delta_version`` pins the task's read to a past commit (a pinned export);
+    the task accepts it at the top level of the payload, as a pinned render
+    sends it.
 
     Returns ``(payload, was_sampled)``.
     """
@@ -1381,6 +1432,10 @@ def _freeze_figure(
         "theme": "light",
         "full_load": full_load,
     }
+    if grouping:
+        payload.update(grouping)
+    if delta_version is not None:
+        payload["delta_version"] = delta_version
     # The family's colours, as the render endpoint sends them: a code figure
     # reads them as `depictio_category_colors` (the ampliseq "Phylum
     # composition per group" bars), and the worker's group colouring too.
@@ -1422,13 +1477,20 @@ def advanced_viz_request(
 
 
 def _freeze_advanced_viz(
-    comp: dict[str, Any], user: ExportUser, filters: list[dict[str, Any]] | None = None
+    comp: dict[str, Any],
+    user: ExportUser,
+    filters: list[dict[str, Any]] | None = None,
+    delta_version: int | None = None,
 ) -> dict[str, Any]:
     """Freeze a data-path advanced_viz via the real ``/advanced_viz/data`` body.
 
     The response's ``sampling`` block is kept verbatim — it is what the
     renderer's badge reads, and pinning it is what makes a reduced frozen
     frame honest about being reduced.
+
+    ``delta_version`` (a pinned export) pins the data fetch to that commit,
+    attached AFTER the phylogenetic metadata-DC remap below so it names the
+    collection the request actually reads.
 
     A phylogenetic tile is the one asymmetric case: its tree is the
     visualisation and its tip metadata is decoration, so a failed tabular fetch
@@ -1456,6 +1518,8 @@ def _freeze_advanced_viz(
             "wf_id": str(config.get("metadata_wf_id") or request["wf_id"]),
             "dc_id": str(config["metadata_dc_id"]),
         }
+    if delta_version is not None:
+        request["delta_version"] = delta_version
     av = _av_routes()
     try:
         payload = av.fetch_advanced_viz_data(
@@ -1617,7 +1681,9 @@ def _run_with_timeout(func: Any, payload: dict[str, Any], timeout: float) -> Any
 
 
 def celery_compute_request(
-    comp: dict[str, Any], filters: list[dict[str, Any]] | None = None
+    comp: dict[str, Any],
+    filters: list[dict[str, Any]] | None = None,
+    delta_version: int | None = None,
 ) -> tuple[str, dict[str, Any]] | None:
     """``(task function name, payload)`` for a Celery-computed advanced_viz.
 
@@ -1628,6 +1694,10 @@ def celery_compute_request(
     component implies no compute at all — an ``embedding`` without
     ``compute_method`` (its renderer reads coordinates from the table instead),
     or a config missing what its task requires.
+
+    ``delta_version`` rides in the payload when the export is pinned: the
+    export-side ``group_compare_opening`` task reads its Delta commit for the
+    opening pair from it.
     """
     kind = advanced_viz_kind(comp)
     if kind not in CELERY_VIZ_KINDS and kind != "embedding":
@@ -1643,6 +1713,8 @@ def celery_compute_request(
         "dc_id": str(dc_id),
         "filter_metadata": scope_residue_filters(list(filters or []), kind),
     }
+    if delta_version is not None:
+        base["delta_version"] = delta_version
 
     if kind == "embedding":
         method = str(config.get("compute_method") or "").lower()
@@ -1684,11 +1756,21 @@ def celery_compute_request(
 
     if kind in ("upset", "upset_plot"):
         min_size = config.get("min_size")
+        annotation_cols = list(config.get("default_annotation_cols") or [])
+        # The dashboard's pins for the tracks (`pinsForColumns`), sent only
+        # when there are some, as the renderer does.
+        colors = comp.get(_FOLD_COLORS_KEY) or {}
+        pins = {
+            c: {v: k for v, k in (colors.get(c) or {}).items() if v != "*" and k}
+            for c in annotation_cols
+        }
+        pins = {c: m for c, m in pins.items() if m}
         return "compute_upset", {
             **base,
             "set_columns": config.get("set_columns") or None,
             "set_colors": config.get("set_colors") or None,
-            "annotation_cols": list(config.get("default_annotation_cols") or []) or None,
+            "annotation_cols": annotation_cols or None,
+            **({"category_colors": pins} if pins else {}),
             "sort_by": config.get("sort_by") or "cardinality",
             "sort_order": config.get("sort_order") or "descending",
             "min_size": 1 if min_size is None else int(min_size),
@@ -1738,12 +1820,19 @@ def celery_compute_request(
 
 
 def _group_compare_opening(request: dict[str, Any]) -> dict[str, Any]:
-    """Resolve the opening pair from the table, then run ``compute_group_compare``."""
+    """Resolve the opening pair from the table, then run ``compute_group_compare``.
+
+    The pair is a fact about the DATA (the first two values of ``group_col``),
+    so under a version pin it is resolved from the pinned commit, never from
+    today's.
+    """
     group_col = request["group_col"]
+    delta_version = request.get("delta_version")
     frame = _dtu().load_deltatable_lite(
         workflow_id=ObjectId(request["wf_id"]),
         data_collection_id=request["dc_id"],
         select_columns=[group_col],
+        delta_version=delta_version,
     )
     labels = sorted({str(v) for v in frame.get_column(group_col).to_list() if v is not None})
     pair = computes.group_compare_opening_pair(
@@ -1770,6 +1859,7 @@ def freeze_celery_compute(
     comp: dict[str, Any],
     budget: ComputeBudget,
     filters: list[dict[str, Any]] | None = None,
+    delta_version: int | None = None,
 ) -> tuple[dict[str, Any] | None, str]:
     """Run one advanced_viz Celery compute in-process. ``(payload, detail)``.
 
@@ -1777,9 +1867,12 @@ def freeze_celery_compute(
     exhausted, timed out, or the task raised — and ``detail`` then says why, so
     the caller can degrade it to ``omitted`` instead of aborting the export. A
     successful compute returns the frozen payload the runtime's shim serves.
+
+    ``delta_version`` (a pinned export) rides in the compute request, which the
+    export-side ``group_compare_opening`` resolution reads.
     """
     kind = advanced_viz_kind(comp) or "?"
-    plan = celery_compute_request(comp, filters)
+    plan = celery_compute_request(comp, filters, delta_version)
     if plan is None:
         return None, f"advanced_viz '{kind}' compute request cannot be derived from its config"
     task_name, request = plan
@@ -1877,15 +1970,24 @@ def multiqc_warming(payload: Any) -> bool:
 
 
 def _multiqc_call(
-    dashboard_oid: ObjectId, comp: dict[str, Any], user: ExportUser
+    dashboard_oid: ObjectId,
+    comp: dict[str, Any],
+    user: ExportUser,
+    pins_body: dict[str, Any] | None = None,
 ) -> tuple[str, Callable[[], Any]]:
     """``(kind, ask)``: the endpoint a MultiQC component renders through
-    (General Stats or a plot, mirroring ``MultiQCDispatch``), as a call."""
+    (General Stats or a plot, mirroring ``MultiQCDispatch``), as a call.
+
+    ``pins_body`` carries the exported state's time-travel pins: the endpoints
+    resolve them from the request body, so a pinned export's tile is rendered
+    from the pinned report set rather than every report the collection holds
+    now.
+    """
     routes = _routes()
     component_id = str(comp.get("index"))
     # No filters, not even the tab's defaults: a bundled MultiQC tile is live,
     # and this payload is the whole figure the runtime re-slices per filter.
-    request = {"filters": [], "theme": "light"}
+    request = {"filters": [], "theme": "light", **(pins_body or {})}
     _, _, _, is_gs = routes._resolve_selected_keys(comp)
     if is_gs:
         return "multiqc-general-stats", lambda: routes.render_multiqc_general_stats_endpoint(
@@ -1924,6 +2026,7 @@ def _freeze_multiqc(
     comp: dict[str, Any],
     user: ExportUser,
     wait: MultiQCWait | None = None,
+    pins_body: dict[str, Any] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Freeze a MultiQC component via the endpoint its renderer would call.
 
@@ -1931,10 +2034,11 @@ def _freeze_multiqc(
     ``render_multiqc_general_stats``, everything else through
     ``render_multiqc`` (one of the two per component, mirroring
     ``MultiQCDispatch``). A cold pre-render (an export right after ingestion)
-    is waited for, within ``wait``, rather than omitting the plot.
+    is waited for, within ``wait``, rather than omitting the plot. ``pins_body``
+    pins the render to the exported state's report set (see ``_multiqc_call``).
     """
     component_id = str(comp.get("index"))
-    kind, ask = _multiqc_call(dashboard_oid, comp, user)
+    kind, ask = _multiqc_call(dashboard_oid, comp, user, pins_body)
     wait = wait if wait is not None else MultiQCWait.from_env()
     out = _multiqc_payload(_await_multiqc(ask, component_id, wait), component_id, wait)
     expansion = multiqc_sample_expansion(str(comp.get("dc_id") or ""))
@@ -1944,7 +2048,11 @@ def _freeze_multiqc(
 
 
 def multiqc_prerender_note(
-    dashboard_oid: ObjectId, comp: dict[str, Any], user: ExportUser, wait_s: float
+    dashboard_oid: ObjectId,
+    comp: dict[str, Any],
+    user: ExportUser,
+    wait_s: float,
+    pins_body: dict[str, Any] | None = None,
 ) -> str | None:
     """The preflight's look at a MultiQC tile's pre-render: ``None`` when the
     endpoint serves the figure now, else what the build will do about it.
@@ -1953,7 +2061,7 @@ def multiqc_prerender_note(
     answer also starts the build, and an export launched after the preflight
     finds it further along.
     """
-    _, ask = _multiqc_call(dashboard_oid, comp, user)
+    _, ask = _multiqc_call(dashboard_oid, comp, user, pins_body)
     if not multiqc_warming(ask()):
         return None
     return (
@@ -2121,6 +2229,7 @@ def _freeze_map(
     user: ExportUser,
     category_colors: dict | None = None,
     filters: list[dict[str, Any]] | None = None,
+    delta_version: int | None = None,
 ) -> dict[str, Any]:
     """Freeze a map at the default filter state (``filters``), keeping its own basemap.
 
@@ -2129,6 +2238,7 @@ def _freeze_map(
     :func:`~depictio.serverless.maps.freeze_map_payload`: the dashboard's
     ``map_style`` is kept, so the basemap loads when the reader is online, and
     the runtime draws the markers on a blank background when it is not.
+    ``delta_version`` (a pinned export) pins the read to that commit.
     """
     init_entry = _dc_init_entry(comp)
     if init_entry is None:
@@ -2139,6 +2249,7 @@ def _freeze_map(
         data_collection_id=dc_id,
         metadata=_filter_metadata(filters, "map", comp) or None,
         init_data={dc_id: init_entry},
+        delta_version=delta_version,
     )
     return freeze_map_payload(comp, df, category_colors)
 
@@ -2434,6 +2545,8 @@ def _bundle_data_refs(
     stored_metadata: list[dict[str, Any]],
     links: list[dict[str, Any]] | None = None,
     serialize: bool = True,
+    extra_columns: set[str] | None = None,
+    delta_versions: dict[str, int] | None = None,
 ) -> tuple[dict[str, DataRef], dict[str, str], dict[str, str], dict[str, pl.DataFrame]]:
     """Bundle every DC a live component, a ui-mode figure or a live
     advanced_viz consumes (:func:`_ships_data`).
@@ -2441,6 +2554,14 @@ def _bundle_data_refs(
     ``links`` are the emitted cross-DC link configs; their join columns are
     folded into the per-DC keep sets (:func:`link_join_column_sets`) so a
     bundled link always finds the column it resolves against.
+
+    ``extra_columns`` are kept in whichever collection carries them, as an
+    interactive filter's column is: the exported state's group and colour-by
+    columns, which the runtime reads whether or not a tile does.
+
+    ``delta_versions`` (a pinned export) maps dc_id to the Delta commit its
+    bundled table is read at; the schema peek and the load both travel to that
+    commit, so the bundled columns and rows are the pinned version's.
 
     ``serialize=False`` is the binding preflight's path (``export_manifest(...,
     decide_only=True)``): the frames are loaded, pruned and given their
@@ -2479,6 +2600,7 @@ def _bundle_data_refs(
     column_sets = live_column_sets(stored_metadata)
     filter_cols = interactive_filter_columns(stored_metadata)
     join_cols = link_join_column_sets(links or [])
+    extra = set(extra_columns or ())
     interactive_comps = [c for c in stored_metadata if c.get("component_type") == "interactive"]
     live_comps_by_dc: dict[str, list[dict[str, Any]]] = {}
     for comp in stored_metadata:
@@ -2516,11 +2638,16 @@ def _bundle_data_refs(
             continue
 
         cols = column_sets.get(dc_id)
+        # A pinned read travels to the pinned commit for the schema peek and the
+        # load alike — a column added after the pinned commit must not sneak a
+        # header without values into the bundled table.
+        delta_version = (delta_versions or {}).get(dc_id)
         try:
             schema = dtu.schema_deltatable_lite(
                 workflow_id=ObjectId(str(wf_id)),
                 data_collection_id=dc_id,
                 init_data={dc_id: init_entry},
+                delta_version=delta_version,
             )
             available = list(schema.keys())
             if cols is None:
@@ -2531,7 +2658,7 @@ def _bundle_data_refs(
                 # link join column (RFC §8) before intersecting — the schema
                 # intersection below is the guard that keeps a column absent
                 # from this DC out of ``select`` (mirroring ``_project_scan``).
-                wanted = cols | filter_cols | join_cols.get(dc_id, set())
+                wanted = cols | filter_cols | extra | join_cols.get(dc_id, set())
                 select = [c for c in available if c in wanted]
                 if dc_id in companion_only and not (cols & set(available)):
                     select = None
@@ -2541,6 +2668,7 @@ def _bundle_data_refs(
                 metadata=None,
                 select_columns=select,
                 init_data={dc_id: init_entry},
+                delta_version=delta_version,
             )
         except Exception as exc:
             failures[dc_id] = f"Delta load failed: {exc}"
@@ -2662,7 +2790,7 @@ def apply_dc_outcomes(
             row.tier = ComponentTier.FROZEN
             row.reason = TierReason.UNSUPPORTED
             row.detail = (
-                "table references no bundled data collection; frozen at the default filter state"
+                "table references no bundled data collection; frozen at the exported filter state"
             )
 
 
@@ -2734,6 +2862,8 @@ def decide_figure(
     data_refs: dict[str, DataRef],
     pruned_frames: dict[str, pl.DataFrame],
     filters: list[dict[str, Any]] | None = None,
+    grouping: dict[str, Any] | None = None,
+    delta_version: int | None = None,
 ) -> FigureDecision:
     """Offer a figure to the bind-and-refill builder and read off its tier.
 
@@ -2759,6 +2889,13 @@ def decide_figure(
     frozen figure is built under it, so it shows what the live tiles beside it
     show when the bundle opens. A code figure's scaffold is built without it
     (the binder needs every row), and rebuilt under it when it does not bind.
+
+    ``grouping`` is the exported colour-by / split (``grouping_render_body``): a
+    figure that does not bind is frozen coloured by it. One that binds ships no
+    payload and is recoloured by the runtime.
+
+    ``delta_version`` (a pinned export) pins the figure's own build read to the
+    pinned commit, so a frozen payload draws the pinned data.
     """
     binding: BindingTable | None = None
     miss: BindingMiss | None = None
@@ -2775,7 +2912,9 @@ def decide_figure(
 
     if code_mode:
         ops, call, refusal = _code_figure_plan(comp)
-        payload, sampled = _freeze_figure(comp, full_load=call is not None)
+        payload, sampled = _freeze_figure(
+            comp, full_load=call is not None, delta_version=delta_version
+        )
         if call is not None and ops is not None:
             df = _base_frame(str(comp.get("dc_id") or ""), data_refs, pruned_frames)
             if df is not None:
@@ -2832,8 +2971,10 @@ def decide_figure(
             )
         return FigureDecision(ComponentTier.LIVE, binding=binding, prologue=prologue)
 
-    if payload is None or filters:
-        payload, sampled = _freeze_figure(comp, filters=filters)
+    if payload is None or filters or grouping:
+        payload, sampled = _freeze_figure(
+            comp, filters=filters, grouping=grouping, delta_version=delta_version
+        )
     if binder_error is not None:
         # Distinguishable from a real binding miss on purpose: the binder never
         # reached a verdict here, so reporting its "no unambiguous binding"
@@ -2841,7 +2982,7 @@ def decide_figure(
         reason = TierReason.BINDING_MISS
         detail = (
             f"the bind-and-refill builder failed with an error rather than a verdict "
-            f"({binder_error}); frozen at the default filter state — this one is a bug to "
+            f"({binder_error}); frozen at the exported filter state — this one is a bug to "
             "report, not a property of the chart"
         )
     elif code_mode and refusal is not None:
@@ -3066,12 +3207,15 @@ def link_join_column_sets(links: list[dict[str, Any]]) -> dict[str, set[str]]:
     return out
 
 
-def _link_source_column_values(dc_id: str, wf_id: str, column: str) -> list[Any] | None:
+def _link_source_column_values(
+    dc_id: str, wf_id: str, column: str, delta_version: int | None = None
+) -> list[Any] | None:
     """Distinct values of a link's join column on an UNBUNDLED source DC.
 
     ``None`` when the Delta table cannot be located or the column is not in its
     schema — either way there is nothing to precompute and the caller leaves the
-    link without a table.
+    link without a table. ``delta_version`` (a pinned export) pins the read to
+    that commit, so the precomputed table translates the pinned data's values.
     """
     try:
         dt = _db().deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
@@ -3093,6 +3237,7 @@ def _link_source_column_values(dc_id: str, wf_id: str, column: str) -> list[Any]
                     "size_bytes": 0,
                 }
             },
+            delta_version=delta_version,
         )
     except Exception:
         return None
@@ -3149,6 +3294,7 @@ def build_links_section(
     bundled_dc_ids: set[str],
     wf_by_dc: dict[str, str] | None = None,
     precompute: bool = True,
+    delta_versions: dict[str, int] | None = None,
 ) -> tuple[LinksSection, list[LinkRow]]:
     """``manifest.links`` plus the rows the ``--check`` links summary prints.
 
@@ -3166,7 +3312,8 @@ def build_links_section(
       not propagate rather than propagating wrongly.
 
     ``precompute=False`` is the ``--check`` path: tiers are predicted from
-    bundling alone and no Delta table is read.
+    bundling alone and no Delta table is read. ``delta_versions`` (a pinned
+    export) pins a tier-B source read to its commit.
     """
     configs = emit_link_configs(links, dc_ids)
     tables: dict[str, LinkTable] = {}
@@ -3209,7 +3356,12 @@ def build_links_section(
             continue
         column = str(config.get("source_column") or "")
         source_values = (
-            _link_source_column_values(source_id, wf_by_dc.get(source_id, ""), column)
+            _link_source_column_values(
+                source_id,
+                wf_by_dc.get(source_id, ""),
+                column,
+                (delta_versions or {}).get(source_id),
+            )
             if column
             else None
         )
@@ -3452,6 +3604,155 @@ def resolve_highlight_tiers(
 
 
 @dataclass
+class _StatePins:
+    """The exported state's time-travel pins, resolved once per export.
+
+    ``pins_body`` is ``state.pins.body()`` — merged into every freeze call that
+    goes through a render endpoint, which resolves the pins from the body as a
+    pinned render would. ``delta_versions`` maps dc_id to the Delta commit the
+    resolver pinned; every DIRECT Delta read below travels there. ``unresolved``
+    maps a dc_id to why it stayed live (reported in the manifest, never shown
+    as pinned). ``version_record`` is the stored version the pins name, for the
+    manifest's ``pinned_version`` block.
+    """
+
+    pins_body: dict[str, Any] = field(default_factory=dict)
+    delta_versions: dict[str, int] = field(default_factory=dict)
+    unresolved: dict[str, str] = field(default_factory=dict)
+    #: The ``definition_version`` the state names, when it names one.
+    definition_version_id: str | None = None
+    version_record: dict[str, Any] | None = None
+
+
+def _resolve_state_pins(
+    state: AnalysisState | None, tabs: list[FamilyTab], entry_tab: FamilyTab
+) -> _StatePins:
+    """Resolve the exported state's version pins once, exactly as renders do.
+
+    The same resolver every render endpoint uses
+    (:func:`~depictio.api.v1.endpoints.dashboards_endpoints.data_versions.resolve_data_versions`),
+    over the whole family: ``referenced`` spans every tab's components, so a
+    collection the version holds no stamp for is reported unresolved (it reads
+    current data and the manifest says so) rather than silently shipping today's
+    data under the version's label.
+
+    A stale or foreign version id raises :class:`VersionPinsError` with the
+    same sentence the render endpoints answer 400 with — never a fallback to
+    current data.
+    """
+    pins_body = state.pins.body() if state is not None else {}
+    if not pins_body:
+        return _StatePins()
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+    from depictio.api.v1.endpoints.dashboards_endpoints.data_versions import (
+        check_version_family,
+        referenced_dc_ids,
+        resolve_data_versions,
+        stale_version_detail,
+    )
+
+    referenced = referenced_dc_ids([comp for tab in tabs for comp in tab.components])
+    try:
+        resolved = resolve_data_versions(pins_body, dashboard=entry_tab.doc, referenced=referenced)
+    except ValueError as exc:
+        raise VersionPinsError(str(exc)) from exc
+    # One record names the pinned version: ``as_of_version`` for the data,
+    # ``definition_version`` for the definitions (usually the same id).
+    version_id = resolved.as_of_version_id or str(pins_body.get("definition_version") or "")
+    record = None
+    if version_id:
+        record = version_store.get_version(version_id)
+        try:
+            # The resolver already checked ``as_of_version``; this also covers
+            # ``definition_version``, which nothing else validates before the
+            # definitions are applied below.
+            check_version_family(record, version_id, entry_tab.doc)
+        except ValueError as exc:
+            raise VersionPinsError(str(exc)) from exc
+        if record is None:  # pragma: no cover — check_version_family raised above
+            raise VersionPinsError(stale_version_detail(version_id))
+    return _StatePins(
+        pins_body=pins_body,
+        delta_versions=dict(resolved.pins),
+        unresolved=dict(resolved.unresolved),
+        definition_version_id=str(pins_body.get("definition_version") or "") or None,
+        version_record=record,
+    )
+
+
+def _apply_definition_versions(tabs: list[FamilyTab], version_id: str) -> list[tuple[str, str]]:
+    """Replace each component's definition with the stored version's, in place.
+
+    ``FamilyTab.components`` is the tab document's own ``stored_metadata`` list,
+    so a replacement here IS what gets classified, bundled and shipped — the
+    reader opens the version's definitions, not today's. The identity fields
+    (``index`` / ``wf_id`` / ``dc_id`` / ``dc_config``) stay live, exactly as a
+    pinned render keeps them (:func:`routes._component_from_version`).
+
+    Returns ``(component_id, detail)`` for components the version cannot define
+    — it never held them (404), or it held them reading another collection
+    (409). Those keep their live definition and the caller omits them: drawing
+    a past version's data through a component that version never knew is the
+    mislabel this feature exists to prevent.
+    """
+    routes = _routes()
+    problems: list[tuple[str, str]] = []
+    for tab in tabs:
+        try:
+            version_tab = routes._definition_tab(tab.doc, version_id)
+        except HTTPException as exc:
+            if exc.status_code == 400:
+                raise VersionPinsError(str(exc.detail)) from exc
+            raise
+        if version_tab is None:
+            # The version holds no snapshot of this tab: its components keep
+            # their live definitions (the version predates the tab).
+            continue
+        components = tab.components
+        for i, comp in enumerate(components):
+            component_id = str(comp.get("index"))
+            try:
+                components[i] = routes._component_from_version(
+                    version_tab,
+                    comp,
+                    component_id,
+                    str(comp.get("component_type") or ""),
+                    project_id=tab.doc.get("project_id"),
+                    version_id=version_id,
+                    label=str(comp.get("component_type") or "Component").capitalize(),
+                )
+            except HTTPException as exc:
+                if exc.status_code in (404, 409):
+                    problems.append((component_id, str(exc.detail)))
+                    continue
+                raise
+    return problems
+
+
+def _pinned_version_block(pins: _StatePins) -> PinnedVersion | None:
+    """The manifest block naming the version the bundle froze on, or ``None``.
+
+    ``None`` when the state pinned no version (a live export, or per-collection
+    ``data_versions`` overrides only): the block is a claim about a stored
+    version, and there is none to claim.
+    """
+    record = pins.version_record
+    if record is None:
+        return None
+    created_at = record.get("created_at")
+    return PinnedVersion(
+        version_id=str(record.get("version_id")),
+        seq=record.get("seq"),
+        label=record.get("label") or None,
+        created_at=created_at.isoformat() if created_at is not None else None,
+        unresolved=[
+            PinnedCollection(dc_id=dc_id, reason=reason)
+            for dc_id, reason in pins.unresolved.items()
+        ],
+    )
+
+
+@dataclass
 class _FreezeState:
     """What the per-component freeze shares across one export's family."""
 
@@ -3464,6 +3765,9 @@ class _FreezeState:
     budget: ComputeBudget
     #: Each tab's opening filter state (its interactive defaults).
     tab_defaults: dict[str, list[dict[str, Any]]]
+    #: The exported state's colour-by / split as a render request's keys; the
+    #: figures that freeze are drawn with it.
+    grouping: dict[str, Any] = field(default_factory=dict)
     frozen: dict[str, FrozenPayload] = field(default_factory=dict)
     bindings: dict[str, BindingTable] = field(default_factory=dict)
     prologues: dict[str, list[PrologueOp]] = field(default_factory=dict)
@@ -3477,6 +3781,14 @@ class _FreezeState:
     computes_skipped: int = 0
     # One wait for every cold MultiQC pre-render in the family (see MultiQCWait).
     multiqc_wait: MultiQCWait = field(default_factory=lambda: MultiQCWait.from_env())
+    # The exported state's time-travel pins, in the wire shape renders send
+    # (``state.pins.body()``): merged into every freeze call that goes through a
+    # render endpoint, which resolves them from the body as a pinned render would.
+    pins_body: dict[str, Any] = field(default_factory=dict)
+    # dc_id -> pinned Delta commit, resolved once at the start of the export
+    # (:func:`_resolve_state_pins`): every direct Delta read below travels to its
+    # collection's pinned commit, never the local mirror of today's data.
+    delta_versions: dict[str, int] = field(default_factory=dict)
 
 
 def _freeze_component(
@@ -3506,7 +3818,9 @@ def _freeze_component(
         # omits), but a cold one is something the reader should hear about
         # before the build: one ask of the endpoint the tile calls.
         try:
-            note = multiqc_prerender_note(ObjectId(tab.id), comp, user, state.multiqc_wait.total)
+            note = multiqc_prerender_note(
+                ObjectId(tab.id), comp, user, state.multiqc_wait.total, state.pins_body
+            )
         except Exception as exc:
             if _is_time_limit(exc):
                 raise
@@ -3531,14 +3845,26 @@ def _freeze_component(
     dashboard_oid = ObjectId(tab.id)
     defaults = state.tab_defaults.get(tab.id) or []
     frozen = state.frozen
+    # The pinned commit for this component's collection, when the exported state
+    # pins one ({} keeps every read live, exactly as before).
+    dc_pin = state.delta_versions.get(str(comp.get("dc_id") or ""))
     try:
         if ctype == "table":
             frozen[component_id] = FrozenPayload(
                 kind="table",
-                payload=_freeze_table(dashboard_oid, component_id, user, filters=defaults),
+                payload=_freeze_table(
+                    dashboard_oid, component_id, user, filters=defaults, pins_body=state.pins_body
+                ),
             )
         elif ctype == "figure":
-            decision = decide_figure(comp, state.data_refs, state.pruned_frames, defaults)
+            decision = decide_figure(
+                comp,
+                state.data_refs,
+                state.pruned_frames,
+                defaults,
+                state.grouping,
+                delta_version=dc_pin,
+            )
             row.tier = decision.tier
             row.reason = decision.reason
             row.detail = decision.detail
@@ -3555,7 +3881,9 @@ def _freeze_component(
                 # result the poll endpoint would have returned. A failure
                 # degrades this one component to omitted (with the error in
                 # its detail) and never aborts the export.
-                compute_payload, detail = freeze_celery_compute(comp, state.budget, defaults)
+                compute_payload, detail = freeze_celery_compute(
+                    comp, state.budget, defaults, delta_version=dc_pin
+                )
                 row.reason = TierReason.CELERY_COMPUTE
                 row.detail = detail
                 if compute_payload is None:
@@ -3567,10 +3895,12 @@ def _freeze_component(
             else:
                 frozen[component_id] = FrozenPayload(
                     kind="advanced-viz-data",
-                    payload=_freeze_advanced_viz(comp, user, defaults),
+                    payload=_freeze_advanced_viz(comp, user, defaults, delta_version=dc_pin),
                 )
         elif ctype == "multiqc":
-            kind, payload = _freeze_multiqc(dashboard_oid, comp, user, state.multiqc_wait)
+            kind, payload = _freeze_multiqc(
+                dashboard_oid, comp, user, state.multiqc_wait, state.pins_body
+            )
             frozen[component_id] = FrozenPayload(kind=kind, payload=payload)
         elif ctype == "map":
             try:
@@ -3580,7 +3910,8 @@ def _freeze_component(
                     raise
                 map_colors = None
             frozen[component_id] = FrozenPayload(
-                kind="map", payload=_freeze_map(comp, user, map_colors, defaults)
+                kind="map",
+                payload=_freeze_map(comp, user, map_colors, defaults, delta_version=dc_pin),
             )
         elif ctype == "image":
             payload, note = _freeze_image(
@@ -3591,6 +3922,7 @@ def _freeze_component(
                 state.object_budget,
                 state.inline_blobs,
                 defaults,
+                pins_body=state.pins_body,
             )
             frozen[component_id] = FrozenPayload(kind="image", payload=payload)
             if note:
@@ -3613,6 +3945,7 @@ def _freeze_component(
                 state.inline_blobs,
                 dry_run=decide_only,
                 filters=defaults,
+                pins_body=state.pins_body,
             )
             row.detail = outcome.detail()
             if not decide_only:
@@ -3634,6 +3967,7 @@ def export_manifest(
     budget: ComputeBudget | None = None,
     decide_only: bool = False,
     python_runtime: str = "off",
+    state: AnalysisState | None = None,
 ) -> ExportResult:
     """Assemble and validate the full ``BundleManifest`` for a dashboard family.
 
@@ -3642,6 +3976,16 @@ def export_manifest(
     component-keyed merges across the family; data collections are bundled ONCE
     however many tabs read them, which is the whole point — six tabs over the
     same two tables used to mean six bundles each re-inlining both.
+
+    ``state`` is the analysis state the export was asked for: each tab's frozen
+    tiles are computed on the state's filters that target that tab's components
+    (:func:`interactive_defaults.filters_for_state`), so a frozen tile agrees
+    with the live ones the bundle or report opens on. Its version pins
+    (``state.pins``) are resolved once up front and honoured throughout — the
+    version's component definitions are what gets classified and shipped, every
+    read travels to the pinned commit, and the manifest names the version (and
+    any collection it could not pin) in ``pinned_version``. ``None`` keeps the
+    pre-state contract: each tab's own interactive defaults, all data live.
 
     ``decide_only=True`` is the binding preflight (``export_static(check=True)``):
     the same body, run for its verdicts and stopped before it builds anything.
@@ -3684,6 +4028,18 @@ def export_manifest(
         )
     budget = budget or ComputeBudget.from_env()
 
+    # Time travel — the exported state's pins, resolved ONCE before any
+    # component is classified or any data read. The version's definitions are
+    # what gets annotated, classified, bundled and shipped, and every read
+    # below travels to the commit the resolver pinned; a collection the
+    # version cannot pin reads current data and is reported in the manifest.
+    # A stale or foreign version id is a hard error (VersionPinsError), never
+    # a silent export of today's data under a past version's label.
+    pins = _resolve_state_pins(state, tabs, entry_tab)
+    definition_problems: list[tuple[str, str]] = []
+    if pins.definition_version_id:
+        definition_problems = _apply_definition_versions(tabs, pins.definition_version_id)
+
     items = family_components(tabs)
     annotate_family_inheritance(tabs)
     annotate_code_context(tabs)
@@ -3691,6 +4047,17 @@ def export_manifest(
     for tab in tabs:
         tier_rows.extend(classify_stored_metadata(tab.components, tab_id=tab.id))
     tier_by_id = {row.component_id: row for row in tier_rows}
+    for cid, detail in definition_problems:
+        # A component the pinned version cannot define (it never held it, or
+        # it held it reading another collection) keeps its LIVE definition
+        # above — the freeze loop skips OMITTED rows, so it ships no payload
+        # and no bundled data is drawn through it.
+        if cid in tier_by_id:
+            row = tier_by_id[cid]
+            row.tier = ComponentTier.OMITTED
+            row.reason = TierReason.UNSUPPORTED
+            row.detail = f"the pinned version's definition could not be applied: {detail}"
+            row.provisional = False
 
     # Cross-DC links (RFC §8): read from the PROJECT, filtered to the ones that
     # can land a filter on this dashboard, and folded into the column sets
@@ -3728,20 +4095,32 @@ def export_manifest(
     # Live tier: bundle the DCs cards/interactive (and ui-mode figures, and the
     # live advanced_viz kinds) read — keyed by dc_id, so a DC read on three tabs
     # is loaded, pruned and inlined exactly once.
+    from depictio.serverless.interactive_defaults import grouping_columns
+
     data_refs, inline_blobs, dc_failures, pruned_frames = _bundle_data_refs(
-        stored_metadata, emitted_links, serialize=not decide_only
+        stored_metadata,
+        emitted_links,
+        serialize=not decide_only,
+        extra_columns=grouping_columns(state),
+        delta_versions=pins.delta_versions,
     )
     apply_dc_outcomes(items, tier_by_id, data_refs, dc_failures)
 
-    # Frozen tier: real endpoint bodies, at each tab's default filter state —
-    # its interactive defaults, the state the bundle's App opens the tab on
-    # (``withInteractiveDefaults``), so a frozen tile agrees with the live ones
-    # beside it until the reader changes a filter. Bindings (bind-and-refill,
-    # RFC §4) — and, for code-mode figures, the prologue IR the runtime replays
-    # first (RFC §7) — are filled per figure below.
-    from depictio.serverless.interactive_defaults import default_filters
+    # Frozen tier: real endpoint bodies, at each tab's opening filter state —
+    # the exported analysis state's filters that target the tab's components,
+    # or its interactive defaults when no state was sent (the state the
+    # bundle's App opens the tab on, ``withInteractiveDefaults``), so a frozen
+    # tile agrees with the live ones beside it until the reader changes a
+    # filter. Bindings (bind-and-refill, RFC §4) — and, for code-mode figures,
+    # the prologue IR the runtime replays first (RFC §7) — are filled per
+    # figure below.
+    from depictio.serverless.interactive_defaults import (
+        filters_for_state,
+        grouping_for_state,
+        grouping_render_body,
+    )
 
-    state = _FreezeState(
+    freeze = _FreezeState(
         user=user,
         decide_only=decide_only,
         data_refs=data_refs,
@@ -3749,10 +4128,13 @@ def export_manifest(
         inline_blobs=inline_blobs,
         project_doc=project_doc,
         budget=budget,
-        tab_defaults={tab.id: default_filters(tab.components) for tab in tabs},
+        tab_defaults={tab.id: filters_for_state(tab.components, state) for tab in tabs},
+        grouping=grouping_render_body(state),
+        pins_body=pins.pins_body,
+        delta_versions=pins.delta_versions,
     )
-    frozen, bindings, prologues = state.frozen, state.bindings, state.prologues
-    object_budget = state.object_budget
+    frozen, bindings, prologues = freeze.frozen, freeze.bindings, freeze.prologues
+    object_budget = freeze.object_budget
 
     # Cards freeze per tab: bulk_compute_cards resolves component ids against
     # ONE dashboard document, so a family needs one call per tab. A card's tier
@@ -3771,7 +4153,11 @@ def export_manifest(
                 continue
             try:
                 for idx, payload in _freeze_cards(
-                    ObjectId(tab.id), cards, user, state.tab_defaults[tab.id]
+                    ObjectId(tab.id),
+                    cards,
+                    user,
+                    freeze.tab_defaults[tab.id],
+                    freeze.pins_body,
                 ).items():
                     frozen[idx] = FrozenPayload(kind="card", payload=payload)
             except Exception as exc:
@@ -3783,8 +4169,8 @@ def export_manifest(
                 )
 
     for tab, comp, component_id in items:
-        _freeze_component(state, tab, comp, component_id, tier_by_id[component_id])
-    jbrowse_tiles = state.jbrowse_tiles
+        _freeze_component(freeze, tab, comp, component_id, tier_by_id[component_id])
+    jbrowse_tiles = freeze.jbrowse_tiles
 
     python_components, python_info = settle_python_jobs(
         items, tier_by_id, bindings, data_refs, python_candidates, python_runtime, decide_only
@@ -3848,6 +4234,7 @@ def export_manifest(
         dc_ids,
         set(data_refs),
         workflow_ids_by_dc(project_doc),
+        delta_versions=pins.delta_versions,
     )
 
     objects, resolved_structures, addons = collect_objects_a(
@@ -3907,6 +4294,8 @@ def export_manifest(
         resolved_structures=resolved_structures,
         addons=addons,
         python_components=python_components,
+        initial_grouping=grouping_for_state(state),
+        pinned_version=_pinned_version_block(pins),
     )
     logger.info(
         "producer A: exported %s (%d tab(s), %d component(s), %d data collection(s), "
@@ -3917,8 +4306,8 @@ def export_manifest(
         len(tier_rows),
         len(data_refs),
         _mb(bundle_size.data_bytes),
-        state.computes_frozen,
-        state.computes_skipped,
+        freeze.computes_frozen,
+        freeze.computes_skipped,
         budget.spent,
         budget.total,
     )
@@ -3940,12 +4329,15 @@ def _freeze_image(
     budget: ObjectBudget,
     inline_blobs: dict[str, str],
     filters: list[dict[str, Any]] | None = None,
+    pins_body: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], str | None]:
     """A gallery's export-time snapshot: its default rows (under ``filters``, the
     tab's interactive defaults), images as thumbnails.
 
     The rows come from ``render_image_paths_endpoint`` (the gallery's own
-    order and cap); each image is read from the instance's bucket, downsampled
+    order and cap; ``pins_body`` carries the exported state's time-travel pins,
+    which the endpoint resolves from the body); each image is read from the
+    instance's bucket, downsampled
     (:func:`objects.thumbnail`) and shipped under the bundle's object budget.
     The row's image value becomes the ``inline:`` key; the runtime turns it
     into a ``blob:`` URL. Rows whose image did not fit are left out, and the
@@ -3959,7 +4351,7 @@ def _freeze_image(
     payload = routes.render_image_paths_endpoint(
         dashboard_oid,
         component_id,
-        {"filters": list(filters or []), "max": cap},
+        {"filters": list(filters or []), "max": cap, **(pins_body or {})},
         current_user=user,
         access_token=None,
     )
@@ -4050,16 +4442,18 @@ def _freeze_jbrowse(
     inline_blobs: dict[str, str] | None,
     dry_run: bool = False,
     filters: list[dict[str, Any]] | None = None,
+    pins_body: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], Any]:
     """The genome browser's session at the default filter state (``filters``),
     with its files.
 
-    ``render_jbrowse`` mints the session the live viewer would open; its
-    assembly, track and index files are then read here, through the same
-    lookups the API's track proxy uses (:func:`_jbrowse_opener`), and shipped
-    within the budget (``jbrowse_bundle.bundle_session``), so the bundle mounts
-    the real browser over them. Returns the rewritten payload and the
-    :class:`~depictio.serverless.jbrowse_bundle.BundleResult` (its ``detail()``
+    ``render_jbrowse`` mints the session the live viewer would open (``pins_body``
+    carries the exported state's time-travel pins, which the endpoint resolves
+    from the body); its assembly, track and index files are then read here,
+    through the same lookups the API's track proxy uses (:func:`_jbrowse_opener`),
+    and shipped within the budget (``jbrowse_bundle.bundle_session``), so the
+    bundle mounts the real browser over them. Returns the rewritten payload and
+    the :class:`~depictio.serverless.jbrowse_bundle.BundleResult` (its ``detail()``
     is the tier detail).
     """
     from depictio.serverless.jbrowse_bundle import bundle_session
@@ -4067,7 +4461,7 @@ def _freeze_jbrowse(
     session = _routes().render_jbrowse_endpoint(
         dashboard_oid,
         component_id,
-        {"filters": list(filters or [])},
+        {"filters": list(filters or []), **(pins_body or {})},
         current_user=user,
         access_token=None,
     )
@@ -4570,6 +4964,7 @@ def export_static(
     single_tab: bool = False,
     bind: bool = True,
     python_runtime: str = "off",
+    state: AnalysisState | None = None,
 ) -> ExportResult:
     """End-to-end: dashboard in Mongo → self-contained HTML at ``out_path``.
 
@@ -4608,6 +5003,14 @@ def export_static(
             embedding — ``on`` forces it, ``off`` leaves it out (those tiles
             stay frozen). See ``serverless/pyodide/plan.py``. The library
             default is ``off``, so nothing downloads unless a caller asks.
+        state: The analysis state the export was asked for: the frozen tiles
+            are computed on its filters (per tab, the entries targeting that
+            tab's components; ``None`` keeps the tab's interactive defaults)
+            and the manifest's ``initial_filters`` is set to the state's
+            filters, so the bundle opens on the exported view. A state the
+            runtime cannot reproduce is the caller's to refuse
+            (``report.ineligibility``); the export itself applies the filters
+            it is handed.
     """
     if python_runtime not in ("auto", "on", "off"):
         raise ProducerAError(f"python_runtime must be auto, on or off, got {python_runtime!r}")
@@ -4624,6 +5027,7 @@ def export_static(
             single_tab=single_tab,
             decide_only=True,
             python_runtime=python_runtime,
+            state=state,
         )
 
     if check:
@@ -4655,9 +5059,18 @@ def export_static(
         raise ProducerAError("out_path is required unless check=True")
 
     result = export_manifest(
-        dashboard_id, export_user, single_tab=single_tab, python_runtime=python_runtime
+        dashboard_id,
+        export_user,
+        single_tab=single_tab,
+        python_runtime=python_runtime,
+        state=state,
     )
     assert result.manifest is not None
+    if state is not None:
+        # The bundle opens on the exported view, as a report's runtime does.
+        from depictio.serverless import report
+
+        result.manifest.initial_filters = report.initial_filters(state)
     html = render_bundle_html(result.manifest)
     # Last ceiling check, and the only one taken on the whole file (RFC §8.1).
     _refuse_oversized_render(html, result.size)

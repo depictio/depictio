@@ -345,7 +345,12 @@ async def _token(*a: Any, **k: Any) -> _Token:
     return _Token()
 
 
-def _run_task(monkeypatch: pytest.MonkeyPatch, **kw: Any) -> tuple[dict, dict, dict]:
+def _run_task(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    files: dict[str, bytes] | None = None,
+    **kw: Any,
+) -> tuple[dict, dict, dict]:
     from depictio.api import celery_app as worker
     from depictio.api.v1.services.notebook_export import render as render_mod
     from depictio.api.v1.services.notebook_export import store
@@ -353,9 +358,9 @@ def _run_task(monkeypatch: pytest.MonkeyPatch, **kw: Any) -> tuple[dict, dict, d
     stored: dict[str, bytes] = {}
     seen: dict[str, Any] = {}
 
-    def fake_render(qmd: bytes, **opts: Any) -> bytes:
+    def fake_render(qmd: bytes, **opts: Any) -> tuple[bytes, dict[str, bytes]]:
         seen["deferred"] = opts["extra_env"].get("DEPICTIO_REPORT_RUNTIME_DEFERRED")
-        return _report().encode()
+        return _report().encode(), files or {}
 
     monkeypatch.setattr("pymongo.AsyncMongoClient", _Mongo)
     monkeypatch.setattr("beanie.init_beanie", _noop)
@@ -372,7 +377,7 @@ def _run_task(monkeypatch: pytest.MonkeyPatch, **kw: Any) -> tuple[dict, dict, d
     monkeypatch.setattr(store, "get", lambda key: b"---\ntitle: x\n---\n")
     monkeypatch.setattr(store, "put", lambda key, body, ct: stored.__setitem__(key, body))
     monkeypatch.setattr(store, "delete", lambda key: None)
-    monkeypatch.setattr(render_mod, "render_quarto_html", fake_render)
+    monkeypatch.setattr(render_mod, "render_quarto_html_files", fake_render)
     monkeypatch.setattr(worker.render_notebook_report, "update_state", lambda **k: None)
     result = worker.render_notebook_report.run(
         job_id="job1",
@@ -492,6 +497,32 @@ def test_a_plain_report_job_is_unchanged(monkeypatch, built):
     assert seen["deferred"] is None
     assert result["filename"] == "report.html"
     assert "window.__combined" not in stored[result["key"]].decode()
+
+
+def test_a_preview_job_uploads_its_files_under_a_capability_token(monkeypatch, built):
+    """The editor's preview is served, not downloaded: the report and its files
+    go to the store under a token minted for the job, and the result carries
+    the URL the editor's iframe opens. No user or job id in the key."""
+    from depictio.api.v1.services.notebook_export import store
+
+    result, stored, _seen = _run_task(
+        monkeypatch,
+        files={"report_files/site_libs/quarto.js": b"console.log(1)"},
+        preview=True,
+        preview_cache="u1/d1",
+    )
+
+    token = result["preview_url"].rsplit("/", 2)[-2]
+    assert result["preview_url"].startswith(store.PREVIEW_FILES_ROUTE)
+    assert result["preview_url"].endswith("/report.html")
+    assert result["key"] is None, "a preview is served, not downloaded"
+    assert len(token) >= 40, "secrets.token_urlsafe(32)"
+    assert set(stored) == {
+        store.preview_key(token, "report.html"),
+        store.preview_key(token, "report_files/site_libs/quarto.js"),
+    }
+    assert "u1" not in store.preview_key(token, "report.html")
+    assert "job1" not in store.preview_key(token, "report.html")
 
 
 # ---------------------------------------------------------------------------

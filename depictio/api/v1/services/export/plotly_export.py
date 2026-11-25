@@ -258,7 +258,11 @@ def _general_stats_spec(
 
 
 def _celery_advanced_viz_spec(
-    component: dict, filter_metadata: list[dict], kind: str, access_token: str | None
+    component: dict,
+    filter_metadata: list[dict],
+    kind: str,
+    access_token: str | None,
+    category_colors: dict[str, dict[str, str]] | None = None,
 ) -> Any:
     """Run an already-server-side advanced-viz compute inline and return its figure.
 
@@ -268,13 +272,106 @@ def _celery_advanced_viz_spec(
     """
     from depictio.api.v1.services.export.compute import run_compute
 
-    result = run_compute(kind, component, filter_metadata, access_token)
+    result = run_compute(kind, component, filter_metadata, access_token, category_colors)
     if not isinstance(result, dict) or "figure" not in result:
         raise HTTPException(
             status_code=500,
             detail=f"{kind} compute returned no figure.",
         )
     return result["figure"]
+
+
+def _dashboard_category_colors(dashboard_id: Any) -> dict[str, dict[str, str]]:
+    """The dashboard's category colours (its own over its family's), or none.
+
+    Best effort: a dashboard that cannot be read draws in the library's palette.
+    """
+    from bson import ObjectId
+
+    from depictio.api.v1.db import dashboards_collection
+    from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
+        effective_category_colors,
+    )
+
+    try:
+        doc = dashboards_collection.find_one(
+            {"dashboard_id": ObjectId(str(dashboard_id))},
+            {"category_colors": 1, "parent_dashboard_id": 1},
+        )
+        return effective_category_colors(doc or {}) or {}
+    except Exception as exc:  # noqa: BLE001 - the plain figure is the fallback
+        logger.info(f"export: category colours unavailable for {dashboard_id}: {exc}")
+        return {}
+
+
+def _with_upset_set_colors(
+    colors: dict[str, dict[str, str]], component: dict, spec: dict[str, Any]
+) -> dict:
+    """The UpSet spec with its sets in the dashboard's category colours, and
+    its legend laid out for a page."""
+    from depictio.api.v1.services.export.upset_colors import colour_upset_figure
+
+    return _static_upset_legend(colour_upset_figure(spec, colors, component.get("config")))
+
+
+# A static UpSet's legend: past this many entries the dashboard's scrolling
+# box, top left over the empty corner, would run down over the dot matrix.
+UPSET_STATIC_LEGEND_MAX = 10
+
+
+def _static_upset_legend(spec: dict[str, Any]) -> dict[str, Any]:
+    """A long annotation legend (one entry per category of the track) laid
+    out under the figure, a few entries to a line, where a page has room for
+    it: on paper nothing scrolls."""
+    entries = sum(
+        1 for t in spec.get("data") or [] if t.get("name") and t.get("showlegend") is not False
+    )
+    layout = spec.get("layout")
+    if entries <= UPSET_STATIC_LEGEND_MAX or not isinstance(layout, dict):
+        return spec
+    legend = dict(layout.get("legend") or {})
+    font = dict(legend.get("font") or {})
+    font["size"] = min(int(font.get("size") or 10), 9)
+    legend.update(
+        orientation="h",
+        x=0,
+        xanchor="left",
+        y=-0.04,
+        yanchor="top",
+        entrywidth=0.2,
+        entrywidthmode="fraction",
+        tracegroupgap=0,
+        font=font,
+    )
+    # A horizontal legend still stacks a legend group in one column: the
+    # track's entries leave their group, whose title becomes the legend's.
+    titles = list(
+        dict.fromkeys(
+            str((t.get("legendgrouptitle") or {}).get("text") or "")
+            for t in spec.get("data") or []
+            if isinstance(t.get("legendgrouptitle"), dict)
+        )
+    )
+    titles = [t for t in titles if t]
+    if titles:
+        legend["title"] = {
+            **(legend.get("title") or {}),
+            "text": " · ".join(titles),
+            "side": "top left",
+        }
+    prefixes = tuple(f"{t}: " for t in titles)
+
+    def entry(t: dict[str, Any]) -> dict[str, Any]:
+        out = {k: v for k, v in t.items() if k not in ("legendgroup", "legendgrouptitle")}
+        name = out.get("name")
+        # "Phylum: Bacillota" under a legend titled Phylum reads "Bacillota".
+        for prefix in prefixes:
+            if isinstance(name, str) and name.startswith(prefix):
+                out["name"] = name[len(prefix) :]
+        return out
+
+    data = [entry(t) for t in spec.get("data") or []]
+    return {**spec, "data": data, "layout": {**layout, "legend": legend}}
 
 
 def _python_advanced_viz_spec(
@@ -284,6 +381,7 @@ def _python_advanced_viz_spec(
     access_token: str | None,
     controls: dict[str, Any] | None = None,
     theme: str = "light",
+    category_colors: dict[str, dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Build an advanced-viz figure from its registered Python builder(s).
 
@@ -295,6 +393,9 @@ def _python_advanced_viz_spec(
     The view decides the builder (``services/advanced_viz/views.py``): a
     ``volcano`` on its MA view is drawn by the MA builder, and a ``pr_benchmark``
     on ``both`` by two builders whose traces are overlaid.
+
+    ``category_colors`` is the dashboard's ``{column: {value: colour}}``; only a
+    builder registered for it (a stacked taxonomy) is handed it.
     """
     from depictio.api.v1.services.advanced_viz.data import load_tidy_columns
     from depictio.api.v1.services.advanced_viz.figure_registry import build, required_columns
@@ -334,6 +435,7 @@ def _python_advanced_viz_spec(
             rows=tidy["rows"],
             theme=theme,
             controls=plan.controls.get(name, {}),
+            category_colors=category_colors,
         )
         spec["data"].extend(part.get("data") or [])
         if position == 0:
@@ -406,12 +508,27 @@ async def build_plotly_export(
     elif component_type == "advanced_viz":
         source = component_json_source(component, controls)
         if source == "celery":
+            upset = str(viz_kind) == "upset_plot"
+            colors = _dashboard_category_colors(dashboard_id) if upset else None
             spec = _normalise_figure(
-                _celery_advanced_viz_spec(component, filter_metadata, str(viz_kind), access_token)
+                _celery_advanced_viz_spec(
+                    component, filter_metadata, str(viz_kind), access_token, colors
+                )
             )
+            if upset:
+                # The dashboard recolours the plain figure in the browser; a
+                # figure that never reaches that renderer gets the same pass.
+                spec = _with_upset_set_colors(colors or {}, component, spec)
         else:
             spec = _python_advanced_viz_spec(
-                component, filter_metadata, current_user, access_token, controls, theme
+                component,
+                filter_metadata,
+                current_user,
+                access_token,
+                controls,
+                theme,
+                # The dashboard's colours reach the builders that draw in them.
+                category_colors=_dashboard_category_colors(dashboard_id),
             )
     else:  # pragma: no cover - guarded by the formats_for check above
         raise ExportUnsupported(

@@ -28,6 +28,8 @@ timeout kills the kernel and whatever it started along with Quarto.
 
 from __future__ import annotations
 
+import contextlib
+import importlib
 import os
 import re
 import shutil
@@ -35,6 +37,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+from contextlib import AbstractContextManager
 from pathlib import Path
 
 # What the render may inherit from the worker, by name. Nothing else passes.
@@ -152,10 +155,35 @@ def render_available() -> bool:
     return True
 
 
+def render_unavailable_reason() -> str | None:
+    """Why ``render_available`` is False, as one sentence for the user, or
+    ``None`` when a render could run."""
+    if not quarto_binary():
+        return (
+            "Quarto is not installed on this server, so reports cannot be rendered. "
+            "Install Quarto (https://quarto.org/docs/get-started/) and the render extra: "
+            "pip install 'depictio[render]'"
+        )
+    try:
+        import ipykernel  # noqa: F401
+        import nbclient  # noqa: F401
+    except Exception:
+        return (
+            "The server has no Jupyter kernel to execute a report with. "
+            "Install Quarto (https://quarto.org/docs/get-started/) and the render extra: "
+            "pip install 'depictio[render]'"
+        )
+    return None
+
+
 #: Set for a render whose output has no browser (the PDF): the notebook client
 #: then gives every figure a PNG and every table a markdown copy, which is what
 #: a typst page can hold (``depictio.notebook.components``).
 STATIC_FIGURES_ENV = "DEPICTIO_STATIC_FIGURES"
+
+#: What Quarto prints when ``--cache`` found the notebook's code unchanged and
+#: read its executed outputs back instead of running the kernel.
+CACHE_HIT_MARK = "(Notebook read from cache)"
 
 
 def render_quarto_html(
@@ -166,12 +194,21 @@ def render_quarto_html(
     api_token: str | None,
     timeout_s: int = 900,
     extra_env: dict[str, str] | None = None,
+    workdir: str | None = None,
+    cache: bool = False,
+    force: bool = False,
 ) -> bytes:
     """The HTML report for an exported ``.qmd``, executed end to end.
 
     ``api_url`` and ``api_token`` are what the notebook's own cells read: the
     report is computed with the rights of whoever asked for it, exactly as if
     they had run the file themselves. ``extra_env`` reaches those cells too.
+
+    ``workdir`` renders into a persistent directory instead of a temporary
+    one: with ``cache`` (or ``force``), Quarto's jupyter-cache keeps the
+    executed cells there across renders, so a preview that only changed text
+    reuses the last run's outputs. ``force`` asks for ``--cache-refresh``
+    instead: re-execute every cell, and refresh the cache with the results.
     """
     return _render(
         qmd,
@@ -181,6 +218,45 @@ def render_quarto_html(
         timeout_s=timeout_s,
         to="html",
         extra_env=extra_env,
+        workdir=workdir,
+        cache=cache,
+        force=force,
+    )[0]
+
+
+def render_quarto_html_files(
+    qmd: bytes,
+    *,
+    stem: str,
+    api_url: str,
+    api_token: str | None,
+    timeout_s: int = 900,
+    extra_env: dict[str, str] | None = None,
+    workdir: str | None = None,
+    cache: bool = False,
+    force: bool = False,
+) -> tuple[bytes, dict[str, bytes]]:
+    """The report *and* every file beside it, for a preview served by the API.
+
+    The preview's document is rendered with ``embed-resources: false`` (its
+    front matter, ``QuartoFrontMatter.embed_resources``), so Quarto writes the
+    report plus a ``<stem>_files/`` directory instead of inlining everything
+    into one big file — the editor's iframe loads the report and its files
+    from the API rather than the worker shipping megabytes of it. The report
+    comes back under its served name ``report.html`` and the files keyed as
+    they are served, ``report_files/<relative path>``.
+    """
+    return _render(
+        qmd,
+        stem=stem,
+        api_url=api_url,
+        api_token=api_token,
+        timeout_s=timeout_s,
+        to="html",
+        extra_env=extra_env,
+        workdir=workdir,
+        cache=cache,
+        force=force,
     )
 
 
@@ -208,7 +284,7 @@ def render_quarto_pdf(
         timeout_s=timeout_s,
         to="typst",
         extra_env={**(extra_env or {}), STATIC_FIGURES_ENV: "1"},
-    )
+    )[0]
 
 
 def _render(
@@ -220,7 +296,16 @@ def _render(
     timeout_s: int,
     to: str,
     extra_env: dict[str, str] | None = None,
-) -> bytes:
+    workdir: str | None = None,
+    cache: bool = False,
+    force: bool = False,
+) -> tuple[bytes, dict[str, bytes]]:
+    """Run Quarto once; the report and the files beside it.
+
+    The files are empty unless the document was rendered with
+    ``embed-resources: false`` (a preview's document is): an embedded report
+    carries everything in its one file, so there is nothing to collect.
+    """
     if not quarto_binary():
         raise RenderUnavailable(
             "Quarto is not installed on this worker — the HTML report needs the Quarto CLI. "
@@ -237,11 +322,32 @@ def _render(
 
     env = render_environment(api_url, api_token, extra_env)
 
-    with tempfile.TemporaryDirectory(prefix="depictio-report-") as tmp:
+    if workdir is None:
+        workspace: AbstractContextManager[str] = tempfile.TemporaryDirectory(
+            prefix="depictio-report-"
+        )
+    else:
+        # A persistent workdir (the preview cache): Quarto's own cache lives
+        # here and outlives the render, so the next preview of the same
+        # dashboard re-executes only the cells that changed. Nothing is
+        # cleaned up: the directory is the cache.
+        wd = Path(workdir)
+        wd.mkdir(parents=True, exist_ok=True)
+        workspace = contextlib.nullcontext(str(wd))
+    with workspace as tmp:
         src = Path(tmp) / f"{stem}.qmd"
         out = Path(tmp) / f"{stem}.{'pdf' if to == 'typst' else 'html'}"
         src.write_bytes(qmd)
         cmd = [str(quarto_binary()), "render", src.name, "--execute", "--to", to]
+        if workdir is not None and (cache or force):
+            # Only worth it with jupyter-cache on this interpreter; without it
+            # the flags are unknown to Quarto and the render would fail.
+            try:
+                importlib.import_module("jupyter_cache")
+            except Exception:
+                pass
+            else:
+                cmd.append("--cache-refresh" if force else "--cache")
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -272,9 +378,32 @@ def _render(
             # The log is the server's: it can hold paths and what the document
             # printed. The caller gets a sentence (``RenderUnavailable.log``).
             raise RenderUnavailable("quarto render failed", log=log.strip()[-4000:])
-        if "Executing" not in log:
+        # A preview's cache hit executes nothing by design: Quarto read the
+        # notebook it executed last time, whose code has not changed.
+        from_cache = "--cache" in cmd and CACHE_HIT_MARK in log
+        if "Executing" not in log and not from_cache:
             raise RenderUnavailable(
                 "quarto render produced a report without executing the notebook — "
                 "the interpreter it used has no Jupyter kernel"
             )
-        return out.read_bytes()
+        return out.read_bytes(), _support_files(out)
+
+
+def _support_files(out: Path) -> dict[str, bytes]:
+    """The files Quarto wrote beside the report, keyed as they are served.
+
+    A report whose ``embed-resources`` is off comes with a ``<stem>_files/``
+    directory (Quarto's libraries, the document's own assets), served under
+    that same name: the report links to it by it. An embedded report comes
+    alone, so this is empty.
+    Nothing of the render's own work (the notebook, the caches) is collected —
+    the served preview carries only what the page needs.
+    """
+    support = out.parent / f"{out.stem}_files"
+    if not support.is_dir():
+        return {}
+    files: dict[str, bytes] = {}
+    for path in sorted(support.rglob("*")):
+        if path.is_file():
+            files[f"{support.name}/{path.relative_to(support).as_posix()}"] = path.read_bytes()
+    return files

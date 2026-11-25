@@ -1,7 +1,7 @@
 /**
  * Forwarders for the static runtime's `jbrowse` add-on.
  *
- * The base runtime (vite.static.config.ts) compiles the real JBrowseRenderer
+ * The base runtime (vite.combined.config.ts) compiles the real JBrowseRenderer
  * but none of JBrowse itself: every import of a specifier the add-on provides
  * (the `from '…'` list of depictio-react-core's
  * `components/jbrowse/vendorModules.ts`, the add-on's entry) resolves to a

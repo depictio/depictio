@@ -53,7 +53,7 @@ DEFAULT_VIEWS: tuple[str, ...] = ("report", "dashboard")
 
 
 class RuntimeUnavailable(RuntimeError):
-    """The static runtime is not built next to the static template."""
+    """The static runtime is not built (``pnpm run build:static``)."""
 
 
 def combined_filename(stem: str) -> str:
@@ -73,6 +73,21 @@ class RuntimeAssets:
 def runtime_available() -> bool:
     folder = runtime_dir()
     return (folder / RUNTIME_JS).is_file() and (folder / RUNTIME_CSS).is_file()
+
+
+def runtime_identity() -> str:
+    """Which build of the runtime a report would embed (size and mtime of
+    its two files), "" when it is not built: a cached preview made with an
+    older runtime must not be served once the runtime is rebuilt."""
+    folder = runtime_dir()
+    parts = []
+    for name in (RUNTIME_JS, RUNTIME_CSS):
+        try:
+            st = (folder / name).stat()
+        except OSError:
+            return ""
+        parts.append(f"{name}:{st.st_size}:{st.st_mtime_ns}")
+    return "|".join(parts)
 
 
 def runtime_assets() -> RuntimeAssets:

@@ -420,8 +420,12 @@ export function withUpsetResponsiveLayout(
   };
   if (layout.legend && typeof layout.legend === 'object') {
     const legend = layout.legend as Record<string, unknown>;
+    // A legend group (an annotation track's categories) stacks in one column
+    // even in a horizontal legend, running down over the plot: the band lists
+    // the entries in trace order, the group's title still leading them.
     out.legend = {
       ...legend,
+      traceorder: 'normal',
       orientation: 'h',
       xref: 'paper',
       yref: 'paper',

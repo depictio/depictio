@@ -180,6 +180,89 @@ def format_share(share: float) -> str:
     return f"{pct:.1f}%" if pct < 9.95 else f"{round(pct)}%"
 
 
+# Pixel geometry of the summary (the live view's own is in pixels too): the
+# figure's data x is in pixels at the width it is drawn at, so a dot, its name
+# and the strip keep their gaps whatever the tree's depth.
+LABEL_FONT = 12
+HEADER_FONT = 10
+HEADER_ANGLE = 35
+ROW_PX = 34
+TIP_GAP = 8  # between a tip's dot edge and its name
+STRIP_GAP = 16  # between the longest name and the strip's first dot
+STRIP_COL = 30  # one strip column
+STRIP_MIN, STRIP_MAX = 4, 20  # strip dot diameters
+EDGE_PX = 8
+
+
+def text_px(text: str, size: float, *, bold: bool = False) -> float:
+    """A cheap estimate of a label's width in pixels (Inter, a little generous)."""
+    return len(text) * size * (0.64 if bold else 0.58)
+
+
+def _static_width() -> int:
+    from ..components import _STATIC_WIDTH
+
+    return int(_STATIC_WIDTH["px"])
+
+
+def tip_geometry(
+    labels: list[tuple[str, str]],
+    sizes: list[float],
+    split_values: list[str],
+    depth: int,
+    width: int,
+) -> dict[str, Any]:
+    """Where the tree, names and strip go, in pixels from the tree's root.
+
+    ``label_shift[i]`` is how far right of the tip the name starts (past its
+    dot's radius), ``strip_x[j]`` the centre of strip column ``j``, past the
+    longest name, so nothing overlaps. The tree takes what the rest leaves.
+    """
+    import math
+
+    label_shift = [s / 2 + TIP_GAP for s in sizes]
+    label_end = max(
+        (
+            shift + text_px(g, LABEL_FONT, bold=True) + text_px(f"  {pct}", LABEL_FONT) + 4
+            for shift, (g, pct) in zip(label_shift, labels, strict=True)
+        ),
+        default=0.0,
+    )
+    n = len(split_values)
+    first = label_end + STRIP_GAP + STRIP_MAX / 2 if n else label_end
+    strip_end = first + (n - 1) * STRIP_COL + STRIP_MAX / 2 if n else label_end
+    # Rotated headers run up and right of their column: the top and right
+    # margins hold what they take.
+    cos, sin = math.cos(math.radians(HEADER_ANGLE)), math.sin(math.radians(HEADER_ANGLE))
+    head_w = [text_px(f"\u25cf {v}", HEADER_FONT) for v in split_values]
+    top = EDGE_PX + (max(head_w) * sin + HEADER_FONT + 8 if head_w else 0)
+    right = max(
+        [EDGE_PX]
+        + [
+            w * cos - (n - 1 - j) * STRIP_COL - STRIP_MAX / 2 + EDGE_PX
+            for j, w in enumerate(head_w)
+        ]
+    )
+    plot = width - EDGE_PX - right
+    tree = min(320.0, max(60.0, plot - strip_end))
+    total = tree + strip_end
+    pad = max(3.0, (plot - total) / 2)
+    tip_x = tree
+    return {
+        "unit": tree / max(1, depth),
+        "tip_x": tip_x,
+        "label_shift": label_shift,
+        "strip_x": [tip_x + first + j * STRIP_COL for j in range(n)],
+        "x_range": [-pad, total + pad],
+        "margin": {
+            "l": EDGE_PX,
+            "r": int(math.ceil(right)),
+            "t": int(math.ceil(top)),
+            "b": EDGE_PX,
+        },
+    }
+
+
 def _phylo_summary(tile: Tile) -> Any:
     import plotly.graph_objects as go
 
@@ -309,6 +392,18 @@ def _phylo_summary(tile: Tile) -> Any:
     # the lineage itself: the dashboard's colours for whichever it is.
     colour_column = color_col if any(majority(g) for g in groups) else rank
     palette = category_colors(colour_values, pinned=tile.pinned_colors(colour_column))
+    shares = [share_of(g) for g in groups]
+    smax = max(shares + [1e-9])
+    size = [8 + 22 * (s / smax) ** 0.5 for s in shares]
+    colours = [palette.get(v, "#868e96") for v in colour_values]
+    geo = tip_geometry(
+        [(g, format_share(s)) for g, s in zip(groups, shares, strict=True)],
+        size,
+        split_values,
+        depth,
+        _static_width(),
+    )
+    tip_x = geo["tip_x"]
     fig = go.Figure()
     xs: list[Any] = []
     ys: list[Any] = []
@@ -318,7 +413,7 @@ def _phylo_summary(tile: Tile) -> Any:
         x0, y0 = pts[n.id]
         for c in n.children:
             x1, y1 = pts[c.id]
-            xs += [x0, x0, x1, None]
+            xs += [x0 * geo["unit"], x0 * geo["unit"], x1 * geo["unit"], None]
             ys += [y0, y1, y1, None]
             stack.append(c)
     fig.add_trace(
@@ -331,10 +426,6 @@ def _phylo_summary(tile: Tile) -> Any:
             showlegend=False,
         )
     )
-    shares = [share_of(g) for g in groups]
-    smax = max(shares + [1e-9])
-    size = [8 + 22 * (s / smax) ** 0.5 for s in shares]
-    colours = [palette.get(v, "#868e96") for v in colour_values]
     hover = [
         f"<b>{g}</b><br>{format_share(s)} of the {'reads' if share else 'tips'}<br>"
         f"{tip_count[g]:,} tips, {cores[g][1]:,} in its core clade"
@@ -342,7 +433,7 @@ def _phylo_summary(tile: Tile) -> Any:
     ]
     fig.add_trace(
         go.Scatter(
-            x=[depth] * len(groups),
+            x=[tip_x] * len(groups),
             y=list(range(len(groups))),
             mode="markers",
             marker={"size": size, "color": colours, "line": {"width": 0}},
@@ -351,17 +442,18 @@ def _phylo_summary(tile: Tile) -> Any:
             showlegend=False,
         )
     )
-    label_x = depth + 0.35
+    # Label and share sit past the tip's dot (a pixel shift from the tip, so a
+    # big dot never reaches its own name), the strip past the longest label.
     for i, (g, s) in enumerate(zip(groups, shares, strict=True)):
         fig.add_annotation(
-            x=label_x,
+            x=tip_x,
             y=i,
+            xshift=geo["label_shift"][i],
             text=f"<b>{g}</b>  <span style='color:#868e96'>{format_share(s)}</span>",
             showarrow=False,
             xanchor="left",
-            font={"size": 12},
+            font={"size": LABEL_FONT},
         )
-    strip_x0 = depth + 3.2
     if split and split_values:
         # One colour per group of the strip, as the live summary draws it: the
         # dashboard's own for that column (a habitat keeps its colour), else
@@ -370,14 +462,17 @@ def _phylo_summary(tile: Tile) -> Any:
         for j, sv in enumerate(split_values):
             vals = [split.get(g, {}).get(sv, 0.0) for g in groups]
             vmax = max(vals + [1e-9])
-            x = strip_x0 + j * 0.9
+            x = geo["strip_x"][j]
             fig.add_trace(
                 go.Scatter(
                     x=[x] * len(groups),
                     y=list(range(len(groups))),
                     mode="markers",
                     marker={
-                        "size": [4 + 16 * (v / vmax) ** 0.5 if v > 0 else 0 for v in vals],
+                        "size": [
+                            STRIP_MIN + (STRIP_MAX - STRIP_MIN) * (v / vmax) ** 0.5 if v > 0 else 0
+                            for v in vals
+                        ],
                         "color": split_palette.get(sv, "#868e96"),
                         "opacity": 0.85,
                     },
@@ -390,17 +485,24 @@ def _phylo_summary(tile: Tile) -> Any:
             )
             fig.add_annotation(
                 x=x,
-                y=-0.9,
+                y=-0.5,
+                yshift=6,
                 text=f"<span style='color:{split_palette.get(sv, '#868e96')}'>\u25cf</span> {sv}",
                 showarrow=False,
-                textangle=-35,
-                font={"size": 10, "color": "#868e96"},
+                textangle=-HEADER_ANGLE,
+                xanchor="left",
                 yanchor="bottom",
+                font={"size": HEADER_FONT, "color": "#868e96"},
             )
-    right = strip_x0 + 0.9 * max(1, len(split_values))
-    fig.update_xaxes(visible=False, range=[-0.3, right])
-    fig.update_yaxes(visible=False, autorange="reversed", range=[len(groups) - 0.4, -1.8])
-    fig.update_layout(height=max(260, 70 + 34 * len(groups)), hovermode="closest")
+    fig.update_xaxes(visible=False, range=geo["x_range"], fixedrange=True)
+    fig.update_yaxes(
+        visible=False, autorange=False, range=[len(groups) - 0.5, -0.5], fixedrange=True
+    )
+    fig.update_layout(
+        height=geo["margin"]["t"] + geo["margin"]["b"] + ROW_PX * len(groups),
+        margin=geo["margin"],
+        hovermode="closest",
+    )
     others = len(placeable) - len(top)
     sub = f"Top {len(groups)} {rank} by {'share of reads' if share else 'share of tips'}"
     if others > 0:

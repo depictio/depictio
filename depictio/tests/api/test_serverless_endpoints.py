@@ -19,6 +19,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from depictio.api.v1.endpoints.serverless_endpoints import routes as routes_mod
+from depictio.models.models.analysis_state import AnalysisState
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.serverless import ComponentTier, TierReason
 from depictio.models.models.users import User
@@ -31,6 +32,7 @@ from depictio.serverless.producer_a import (
     ExportResult,
     ProducerAError,
 )
+from depictio.tests.api.test_serverless_export import DC_OID  # noqa: F401 (test data)
 
 DASHBOARD_OID = ObjectId("6824cb3b89d2b72169309737")
 PROJECT_OID = ObjectId("646b0f3c1e4a2d7f8e5b8c9d")
@@ -634,6 +636,108 @@ def test_dispatch_unknown_dashboard_is_404(
 
 
 # ---------------------------------------------------------------------------
+# Dispatch with an analysis state
+# ---------------------------------------------------------------------------
+
+
+def _export_state(**extra: Any) -> dict[str, Any]:
+    return {
+        "filters": [
+            {
+                "index": "filter-1",
+                "value": [2021],
+                "column_name": "year",
+                "interactive_component_type": "MultiSelect",
+                "metadata": {"dc_id": str(DC_OID), "column_name": "year"},
+            }
+        ],
+        "context": {"dashboard_id": str(DASHBOARD_OID)},
+        **extra,
+    }
+
+
+def test_dispatch_with_a_state_carries_it_to_the_worker(
+    client, owner, jobs, dashboards, monkeypatch: pytest.MonkeyPatch
+):
+    """The body's state rides in the task payload, JSON-serializable as the
+    worker rebuilds it; the job doc and response are as without one."""
+    _patch_project(monkeypatch, [OWNER_OID])
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    _as_user(client, owner)
+
+    resp = client.post(
+        f"/serverless/export-static/{DASHBOARD_OID}", json={"state": _export_state()}
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "pending"
+    (payload,) = task.calls[0]
+    assert payload["job_id"] == body["job_id"]
+    assert payload["python_runtime"] == "off"
+    # The state as the dispatch read it (the worker rebuilds AnalysisState).
+    assert payload["state"]["filters"][0]["index"] == "filter-1"
+    assert payload["state"]["filters"][0]["value"] == [2021]
+    assert payload["state"]["context"]["dashboard_id"] == str(DASHBOARD_OID)
+    assert jobs.docs[body["job_id"]]["status"] == "pending"
+
+
+def test_dispatch_with_a_pinned_grouped_state_queues_it(
+    client, owner, jobs, dashboards, monkeypatch: pytest.MonkeyPatch
+):
+    """Pins, selection groups and colour-by are all reproduced offline now: the
+    state is accepted and travels to the worker whole."""
+    _patch_project(monkeypatch, [OWNER_OID])
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    _as_user(client, owner)
+    state = _export_state(pins={"as_of_version": "v-old"}, color_by={"kind": "groups"})
+
+    resp = client.post(f"/serverless/export-static/{DASHBOARD_OID}", json={"state": state})
+
+    assert resp.status_code == 200
+    [payload] = task.calls[0]
+    sent = AnalysisState.model_validate(payload["state"])
+    assert sent.pins.as_of_version == "v-old"
+    assert sent.color_by.kind == "groups"
+
+
+def test_dispatch_anonymous_on_a_public_project_is_404(
+    client, jobs, dashboards, monkeypatch: pytest.MonkeyPatch
+):
+    """A public project grants a viewer floor, never the owner right a bundle
+    needs: the dispatch answers an anonymous caller exactly as the owner gate
+    answers anyone else (404, nothing enqueued)."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as dashboards_routes_mod
+
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    monkeypatch.setattr(
+        dashboards_routes_mod,
+        "projects_collection",
+        _FakeCollection(
+            [
+                {
+                    "_id": PROJECT_OID,
+                    "is_public": True,
+                    "permissions": {"owners": [], "editors": [], "viewers": []},
+                }
+            ]
+        ),
+    )
+    anon = _user(ObjectId()).model_copy(update={"is_anonymous": True})
+    _as_user(client, anon)
+
+    resp = client.post(f"/serverless/export-static/{DASHBOARD_OID}")
+
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Dashboard not found or access denied"
+    assert task.calls == []
+    assert jobs.docs == {}
+
+
+# ---------------------------------------------------------------------------
 # Status
 # ---------------------------------------------------------------------------
 
@@ -858,12 +962,14 @@ def test_export_task_uploads_bundle(monkeypatch: pytest.MonkeyPatch):
         user=None,
         single_tab=False,
         python_runtime="off",
+        state=None,
     ):
         captured.update(
             dashboard_id=dashboard_id,
             user=user,
             single_tab=single_tab,
             python_runtime=python_runtime,
+            state=state,
         )
         Path(out_path).write_text("<html>hi</html>", encoding="utf-8")
         return _fake_export_result()
@@ -888,6 +994,7 @@ def test_export_task_uploads_bundle(monkeypatch: pytest.MonkeyPatch):
     assert captured["dashboard_id"] == str(DASHBOARD_OID)
     assert captured["user"].id == str(OWNER_OID)
     assert captured["single_tab"] is False  # the family is the default
+    assert captured["state"] is None  # no state sent: the tab's own defaults
     assert result["bucket"] == settings.minio.bucket
     assert result["size_bytes"] == len("<html>hi</html>")
     assert result["tab_count"] == 2
@@ -901,6 +1008,55 @@ def test_export_task_uploads_bundle(monkeypatch: pytest.MonkeyPatch):
     assert put["Bucket"] == settings.minio.bucket
     assert put["ContentType"] == "text/html; charset=utf-8"
     assert put["Body"] == b"<html>hi</html>"
+
+
+def test_export_task_rebuilds_the_analysis_state(monkeypatch: pytest.MonkeyPatch):
+    """A payload carrying a state reaches ``export_static`` as one again."""
+    from depictio.api.v1 import s3 as s3_mod
+    from depictio.api.v1.celery_tasks import export_static_bundle
+    from depictio.serverless import producer_a as producer_a_mod
+
+    captured: dict[str, Any] = {}
+
+    def fake_export_static(dashboard_id, out_path=None, user=None, state=None, **kw):
+        captured["state"] = state
+        Path(out_path).write_text("<html>hi</html>", encoding="utf-8")
+        return _fake_export_result()
+
+    monkeypatch.setattr(producer_a_mod, "export_static", fake_export_static)
+    monkeypatch.setattr(s3_mod, "s3_client", _FakeS3())
+
+    export_static_bundle(
+        {
+            "job_id": "job-2",
+            "dashboard_id": str(DASHBOARD_OID),
+            "user": {
+                "id": str(OWNER_OID),
+                "email": "o@example.com",
+                "is_admin": False,
+                "is_anonymous": False,
+            },
+            "state": {
+                "version": 1,
+                "filters": [
+                    {
+                        "index": "filter-1",
+                        "value": [2021],
+                        "column_name": "year",
+                        "interactive_component_type": "MultiSelect",
+                        "metadata": {"dc_id": "6" * 24, "column_name": "year"},
+                    }
+                ],
+                "context": {"dashboard_id": str(DASHBOARD_OID)},
+            },
+        }
+    )
+
+    state = captured["state"]
+    assert isinstance(state, AnalysisState)
+    assert [f.index for f in state.filters] == ["filter-1"]
+    assert state.filters[0].value == [2021]
+    assert state.context.dashboard_id == str(DASHBOARD_OID)
 
 
 def test_export_task_prunes_expired_bundles_first(monkeypatch: pytest.MonkeyPatch):
@@ -999,17 +1155,30 @@ def test_export_task_propagates_missing_template(monkeypatch: pytest.MonkeyPatch
 def test_template_path_env_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     from depictio.serverless import addons, dist
 
-    assert dist.template_path() == dist.TEMPLATE_PATH
-    assert dist.dist_static_dir() == dist.TEMPLATE_PATH.parent
+    assert dist.runtime_path() == dist.RUNTIME_PATH
+    assert dist.RUNTIME_PATH.name == "combined-runtime.js"
+    assert dist.dist_static_dir() == dist.RUNTIME_PATH.parent
+    assert not dist.is_legacy_template(dist.RUNTIME_PATH)
 
-    custom = tmp_path / "static.html"
-    custom.write_text("__BUNDLE_MANIFEST__", encoding="utf-8")
+    custom = tmp_path / "combined-runtime.js"
+    custom.write_text("/* runtime */", encoding="utf-8")
+    (tmp_path / "combined-runtime.css").write_text("/* css */", encoding="utf-8")
     monkeypatch.setenv(dist.TEMPLATE_PATH_ENV, str(custom))
-    assert dist.template_path() == custom
-    # Everything beside the template moves with it.
+    assert dist.runtime_path() == custom
+    assert dist.runtime_css_path(custom) == tmp_path / "combined-runtime.css"
+    assert dist.runtime_bytes() == len("/* runtime *//* css */")
+    # Everything beside the runtime moves with it.
     assert dist.dist_static_dir() == tmp_path
     monkeypatch.delenv(addons.ADDONS_DIR_ENV, raising=False)
     assert addons.addons_dir() == tmp_path / "addons"
 
+    # A legacy `.html` template is still honoured (token injection).
+    legacy = tmp_path / "static.html"
+    legacy.write_text("__BUNDLE_MANIFEST__", encoding="utf-8")
+    monkeypatch.setenv(dist.TEMPLATE_PATH_ENV, str(legacy))
+    assert dist.is_legacy_template(dist.runtime_path())
+    assert dist.runtime_bytes() == len("__BUNDLE_MANIFEST__")
+    assert dist.dist_static_dir() == tmp_path
+
     monkeypatch.delenv(dist.TEMPLATE_PATH_ENV)
-    assert dist.template_path() == dist.TEMPLATE_PATH
+    assert dist.runtime_path() == dist.RUNTIME_PATH

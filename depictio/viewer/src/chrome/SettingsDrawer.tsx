@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Accordion,
   Anchor,
@@ -21,6 +21,7 @@ import {
   BrandThemePreview,
   canExportStatic,
   isEmptyBrandTheme,
+  startReportPreview,
   useBrandScopeAttributes,
   useIsStaticBundle,
   useResolvedBrandTheme,
@@ -36,6 +37,7 @@ import {
 } from 'depictio-react-core';
 import DashboardInfoBody from './DashboardInfoBody';
 import ShareFiltersField from './ShareFiltersField';
+import ExportFormatCard from './ExportFormatCard';
 import NotebookExportModal, { type ExportChoice } from './NotebookExportModal';
 import {
   SECTION_ICON_STYLE,
@@ -47,6 +49,7 @@ import { useBranding } from '../branding';
 import { useFeedbackLink } from '../feedback';
 import { UiScaleField } from '../components/settings/preferences';
 import { CONTENT_WIDTHS, type ContentWidth, useContentWidthPref } from '../hooks/useContentWidthPref';
+import { useReportEditorEnabled } from '../hooks/useReportEditorEnabled';
 import { useNotebookExportEnabled } from '../hooks/useNotebookExportEnabled';
 import { useStaticExportEnabled } from '../hooks/useStaticExportEnabled';
 
@@ -652,11 +655,14 @@ const FeedbackBlock: React.FC<{ href: string; label: string }> = ({ href, label 
 );
 
 /**
- * "Export" section. The default is ONE file: the rendered report and the
- * interactive dashboard together, behind a "Report | Dashboard" switch. The
- * separate outputs (the dashboard alone, the report alone, the `.qmd` source)
- * are tucked under "Advanced"; the modal falls back to the dashboard alone, and
- * says why, where this server cannot build the combined file.
+ * "Export" section: one card per format, each saying what the file is.
+ *
+ * Report (HTML / PDF) and Report + dashboard are the two a reader reaches for,
+ * so they sit in view; the dashboard alone and the Quarto source are under
+ * "Other formats". The report card also leads to the report editor, and
+ * opening this section renders its preview in the background so the editor
+ * opens on a ready report. Where this server cannot build the combined file
+ * (the static export is off) only the report and its source are offered.
  */
 const ExportBlock: React.FC<{
   dashboard: DashboardData | null;
@@ -668,9 +674,25 @@ const ExportBlock: React.FC<{
     allowed: boolean | null;
     onExportStatic: () => void;
   } | null;
-}> = ({ dashboard, getAnalysisState, staticExport }) => {
+  /** The reader may edit this dashboard's report. */
+  canEditReport?: boolean;
+}> = ({ dashboard, getAnalysisState, staticExport, canEditReport }) => {
   const [opened, setOpened] = useState<ExportChoice | null>(null);
+  const reportEditorEnabled = useReportEditorEnabled();
   const dashboardId = String(dashboard?.dashboard_id ?? dashboard?._id ?? '');
+  const showCustomise = reportEditorEnabled && Boolean(canEditReport) && Boolean(dashboardId);
+
+  // Render the editor's preview when the reader heads for the button (hover
+  // or focus), so it is under way when the page opens; merely opening the
+  // section starts nothing. A refusal changes nothing here: the editor starts
+  // its own render.
+  const prewarmedRef = useRef<string | null>(null);
+  const prewarm = () => {
+    if (!showCustomise || prewarmedRef.current === dashboardId) return;
+    prewarmedRef.current = dashboardId;
+    startReportPreview(dashboardId, { force: false }).catch(() => undefined);
+  };
+
   // The combined file embeds the static runtime: without the static export
   // (switched off on this server) only the report and its source are offered.
   const combinedOffered = Boolean(staticExport);
@@ -683,28 +705,69 @@ const ExportBlock: React.FC<{
       dashboardTitle={dashboard?.title}
       getAnalysisState={getAnalysisState}
       combinedOffered={combinedOffered}
+      canEditReport={showCustomise}
       onExportDashboardOnly={
         staticExport?.allowed && !staticExport.previewing ? staticExport.onExportStatic : undefined
       }
     />
   );
+  const reportCard = (
+    <ExportFormatCard
+      icon="mdi:file-document-outline"
+      title="Report (HTML / PDF)"
+      description="The dashboard written up as a document, with a cover, text around the figures and an optional PDF."
+      testId="export-report-card"
+    >
+      {showCustomise && (
+        <Button
+          component="a"
+          href={`/dashboard-report/${dashboardId}`}
+          onMouseEnter={prewarm}
+          onFocus={prewarm}
+          size="sm"
+          leftSection={<Icon icon="mdi:file-document-edit-outline" width={16} />}
+          data-testid="export-customise-report"
+        >
+          Customise report…
+        </Button>
+      )}
+      <Button
+        variant={showCustomise ? 'light' : 'filled'}
+        size="sm"
+        leftSection={<Icon icon="mdi:notebook-outline" width={16} />}
+        onClick={() => setOpened('report')}
+        disabled={!dashboardId}
+        data-testid="export-report"
+      >
+        Export report
+      </Button>
+    </ExportFormatCard>
+  );
+  const notebookCard = (
+    <ExportFormatCard
+      icon="mdi:language-python"
+      title="Quarto notebook (.qmd)"
+      description="The report's source: a Quarto document to render and keep working in yourself."
+      testId="export-notebook-card"
+    >
+      <Button
+        variant="light"
+        size="sm"
+        leftSection={<Icon icon="mdi:download-outline" width={16} />}
+        onClick={() => setOpened('qmd')}
+        disabled={!dashboardId}
+        data-testid="export-notebook"
+      >
+        Download .qmd
+      </Button>
+    </ExportFormatCard>
+  );
+
   if (!combinedOffered) {
     return (
-      <Stack gap="xs" data-testid="export-section">
-        <Group>
-          <Button
-            leftSection={<Icon icon="mdi:notebook-outline" width={16} />}
-            onClick={() => setOpened('report')}
-            disabled={!dashboardId}
-            data-testid="export-notebook"
-          >
-            Export report
-          </Button>
-        </Group>
-        <Text size="xs" c="dimmed">
-          The report rendered here, or the Quarto document (<code>.qmd</code>) to render and keep
-          working in yourself.
-        </Text>
+      <Stack gap="sm" data-testid="export-section">
+        {reportCard}
+        {notebookCard}
         {modal}
       </Stack>
     );
@@ -712,11 +775,17 @@ const ExportBlock: React.FC<{
   return (
     <Stack gap="sm" data-testid="export-section">
       <Text size="sm" c="dimmed">
-        One HTML file to send: the rendered report with its text and code, and the whole
-        interactive dashboard one click away. It opens without a server.
+        Every format uses the filters you have right now.
       </Text>
-      <Group>
+      {reportCard}
+      <ExportFormatCard
+        icon="mdi:export-variant"
+        title="Report + dashboard"
+        description="One HTML file to send: the rendered report and the whole interactive dashboard one click away. It opens without a server."
+        testId="export-combined-card"
+      >
         <Button
+          size="sm"
           leftSection={<Icon icon="mdi:export-variant" width={16} />}
           onClick={() => setOpened('combined')}
           disabled={!dashboardId}
@@ -724,46 +793,16 @@ const ExportBlock: React.FC<{
         >
           Export report + dashboard
         </Button>
-      </Group>
-      <Accordion variant="contained" data-testid="export-advanced">
-        <Accordion.Item value="advanced">
-          <Accordion.Control data-testid="export-advanced-toggle">
-            <Text size="sm" fw={500}>
-              Advanced: separate outputs
-            </Text>
-          </Accordion.Control>
-          <Accordion.Panel>
-            <Stack gap="md">
-              {staticExport && (
-                <ExportStaticBlock
-                  dashboardId={dashboardId}
-                  previewing={staticExport.previewing}
-                  allowed={staticExport.allowed}
-                  onExportStatic={staticExport.onExportStatic}
-                />
-              )}
-              <Stack gap="xs">
-                <Group>
-                  <Button
-                    variant="light"
-                    size="sm"
-                    leftSection={<Icon icon="mdi:notebook-outline" width={16} />}
-                    onClick={() => setOpened('qmd')}
-                    disabled={!dashboardId}
-                    data-testid="export-notebook"
-                  >
-                    Report only, or its source
-                  </Button>
-                </Group>
-                <Text size="xs" c="dimmed">
-                  The report rendered here without the dashboard, or the Quarto document (
-                  <code>.qmd</code>) to render and keep working in yourself.
-                </Text>
-              </Stack>
-            </Stack>
-          </Accordion.Panel>
-        </Accordion.Item>
-      </Accordion>
+      </ExportFormatCard>
+      {staticExport && (
+        <ExportStaticBlock
+          dashboardId={dashboardId}
+          previewing={staticExport.previewing}
+          allowed={staticExport.allowed}
+          onExportStatic={staticExport.onExportStatic}
+        />
+      )}
+      {notebookCard}
       {modal}
     </Stack>
   );
@@ -828,28 +867,28 @@ const ExportStaticBlock: React.FC<{
 }> = ({ dashboardId, previewing, allowed, onExportStatic }) => {
   const reason = previewing ? PREVIEW_HINT : allowed === false ? OWNER_GATE_HINT : null;
   return (
-    <Stack gap="xs" data-testid="export-static-section">
-      {/* The button sizes to its label; only the caption spans the section, so
-          it stays readable instead of wrapping at button width. */}
-      <Group>
-        <Tooltip label={reason} disabled={!reason} withArrow>
-          <Button
-            leftSection={<Icon icon="mdi:export-variant" width={16} />}
-            variant="light"
-            size="sm"
-            onClick={onExportStatic}
-            disabled={!dashboardId || previewing || allowed !== true}
-            data-testid="export-static-btn"
-          >
-            Dashboard only
-          </Button>
-        </Tooltip>
-      </Group>
-      <Text size="xs" c="dimmed">
-        {reason ??
-          'The interactive dashboard alone, as one self-contained HTML file that opens without a server.'}
-      </Text>
-    </Stack>
+    <ExportFormatCard
+      icon="mdi:monitor-dashboard"
+      title="Dashboard only (serverless)"
+      description={
+        reason ??
+        'The interactive dashboard alone, as one self-contained HTML file that opens without a server.'
+      }
+      testId="export-static-section"
+    >
+      <Tooltip label={reason} disabled={!reason} withArrow>
+        <Button
+          leftSection={<Icon icon="mdi:export-variant" width={16} />}
+          variant="light"
+          size="sm"
+          onClick={onExportStatic}
+          disabled={!dashboardId || previewing || allowed !== true}
+          data-testid="export-static-btn"
+        >
+          Dashboard only
+        </Button>
+      </Tooltip>
+    </ExportFormatCard>
   );
 };
 
@@ -1058,6 +1097,9 @@ interface SettingsDrawerProps {
   /** A past version is shown (`?version=`): the export action is disabled
    *  (never hidden) with the reason, since a build exports the live state. */
   previewing?: boolean;
+  /** The reader may edit the dashboard's report: the Export section then
+   *  leads to the report editor. */
+  canEditReport?: boolean;
 }
 
 /** What the "Your filters" section needs from the viewer. */
@@ -1120,6 +1162,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   onExportStatic,
   getAnalysisState,
   previewing = false,
+  canEditReport = false,
 }) => {
   // Static bundles are offline snapshots: there is no API to preflight or build
   // against, so the export is absent rather than disabled. Inert (false) in
@@ -1290,6 +1333,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
             <ExportBlock
               dashboard={dashboard}
               getAnalysisState={getAnalysisState}
+              canEditReport={canEditReport}
               staticExport={
                 showStaticExport && onExportStatic
                   ? { previewing, allowed: staticExportAllowed, onExportStatic }

@@ -28,6 +28,7 @@ from typing import Any
 from depictio.notebook.qmd_safe import defuse, one_line
 from depictio.notebook.qmd_safe import esc as _esc
 from depictio.notebook.qmd_safe import typst_str as _typst_str
+from depictio.notebook.text import PLACEHOLDER
 
 from .report_theme import SCHEME_TOGGLE
 from .resources import script, style
@@ -163,7 +164,11 @@ def _about_item(body: str, *, name: str = "", index: str = "", pos: int | None =
         attrs += f' data-dpx-pos="{pos}"'
     longest = max((len(m.group(0)) for m in re.finditer(r":{3,}", body)), default=2)
     fence = ":" * max(3, longest + 1)
-    return f"{fence} {{{attrs}}}\n{body}\n{fence}"
+    # A blank line before the closing fence: pandoc reads a fence that follows
+    # a paragraph line as part of that paragraph, and the note then never
+    # closes, swallowing every tile after it (and a landscape PDF page inside
+    # it fails the whole PDF).
+    return f"{fence} {{{attrs}}}\n{body}\n\n{fence}"
 
 
 def _attr(value: str) -> str:
@@ -215,10 +220,19 @@ _STEPS_OPEN = re.compile(r"^(\s*):::+\s*\{?\.?steps\}?\s*$")
 _DIV_CLOSE = re.compile(r"^\s*:::+\s*$")
 
 
+#: What a step's ``[Settings](params:x)`` link shows: the live stepper's icon.
+PARAMS_ICON = "mdi:tune-variant"
+
+_LINK_PARTS = re.compile(r"^\[(?P<label>[^\]\n]+)\]\((?P<target>.+)\)$")
+
+
 def stepper_markdown(
     markdown: str,
     icon_html: Callable[[str], str],
     rewrite_link: Callable[[str], str] = lambda s: s,
+    *,
+    accent: str | None = None,
+    step_link: Callable[[str, str], str | None] | None = None,
 ) -> str:
     """Each ``::: steps`` list item as the stepper's parts.
 
@@ -228,6 +242,13 @@ def stepper_markdown(
     stylesheet lays out. ``rewrite_link`` turns each step link into the
     document's; one it turns into plain text (a target the document lacks) is
     dropped. Everything else in the text is left as written.
+
+    ``accent`` colours the marks (the tile's own accent, as the live stepper's
+    ``accentColor``); without it they take the page's. ``step_link(label,
+    target)`` draws a step's link as the live stepper does, an icon alone with
+    its name as a tooltip: it returns the HTML, ``""`` for a target the
+    document lacks (the link goes), or ``None`` to leave the link to
+    ``rewrite_link`` (an external one stays a text link).
     """
     lines = markdown.split("\n")
     inside = False
@@ -235,7 +256,8 @@ def stepper_markdown(
         if not inside:
             if _STEPS_OPEN.match(line):
                 inside = True
-                lines[i] = "::: {.steps .dpx-steps}"
+                style = f' style="--dpx-accent: {_esc(accent, quote=True)}"' if accent else ""
+                lines[i] = f"::: {{.steps .dpx-steps{style}}}"
             continue
         if _DIV_CLOSE.match(line):
             inside = False
@@ -244,7 +266,16 @@ def stepper_markdown(
         if not m or not (m.group("icon") or m.group("label")):
             continue
         bits = [b.strip() for b in re.split(r"\s+·\s+", m.group("rest").strip()) if b.strip()]
-        links = [r for r in (rewrite_link(b) for b in bits if _LINK_ONLY.match(b)) if "](" in r]
+        links = []
+        for bit in (b for b in bits if _LINK_ONLY.match(b)):
+            parts = _LINK_PARTS.match(bit)
+            drawn = step_link(parts["label"], parts["target"]) if step_link and parts else None
+            if drawn is None:
+                drawn = rewrite_link(bit)
+                if "](" not in drawn:
+                    drawn = ""
+            if drawn:
+                links.append(drawn)
         text = " · ".join(b for b in bits if not _LINK_ONLY.match(b))
         mark = icon_html(m.group("icon")) if m.group("icon") else ""
         # Spaces between the parts: a page without the stylesheet (the PDF)
@@ -258,6 +289,318 @@ def stepper_markdown(
             head.append(f'<span class="dpx-step-text">{text}</span>')
         lines[i] = m.group("num") + " ".join(head)
     return "\n".join(lines)
+
+
+# ── Findings and tab tiles ───────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class TabLinkInfo:
+    """What a tile that cites a tab draws of it (``TabLinkTarget``, ``tabLinks.ts``).
+
+    ``None`` stands for a tab the document does not hold: its link, its tile,
+    its finding's way in are all left out, as the live renderer leaves them.
+    """
+
+    label: str
+    #: The tab's heading id in this document.
+    anchor: str
+    #: Iconify id, as the sidebar shows it.
+    icon: str | None
+    #: A CSS colour: the tab's own, as the sidebar shows it.
+    color: str
+    #: The tab's subtitle, the question it answers.
+    description: str | None = None
+
+
+TabLookup = Callable[[str], TabLinkInfo | None]
+
+_LIST_ITEM = re.compile(r"^ {0,1}(?P<marker>[-*+]|\d+[.)])[ \t]+(?P<text>\S.*)$")
+_ANY_MARKER = re.compile(r"^\s*(?:[-*+]|\d+[.)])[ \t]+")
+_FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
+_STEPS_DIV = re.compile(r"^\s*:::+\s*(?:\{[^}]*\.steps\b[^}]*\}|\{?\.?steps\}?)\s*$")
+_HEADING_LINE = re.compile(r"^#{1,6}\s")
+
+
+def _list_at(lines: list[str], i: int) -> tuple[int, bool, list[str]] | None:
+    """The markdown list that starts at ``lines[i]``: where it ends (exclusive),
+    whether it is numbered, and each item as one line of text.
+
+    ``None`` for anything that is not a plain one-level list (a nested list is
+    left to pandoc: the live renderer reads only the top level too).
+    """
+    first = _LIST_ITEM.match(lines[i])
+    if not first:
+        return None
+    ordered = first["marker"][0].isdigit()
+    items: list[str] = []
+    j = i
+    while j < len(lines):
+        m = _LIST_ITEM.match(lines[j])
+        if m:
+            if m["marker"][0].isdigit() != ordered:
+                break
+            items.append(m["text"].strip())
+            j += 1
+            continue
+        line = lines[j]
+        if not line.strip():
+            k = j
+            while k < len(lines) and not lines[k].strip():
+                k += 1
+            nxt = _LIST_ITEM.match(lines[k]) if k < len(lines) else None
+            if nxt and nxt["marker"][0].isdigit() == ordered:
+                j = k
+                continue
+            break
+        if line[0] in " \t":
+            if _ANY_MARKER.match(line):
+                return None
+            items[-1] += " " + line.strip()
+            j += 1
+            continue
+        break
+    return j, ordered, items
+
+
+def _map_lists(
+    markdown: str,
+    convert: Callable[[list[str], bool], list[str] | None],
+    *,
+    drop_heading_when_empty: bool = False,
+) -> str:
+    """``markdown`` with every plain list ``convert`` accepts replaced by its lines.
+
+    ``convert(items, ordered)`` returns the replacement, or ``None`` to leave
+    the list as written. Stepper lists and fenced code are never read as lists.
+    An empty replacement removes the list, and (``drop_heading_when_empty``)
+    the heading that announced it.
+    """
+    lines = markdown.split("\n")
+    out: list[str] = []
+    i = 0
+    fence: str | None = None
+    while i < len(lines):
+        line = lines[i]
+        f = _FENCE.match(line)
+        if fence is not None or f:
+            if f and fence is None:
+                fence = f.group(1)[0]
+            elif f and f.group(1)[0] == fence:
+                fence = None
+            out.append(line)
+            i += 1
+            continue
+        if _STEPS_DIV.match(line):
+            j = i + 1
+            while j < len(lines) and not _DIV_CLOSE.match(lines[j]):
+                j += 1
+            out.extend(lines[i : j + 1])
+            i = j + 1
+            continue
+        got = _list_at(lines, i)
+        if got is None:
+            out.append(line)
+            i += 1
+            continue
+        end, ordered, items = got
+        repl = convert(items, ordered)
+        if repl is None:
+            out.extend(lines[i:end])
+        elif repl:
+            out.extend(repl)
+        elif drop_heading_when_empty:
+            while out and not out[-1].strip():
+                out.pop()
+            if out and _HEADING_LINE.match(out[-1]):
+                out.pop()
+        i = end
+    return "\n".join(out)
+
+
+@dataclass(frozen=True)
+class StatRow:
+    """One result of a findings list: ``**41%** Claim - context [Tab](tab:Name)``."""
+
+    stat: str
+    claim: str
+    context: str | None
+    #: The trailing link as written, ``[label](target)``.
+    link: str | None
+
+
+_STAT_HEAD = re.compile(r"^\*\*([^*\n]+)\*\*\s+(\S.*)$")
+#: The longest a figure runs: a number and its unit, not a phrase.
+_STAT_MAX = 16
+_TRAILING_LINK = re.compile(r"\s*(\[[^\]\n]+\]\((?:[^()\n]|\([^()\n]*\))+\))\s*$")
+_CONTEXT_SPLIT = re.compile(r"\s+[—–]\s+")
+
+
+def parse_stat_row(item: str) -> StatRow | None:
+    """A list item as a result row, or ``None`` (``parseStatRow``, ``blockMarkdown.ts``).
+
+    A bold figure that holds a digit (a ``{{value}}`` counts as the number it
+    will show), the claim, then a context after a dash and/or a closing link.
+    The figure alone is not enough: ``**16S** amplicons`` is a fact, not a result.
+    """
+    m = _STAT_HEAD.match(item.strip())
+    if not m:
+        return None
+    figure = PLACEHOLDER.sub("0", m.group(1).strip())
+    if len(figure) > _STAT_MAX or not re.search(r"[0-9]", figure):
+        return None
+    rest = m.group(2)
+    tail = _TRAILING_LINK.search(rest)
+    link = tail.group(1) if tail else None
+    if tail:
+        rest = rest[: tail.start()]
+    claim, *ctx = _CONTEXT_SPLIT.split(rest)
+    context = " — ".join(ctx).strip() if ctx else None
+    if not claim.strip() or (not link and not context):
+        return None
+    return StatRow(m.group(1).strip(), claim.strip(), context, link)
+
+
+def _stat_rows(items: list[str]) -> list[StatRow] | None:
+    rows = [parse_stat_row(item) for item in items]
+    return [r for r in rows if r] if rows and all(rows) else None
+
+
+def _finding_link(
+    row: StatRow,
+    tab_link: TabLookup,
+    icon_html: Callable[[str | None, str], str] | None = None,
+) -> tuple[str, str]:
+    """A finding's way in, as markdown (the tab's icon before its name, as the
+    live row), and its tab's colour (both ``""`` when it has none)."""
+    parts = _LINK_PARTS.match(row.link or "")
+    if not parts:
+        return "", ""
+    if not parts["target"].startswith("tab:"):
+        return row.link or "", ""
+    info = tab_link(parts["target"][4:].strip())
+    # A tab the document lacks: no link, as the live row.
+    if not info:
+        return "", ""
+    icon = icon_html(info.icon, info.color) if icon_html else ""
+    mark = f'<span class="dpx-finding-link-icon" aria-hidden="true">{icon}</span>' if icon else ""
+    return f"{mark}[{parts['label']}](#{info.anchor})", info.color
+
+
+def findings_markdown(
+    markdown: str,
+    *,
+    tab_link: TabLookup,
+    icon_html: Callable[[str | None, str], str] | None = None,
+) -> str:
+    """Each findings list as ``FindingsList`` draws it: the figure large in its
+    tab's colour, the claim in bold over its dimmed context, the tab on the right.
+
+    Pandoc divs and spans (the markdown inside a claim stays markdown); the
+    stylesheet lays the rows out on one grid. Only a list whose every item reads
+    as a result is drawn so, as live; any other list is left alone.
+    """
+
+    def convert(items: list[str], ordered: bool) -> list[str] | None:
+        rows = _stat_rows(items)
+        if rows is None:
+            return None
+        out = ["", "::: {.dpx-findings}", ""]
+        for row in rows:
+            link, color = _finding_link(row, tab_link, icon_html)
+            style = f' style="color: {_esc(color, quote=True)}"' if color else ""
+            spans = [
+                f"[{row.stat}]{{.dpx-finding-stat{style}}}",
+                f"[{row.claim}]{{.dpx-finding-claim}}",
+            ]
+            if row.context:
+                spans.append(f"[{row.context}]{{.dpx-finding-context}}")
+            if link:
+                tint = f' style="--dpx-link-color: {_esc(color, quote=True)}"' if color else ""
+                spans.append(f"[{link}]{{.dpx-finding-link{tint}}}")
+            out += ["::: {.dpx-finding}", " ".join(spans), "", ":::", ""]
+        return [*out, ":::", ""]
+
+    return _map_lists(markdown, convert)
+
+
+@dataclass(frozen=True)
+class TabTile:
+    """One item of a tab-tile list: ``[Label](tab:Name)`` and what follows it."""
+
+    label: str
+    tab: str
+    #: Text after the link (``: ...`` or a dash), or ``None`` to use the tab's own.
+    text: str | None
+
+
+_TAB_TILE = re.compile(
+    r"^\[([^\]\n]+)\]\(tab:((?:[^()\n]|\([^()\n]*\))+)\)\s*"
+    r"(?:[:—–-]\s*(.*\S))?\s*$"
+)
+
+
+def parse_tab_tile(item: str) -> TabTile | None:
+    """A list item as a tab tile, or ``None`` (``parseTabTile``, ``tabLinks.ts``)."""
+    m = _TAB_TILE.match(item.strip())
+    return (
+        TabTile(m.group(1).strip(), m.group(2).strip(), (m.group(3) or "").strip() or None)
+        if m
+        else None
+    )
+
+
+def _tab_tiles(items: list[str]) -> list[TabTile] | None:
+    tiles = [parse_tab_tile(item) for item in items]
+    return [t for t in tiles if t] if tiles and all(tiles) else None
+
+
+def tab_tiles_markdown(
+    markdown: str,
+    *,
+    tab_link: TabLookup,
+    icon_html: Callable[[str | None, str], str],
+) -> str:
+    """Each list whose every item is a tab link as ``TabTiles`` draws it: the
+    tab's icon in its colour, its name, and its description (the author's own
+    line after the link wins). A numbered list numbers its tiles.
+
+    A tab the document lacks is left out, numbering included; a list with none
+    left goes, and the heading announcing it.
+    """
+
+    def convert(items: list[str], ordered: bool) -> list[str] | None:
+        tiles = _tab_tiles(items)
+        if tiles is None:
+            return None
+        out = ["", "::: {.dpx-tab-tiles}", ""]
+        n = 0
+        for tile in tiles:
+            info = tab_link(tile.tab)
+            if info is None:
+                continue
+            n += 1
+            line = tile.text if tile.text is not None else _esc(info.description or "")
+            parts = []
+            if ordered:
+                parts.append(f"[{n:02d}]{{.dpx-tab-tile-num}}")
+            icon = icon_html(info.icon, info.color)
+            if icon:
+                parts.append(f'<span class="dpx-tab-tile-icon" aria-hidden="true">{icon}</span>')
+            parts.append(f"[{tile.label}](#{info.anchor}){{.dpx-tab-tile-name}}")
+            if line:
+                parts.append(f"[{line}]{{.dpx-tab-tile-line}}")
+            style = f' style="--dpx-tile-color: {_esc(info.color, quote=True)}"'
+            out += [
+                f"::: {{.dpx-tab-tile{' .dpx-numbered' if ordered else ''}{style}}}",
+                " ".join(parts),
+                "",
+                ":::",
+                "",
+            ]
+        return [] if n == 0 else [*out, ":::", ""]
+
+    return _map_lists(markdown, convert, drop_heading_when_empty=True)
 
 
 # ── Header bar and footer ────────────────────────────────────────────────────
@@ -647,10 +990,12 @@ def _plain(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip(" ·")
 
 
-def _typst_icon(svg: str | None, color: str) -> str:
+def _typst_icon(svg: str | None, color: str, opacity: float | None = None) -> str:
     if not svg:
         return "none"
     out = svg.replace("currentColor", color)
+    if opacity is not None:
+        out = out.replace("<svg", f'<svg opacity="{opacity}"', 1)
     if "xmlns=" not in out:
         out = out.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"', 1)
     return _typst_str(out)
@@ -664,22 +1009,97 @@ def _html_only(markdown: str) -> str:
     return f':::: {{.content-visible when-format="html"}}\n{markdown}\n::::'
 
 
+_MONO_INK = "#495057"
+_QUIET = "#868e96"
+
+
+def _typst_array(items: list[str]) -> str:
+    return "(" + ", ".join(items) + ("," if items else "") + ")"
+
+
+def _typst_findings(rows: list[StatRow], tab_link: TabLookup | None, mono: bool) -> str:
+    entries = []
+    for row in rows:
+        label, color = "", ""
+        parts = _LINK_PARTS.match(row.link or "")
+        if parts and tab_link and parts["target"].startswith("tab:"):
+            info = tab_link(parts["target"][4:].strip())
+            label, color = (_plain(parts["label"]), info.color) if info else ("", "")
+        elif parts and not parts["target"].startswith("tab:"):
+            label = _plain(parts["label"])
+        paint = "none" if mono or not color else f"rgb({_typst_str(color)})"
+        entries.append(
+            f"({_typst_str(_plain(row.stat))}, {_typst_str(_plain(row.claim))}, "
+            f"{_typst_str(_plain(row.context or ''))}, {_typst_str(label)}, {paint})"
+        )
+    return f"#dpx-findings({_typst_array(entries)})"
+
+
+def _typst_tab_tiles(
+    tiles: list[TabTile],
+    ordered: bool,
+    tab_link: TabLookup,
+    icon_svg: Callable[[str], str | None],
+    mono: bool,
+) -> str | None:
+    entries = []
+    for tile in tiles:
+        info = tab_link(tile.tab)
+        if info is None:
+            continue
+        color = _MONO_INK if mono else info.color
+        icon = _typst_icon(icon_svg(info.icon) if info.icon else None, color, 0.4)
+        line = _plain(tile.text) if tile.text is not None else (info.description or "")
+        num = f"{len(entries) + 1:02d}" if ordered else ""
+        entries.append(
+            f"({icon}, rgb({_typst_str(color)}), {_typst_str(_plain(tile.label))}, "
+            f"{_typst_str(line)}, {_typst_str(num)})"
+        )
+    return f"#dpx-tab-tiles({_typst_array(entries)})" if entries else None
+
+
 def pdf_structures(
     markdown: str,
     icon_svg: Callable[[str], str | None],
     *,
     accent: str,
     mono: bool = False,
+    tab_link: TabLookup | None = None,
+    has_params: bool = True,
 ) -> str:
-    """A text tile's stepper (``::: steps``) and fact lists ("The run": icon,
-    bold label, value) twice: as written, for the page, and as the PDF's
-    ``dpx-steps`` / ``dpx-facts``, which pandoc's own list would flatten.
+    """A text tile's stepper (``::: steps``), fact lists ("The run": icon,
+    bold label, value), findings lists and tab-tile lists twice: as written,
+    for the page, and as the PDF's ``dpx-steps`` / ``dpx-facts`` /
+    ``dpx-findings`` / ``dpx-tab-tiles``, which pandoc's own list would flatten.
     The values (``{{name}}``) stay placeholders, filled when the document runs.
     """
     lines = markdown.split("\n")
     out: list[str] = []
     i = 0
-    disc = "#495057" if mono else accent
+    disc = _MONO_INK if mono else accent
+
+    def step_links(bits: list[str]) -> str:
+        """A step's links as icons beside its label (the live stepper's), none
+        for a target the document lacks."""
+        icons = []
+        for bit in bits:
+            parts = _LINK_PARTS.match(bit)
+            if not parts or not _LINK_ONLY.match(bit):
+                continue
+            target = parts["target"]
+            if target.startswith("params:"):
+                svg, color = (icon_svg(PARAMS_ICON) if has_params else None), _QUIET
+            elif target.startswith("tab:") and tab_link is not None:
+                info = tab_link(target[4:].strip())
+                svg = icon_svg(info.icon) if info and info.icon else None
+                color = _MONO_INK if mono or not info else info.color
+            else:
+                continue
+            icon = _typst_icon(svg, color)
+            if icon != "none":
+                icons.append(icon)
+        return _typst_array(icons)
+
     while i < len(lines):
         line = lines[i]
         if _STEPS_OPEN.match(line):
@@ -698,7 +1118,8 @@ def pdf_structures(
                     icon_svg(m.group("icon")) if m.group("icon") else None, "#ffffff"
                 )
                 steps.append(
-                    f"({icon}, {_typst_str(_plain(m.group('label') or ''))}, {_typst_str(text)})"
+                    f"({icon}, {_typst_str(_plain(m.group('label') or ''))}, {_typst_str(text)}, "
+                    f"{step_links(bits)})"
                 )
             out.append(_html_only("\n".join(block)))
             if steps:
@@ -708,6 +1129,21 @@ def pdf_structures(
             i = j + 1
             continue
         m = _FACT_ITEM.match(line)
+        got = None if m else _list_at(lines, i)
+        if got is not None:
+            end, ordered, items = got
+            code = None
+            if rows := _stat_rows(items):
+                code = _typst_findings(rows, tab_link, mono)
+            elif (tiles := _tab_tiles(items)) and tab_link is not None:
+                code = _typst_tab_tiles(tiles, ordered, tab_link, icon_svg, mono)
+            if code:
+                out.append(_html_only("\n".join(lines[i:end])))
+                out.append(_typst_only(code))
+            else:
+                out.extend(lines[i:end])
+            i = end
+            continue
         if m and "{{legend:" not in line:
             j = i
             facts = []

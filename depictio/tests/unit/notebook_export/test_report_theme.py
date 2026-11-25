@@ -175,7 +175,7 @@ def test_the_contents_title_no_longer_folds_on_its_own(ampliseq_tabs):
     _, body = _split(generate_qmd(_plan(ampliseq_tabs)))
     # One control for the list as a whole: the theme's button.
     assert "head.classList.toggle('dpx-folded')" not in body
-    assert "depictio-report:toc-collapsed" in CHROME_JS
+    assert "depictio-report:toc-mode" in CHROME_JS
 
 
 def test_a_failed_tiles_caption_drops_its_data_badge():

@@ -72,7 +72,7 @@ def gene_asset_path(assembly: str, template_dir: Path | None = None) -> Path | N
     The checked-in source first (a checkout and the images carry it), then the
     copy Vite puts in the SPA build (``viewer/dist/assets/genomes``, the one a
     wheel carries: shipping ``public/`` too counted every table twice), then the
-    one beside the static template (``dist-static/assets/genomes``).
+    one beside the runtime (``dist-static/assets/genomes``).
     """
     name = f"{assembly}.genes.json"
     candidates = [_SOURCE_DIR / name, _DIST_DIR / name]

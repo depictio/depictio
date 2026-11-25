@@ -2,39 +2,43 @@
 /**
  * Build openable demo pages from the static-runtime bundle.
  *
- * Reads the demo registry (demo/manifests.json), injects each manifest into
- * the built template (dist-static/static.html) and writes a self-contained
+ * Reads the demo registry (demo/manifests.json), composes each manifest into a
+ * bundle page from the built runtime (dist-static/combined-runtime.{js,css},
+ * the producers' composition) and writes a self-contained
  * site under dist-static/site/: one demo-<id>.html per registry entry plus an
  * index.html linking them. The site is what CI uploads as an artifact and what
  * the GH Pages workflow publishes — each serverless phase appends a registry
  * entry, earlier demos stay, so the evolution is browsable side by side.
  *
- * Injection matches the Python producers (depictio/catalog/payload.py::_inject):
- * replace every token occurrence, escape `</` in the JSON blob. The function
- * replacement form is required — a plain string would interpret `$` sequences.
+ * The page matches the Python producers (depictio/serverless/bundle_html.py):
+ * `</` and `<!--` are escaped in the JSON blob, the add-ons go before the
+ * runtime's script.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { applyAddons } from './addons.mjs';
-import { REPORT_TOKEN, composeRuntime, readCombinedRuntime } from './combined-runtime.mjs';
+import { addonsHtml } from './addons.mjs';
+import {
+  REPORT_TOKEN,
+  composeBundle,
+  composeRuntime,
+  readCombinedRuntime,
+} from './combined-runtime.mjs';
 
 const VIEWER_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const TEMPLATE = join(VIEWER_DIR, 'dist-static', 'static.html');
 const REGISTRY = join(VIEWER_DIR, 'demo', 'manifests.json');
 const SITE_DIR = join(VIEWER_DIR, 'dist-static', 'site');
-const TOKEN = '__BUNDLE_MANIFEST__';
 
-if (!existsSync(TEMPLATE)) {
+const runtime = readCombinedRuntime(join(VIEWER_DIR, 'dist-static'));
+if (!runtime) {
   console.error(
-    'dist-static/static.html not found — run `pnpm run build:static` first ' +
+    'dist-static/combined-runtime.{js,css} not found — run `pnpm run build:static` first ' +
       '(or `pnpm run demo:static`, which chains both).',
   );
   process.exit(1);
 }
 
-const template = readFileSync(TEMPLATE, 'utf-8');
 const registry = JSON.parse(readFileSync(REGISTRY, 'utf-8'));
 mkdirSync(SITE_DIR, { recursive: true });
 
@@ -45,27 +49,30 @@ const entries = [];
 for (const entry of registry) {
   const manifestPath = resolve(VIEWER_DIR, entry.manifest);
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
-  const blob = JSON.stringify(manifest).replace(/<\//g, '<\\/');
-  // Add-ons first (the producers' order): the manifest names the ones it needs.
-  const withAddons = applyAddons(template, (manifest.addons ?? []).map((a) => a.name));
-  const html = withAddons.replaceAll(TOKEN, () => blob);
+  // The manifest names the add-ons it needs; they precede the runtime's script.
+  const html = composeBundle({
+    ...runtime,
+    manifest,
+    title: manifest.dashboard?.title,
+    addons: addonsHtml((manifest.addons ?? []).map((a) => a.name)),
+  });
   const out = join(SITE_DIR, `demo-${entry.id}.html`);
   writeFileSync(out, html);
   entries.push({ ...entry, file: `demo-${entry.id}.html`, bytes: html.length });
   console.log(`demo-${entry.id}.html: ${(html.length / 1e6).toFixed(2)} MB — ${entry.title}`);
 }
 
-// The "with structure viewer" template: the base runtime plus the 3Dmol.js
+// The "with structure viewer" floor: the base runtime plus the 3Dmol.js
 // add-on, i.e. the floor of any bundle holding a molecule_3d tile. CI checks it
 // against its own byte budget beside the base one.
 writeFileSync(
   join(VIEWER_DIR, 'dist-static', 'static-structure.html'),
-  applyAddons(template, ['3dmol']),
+  composeBundle({ ...runtime, manifest: null, addons: addonsHtml(['3dmol']) }),
 );
 // Likewise the genome-browser floor: the base runtime plus the JBrowse add-on.
 writeFileSync(
   join(VIEWER_DIR, 'dist-static', 'static-genome.html'),
-  applyAddons(template, ['jbrowse']),
+  composeBundle({ ...runtime, manifest: null, addons: addonsHtml(['jbrowse']) }),
 );
 
 // The runtime a report embeds (vite.combined.config.ts), in a report's two
@@ -75,8 +82,7 @@ writeFileSync(
 // exported state (species = Adelie); the combined file adds the dashboard
 // behind a "Report | Dashboard" switch. Plus the floor every report pays for
 // the runtime, which CI checks against its own byte budget.
-const runtime = readCombinedRuntime(join(VIEWER_DIR, 'dist-static'));
-if (runtime) {
+{
   writeFileSync(
     join(VIEWER_DIR, 'dist-static', 'combined-runtime-floor.html'),
     composeRuntime({ ...runtime, manifest: null, output: 'combined' }),
@@ -128,8 +134,6 @@ if (runtime) {
     });
     console.log(`${page.id}.html: ${(page.html.length / 1e6).toFixed(2)} MB — ${page.title}`);
   }
-} else {
-  console.warn('static runtime not built (vite.combined.config.ts): the report demos are skipped');
 }
 
 const sha = process.env.GITHUB_SHA?.slice(0, 8) ?? 'local';

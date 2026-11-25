@@ -52,6 +52,210 @@
       "title": "AggSpec",
       "type": "object"
     },
+    "AnalysisFilter": {
+      "additionalProperties": true,
+      "description": "One entry of the viewer's ``InteractiveFilter[]`` (``api.ts``).\n\nGroup projections travel here too, exactly as the render endpoints see\nthem: ``source == \"group_filter\"`` and an index prefixed with\n``__depictio_group__:``. Keeping them in the same list means the server\nnever has to re-implement the viewer's ``groupsToFilters``.",
+      "properties": {
+        "column_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column Name"
+        },
+        "filter_expr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filter Expr"
+        },
+        "index": {
+          "title": "Index",
+          "type": "string"
+        },
+        "interactive_component_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interactive Component Type"
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AnalysisFilterMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
+        "value": {
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "title": "AnalysisFilter",
+      "type": "object"
+    },
+    "AnalysisFilterMetadata": {
+      "additionalProperties": true,
+      "description": "The ``metadata`` block the viewer attaches to a filter.\n\n``dc_id`` is what cross-DC link resolution keys on server-side: a filter\nwithout it is treated as global (applied wherever its column exists).",
+      "properties": {
+        "column_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column Name"
+        },
+        "dc_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dc Id"
+        },
+        "filter_expr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filter Expr"
+        },
+        "interactive_component_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interactive Component Type"
+        },
+        "selection_column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selection Column"
+        }
+      },
+      "title": "AnalysisFilterMetadata",
+      "type": "object"
+    },
+    "AnalysisGroup": {
+      "description": "A saved selection group (``SelectionGroup`` in ``selectionGroups.ts``).",
+      "properties": {
+        "color": {
+          "title": "Color",
+          "type": "string"
+        },
+        "column_name": {
+          "title": "Column Name",
+          "type": "string"
+        },
+        "created_at": {
+          "default": 0,
+          "title": "Created At",
+          "type": "integer"
+        },
+        "dc_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dc Id"
+        },
+        "filter_active": {
+          "default": false,
+          "title": "Filter Active",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "values": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "color",
+        "column_name"
+      ],
+      "title": "AnalysisGroup",
+      "type": "object"
+    },
     "AndPred": {
       "additionalProperties": false,
       "description": "``{\"and\": [<Pred>, ...]}`` \u2014 the field is aliased because ``and`` is a keyword.",
@@ -97,6 +301,19 @@
       "additionalProperties": false,
       "description": "Everything the runtime needs to refill a ui-mode figure (RFC \u00a74).",
       "properties": {
+        "color_col": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The discrete column the figure is coloured by (px ``color``), None when it has none. Lets the runtime recolour the figure by selection groups: the traces of that colour are merged and re-cut by the group a row belongs to",
+          "title": "Color Col"
+        },
         "group_cols": {
           "description": "px grouping columns in order [color, symbol, line_dash, line_group, pattern_shape, facet_row, facet_col]",
           "items": {
@@ -269,6 +486,35 @@
         "col"
       ],
       "title": "ColRef",
+      "type": "object"
+    },
+    "ColorBy": {
+      "description": "The dashboard-global \"Colour by\" override.",
+      "properties": {
+        "column_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column Name"
+        },
+        "kind": {
+          "default": "none",
+          "enum": [
+            "none",
+            "groups",
+            "column"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "ColorBy",
       "type": "object"
     },
     "ColumnSpec": {
@@ -596,6 +842,50 @@
       "title": "GroupByOp",
       "type": "object"
     },
+    "InitialGrouping": {
+      "additionalProperties": false,
+      "description": "The grouping half of an analysis state a bundle or report opens on.\n\nThe shapes are the analysis state's own (``analysis_state.py``), so a\nproducer copies them across and the runtime reads the viewer's types.\n``split_panels`` is what the viewer derived from the display when the state\nwas built; the runtime derives its own from ``groups`` and ``display_mode``.",
+      "properties": {
+        "color_by": {
+          "$ref": "#/$defs/ColorBy"
+        },
+        "display_mode": {
+          "default": "color",
+          "enum": [
+            "color",
+            "facet"
+          ],
+          "title": "Display Mode",
+          "type": "string"
+        },
+        "groups": {
+          "items": {
+            "$ref": "#/$defs/AnalysisGroup"
+          },
+          "title": "Groups",
+          "type": "array"
+        },
+        "show_other": {
+          "default": true,
+          "title": "Show Other",
+          "type": "boolean"
+        },
+        "show_overall": {
+          "default": true,
+          "title": "Show Overall",
+          "type": "boolean"
+        },
+        "split_panels": {
+          "items": {
+            "$ref": "#/$defs/SplitPanel"
+          },
+          "title": "Split Panels",
+          "type": "array"
+        }
+      },
+      "title": "InitialGrouping",
+      "type": "object"
+    },
     "IsInArgs": {
       "additionalProperties": false,
       "description": "Argument of ``is_in``: column plus the literal membership set.",
@@ -839,6 +1129,88 @@
         "or"
       ],
       "title": "OrPred",
+      "type": "object"
+    },
+    "PinnedCollection": {
+      "additionalProperties": false,
+      "description": "A collection a pinned export left live, and why.\n\nThe reason is the resolver's own (``data_versions.py``): ``not_in_version``\nfor a collection added after the version was taken, or the stamp's recorded\nreason for one the version could not pin.",
+      "properties": {
+        "dc_id": {
+          "title": "Dc Id",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dc_id",
+        "reason"
+      ],
+      "title": "PinnedCollection",
+      "type": "object"
+    },
+    "PinnedVersion": {
+      "additionalProperties": false,
+      "description": "The dashboard version a pinned export froze on.\n\nFilled only when the exported state's pins name a version\n(``as_of_version`` / ``definition_version``); a bundle of the live\ndashboard leaves it null. ``unresolved`` says which collections stayed\nlive anyway, so a reader is never shown a past version's label over data\nthe version could not pin.",
+      "properties": {
+        "created_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO 8601 timestamp of the version save",
+          "title": "Created At"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Its saved name, when it has one",
+          "title": "Label"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The version's timeline number",
+          "title": "Seq"
+        },
+        "unresolved": {
+          "description": "Collections the version could not pin, reading current data",
+          "items": {
+            "$ref": "#/$defs/PinnedCollection"
+          },
+          "title": "Unresolved",
+          "type": "array"
+        },
+        "version_id": {
+          "title": "Version Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version_id"
+      ],
+      "title": "PinnedVersion",
       "type": "object"
     },
     "Producer": {
@@ -1675,7 +2047,7 @@
     },
     "RuntimeAddon": {
       "additionalProperties": false,
-      "description": "An optional runtime piece embedded only into bundles that need it.\n\nThe base runtime (``static.html``) stays inside its byte budget; a producer\nappends an add-on's script when a component needs it, and records it here so\nthe runtime and the tier table can say what was embedded and why.",
+      "description": "An optional runtime piece embedded only into bundles that need it.\n\nThe base runtime (``combined-runtime.js``) stays inside its byte budget; a producer\nappends an add-on's script when a component needs it, and records it here so\nthe runtime and the tier table can say what was embedded and why.",
       "properties": {
         "bytes": {
           "default": 0,
@@ -1783,6 +2155,39 @@
         "desc"
       ],
       "title": "SortOp",
+      "type": "object"
+    },
+    "SplitPanel": {
+      "description": "One cell of a split view (``PanelSpec`` in ``splitPanels.ts``).\n\n``constraints`` are ordinary filters appended to the dashboard's own for\nthat cell alone, so a panel serialises straight to a ``.filter(...)``.",
+      "properties": {
+        "color": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Color"
+        },
+        "constraints": {
+          "items": {
+            "$ref": "#/$defs/AnalysisFilter"
+          },
+          "title": "Constraints",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "SplitPanel",
       "type": "object"
     },
     "TabEntry": {
@@ -1959,6 +2364,7 @@
         "celery_compute",
         "code_mode",
         "binding_miss",
+        "trendline",
         "max_points",
         "link_table_too_big",
         "map_tiles",
@@ -2171,6 +2577,18 @@
       "title": "Initial Filters",
       "type": "array"
     },
+    "initial_grouping": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/InitialGrouping"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The selection groups, colour-by and split the runtime opens on (the exported analysis state's own). The viewer's group store is seeded from it, in memory: a reader can add, edit and delete groups, none of it saved. None opens with no group, colouring the figures as built"
+    },
     "inline_blobs": {
       "additionalProperties": {
         "type": "string"
@@ -2201,6 +2619,18 @@
       "description": "indexed_file dc_id -> the objects shipped for it (structures, PAE matrices), read at export from the collection's storage under a stated cap",
       "title": "Objects",
       "type": "object"
+    },
+    "pinned_version": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PinnedVersion"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The dashboard version this bundle froze on, when the exported state's pins named one; null for a bundle of the live dashboard. Its `unresolved` collections read current data \u2014 the bundle never claims a version's label for data that version could not pin"
     },
     "producer": {
       "$ref": "#/$defs/Producer"

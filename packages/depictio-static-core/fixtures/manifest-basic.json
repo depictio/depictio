@@ -180,5 +180,30 @@
   "resolved_structures": [],
   "addons": [],
   "python_components": {},
-  "initial_filters": []
+  "initial_filters": [],
+  "initial_grouping": {
+    "groups": [
+      {
+        "id": "grp-fixture-1",
+        "name": "Group 1",
+        "color": "#1f77b4",
+        "dc_id": "dc00000000000000000000a1",
+        "column_name": "species",
+        "values": [
+          "setosa"
+        ],
+        "created_at": 0,
+        "filter_active": false
+      }
+    ],
+    "color_by": {
+      "kind": "groups",
+      "column_name": null
+    },
+    "display_mode": "color",
+    "show_other": true,
+    "show_overall": true,
+    "split_panels": []
+  },
+  "pinned_version": null
 }

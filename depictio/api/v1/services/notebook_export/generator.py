@@ -8,6 +8,7 @@ produces the preflight the export modal shows.
 
 from __future__ import annotations
 
+import html as _html
 import pprint
 import re
 from dataclasses import dataclass, field, replace
@@ -23,6 +24,7 @@ from depictio.models.models.analysis_state import (
     NotebookPreflightDC,
     NotebookPreflightStage,
 )
+from depictio.models.models.report_layer import ReportLayer, ReportSettings, ReportTile
 from depictio.notebook.components import readable_name
 from depictio.notebook.qmd_safe import comment as _qmd_comment
 from depictio.notebook.qmd_safe import defuse, defuse_code, one_line
@@ -57,26 +59,31 @@ from .reading_order import (
     grid_columns,
     ordered_units,
     tab_display_name,
+    tab_icon_id,
     tab_link_key,
 )
 from .report_chrome import (
     DARK_CSS,
     DIV_CLOSE,
     ORPHAN,
+    PARAMS_ICON,
     REPORT_CSS,
     SURFACE_OPEN,
     TOC_SCOPE_JS,
+    TabLinkInfo,
     about_callout,
     about_callout_many,
     appbar_html,
     cell_open,
     drop_orphan_links,
+    findings_markdown,
     footer_html,
     grid_open,
     mark_css,
     methods,
     pdf_structures,
     stepper_markdown,
+    tab_tiles_markdown,
     title_logo_css,
 )
 from .report_theme import BRAND_DEFAULTS, CHROME_CSS, CHROME_JS, brand_rules
@@ -91,6 +98,10 @@ _TARGET = r"((?:[^()\n]|\([^()\n]*\))+)"
 _TAB_LINK_RE = re.compile(r"\[([^\]]+)\]\(tab:" + _TARGET + r"\)")
 _PARAMS_LINK_RE = re.compile(r"\[([^\]]+)\]\(params:[^)]*\)")
 _SECTION_LINK_RE = re.compile(r"\[([^\]]+)\]\(section:" + _TARGET + r"\)")
+# A tab map (lists of tab tiles) of up to this many groups is kept on one PDF page.
+TAB_TILE_GROUPS_ON_A_PAGE = 4
+# Any markdown link, read as its label (a section's description in the PDF).
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]*\)")
 _LEGEND_RE = re.compile(r"\{\{legend:([A-Za-z0-9_.-]+)\}\}")
 # A text tile's inline icon, `![](icon:mdi:flask-outline)` (TextRenderer draws it).
 INLINE_ICON_RE = re.compile(r"!\[[^\]]*\]\(icon:([a-z0-9-]+:[a-z0-9-]+)\)")
@@ -129,8 +140,190 @@ def _appendix_letter(n: int) -> str:
     return out
 
 
+#: A tile the layer keeps out of the PDF, wrapped so only the HTML shows it.
+HTML_ONLY_OPEN = '::: {.content-visible when-format="html"}'
+#: The same fold the other way round: only the PDF (typst) shows the content.
+TYPST_ONLY_OPEN = '::: {.content-visible when-format="typst"}'
+#: A page break in the PDF only: a large table's own page.
+TYPST_PAGE_BREAK_MD = "`#pagebreak(weak: true)`{=typst}"
+
+#: Rows from which a table starts a new PDF page: about a third of a page.
+TABLE_PAGE_ROWS = 12
+
+PAGE_BREAK_MD = (
+    # The page break the layer asks for before a tile: a typst one in the PDF,
+    # a CSS one in the HTML (Quarto's typst writer reads only the raw block).
+    '::: {.content-visible when-format="html"}\n'
+    '<div style="break-after:page"></div>\n'
+    ":::\n\n"
+    "`#pagebreak()`{=typst}"
+)
+
+
+# ── The live preview's DOM markers (contract #1457, §2) ──────────────────────
+#
+# Every HTML report carries them; the report editor patches the rendered page
+# in the browser (``assets/preview_patch.js``). Pandoc fenced divs with
+# attributes: pandoc's typst writer drops the attributes, so the PDF keeps its
+# own layout. The fences nest, a part (6) holding tabs (5), a tab holding
+# sections (4), a section holding the tiles' own ``:::`` placeholders (the
+# runtime's contract, kept as it is) and ``#fig-``/``#tbl-`` floats.
+
+PART_FENCE = "::::::"
+TAB_FENCE = ":::::"
+SECTION_FENCE = "::::"
+
+
+def part_div(kind: str) -> str:
+    """A part's marker div, opened (``intro``, ``conclusion``, ``appendix``)."""
+    return f'{PART_FENCE} {{data-depictio-part="{kind}"}}'
+
+
+def tab_div(tab_id: str) -> str:
+    """A tab part's marker div, opened; the value is the tab's dashboard id."""
+    return f'{TAB_FENCE} {{data-depictio-tab="{_esc(tab_id)}"}}'
+
+
+def section_div(tab_id: str, title: str) -> str:
+    """A section's marker div, opened: ``<tab_id>:<section title>``."""
+    return f'{SECTION_FENCE} {{data-depictio-section="{_esc(f"{tab_id}:{title}")}"}}'
+
+
+def tile_anchor_id(ref: str) -> str:
+    """The HTML anchor of a tile, from its ``<tab_id>:<index>`` ref: a link to
+    ``report.html#dpx-tile-...`` lands on the component."""
+    return "dpx-tile-" + re.sub(r"[^A-Za-z0-9_-]", "-", ref)
+
+
+def tile_anchors(refs: list[str]) -> str:
+    """The anchors of a tile (one per card in a strip), as an HTML-only raw
+    block: the PDF has no use for them, and a typst label on a marker block
+    would be one more thing for its layout to place."""
+    spans = "".join(f'<span id="{tile_anchor_id(r)}" class="dpx-anchor"></span>' for r in refs)
+    return f"```{{=html}}\n{spans}\n```"
+
+
+def caption_marked(caption: str) -> str:
+    """The caption paragraph carrying the preview's caption marker."""
+    return f'[{caption}]{{data-depictio-caption=""}}'
+
+
+#: Nesting cap of the layer prose walk: no author JSON walks the interpreter's
+#: recursion limit into a 500 (the export must always succeed).
+_MAX_PROSE_DEPTH = 50
+
+
+def _tiptap_markdown(node: dict[str, Any] | None, depth: int = 0) -> str:
+    """TipTap JSON (the report layer's intro and conclusion) as markdown.
+
+    One small helper, the only reader of that shape: paragraphs, headings,
+    lists, quotes, code blocks, the marks a text editor writes and hard
+    breaks; anything else degrades to its text. Total on any author JSON (an
+    editor can PUT shapes this never wrote): nodes, marks, attrs and levels
+    of the wrong type are ignored, nesting past ``_MAX_PROSE_DEPTH`` stops
+    the walk. The result still goes through ``defuse`` (author markdown: its
+    emphasis survives, a chunk or a shortcode typed into it does not), so
+    nothing here has to be safe — only faithful.
+    """
+    if not isinstance(node, dict) or depth > _MAX_PROSE_DEPTH:
+        return ""
+    ntype = str(node.get("type") or "")
+
+    def children(node: dict[str, Any]) -> list[Any]:
+        content = node.get("content")
+        return content if isinstance(content, list) else []
+
+    def render_content(items: Any) -> str:
+        if not isinstance(items, list):
+            return ""
+        return "".join(
+            _tiptap_markdown(child, depth + 1) for child in items if isinstance(child, dict)
+        )
+
+    def inline(node: dict[str, Any]) -> str:
+        text = str(node.get("text") or "")
+        marks = node.get("marks")
+        for mark in marks if isinstance(marks, list) else []:
+            if not isinstance(mark, dict):
+                continue
+            mtype = str(mark.get("type") or "")
+            if mtype == "bold":
+                text = f"**{text}**" if text else text
+            elif mtype == "italic":
+                text = f"*{text}*" if text else text
+            elif mtype == "strike":
+                text = f"~~{text}~~" if text else text
+            elif mtype == "code":
+                text = f"`{text}`" if text else text
+        return text
+
+    if ntype == "text":
+        return inline(node)
+    if ntype == "hardBreak":
+        return "\\\n"
+    if ntype == "paragraph":
+        return render_content(children(node)) + "\n\n"
+    if ntype == "heading":
+        attrs = node.get("attrs")
+        raw = attrs.get("level") if isinstance(attrs, dict) else None
+        level = 1 if isinstance(raw, bool) or not isinstance(raw, (int, float)) else int(raw)
+        return f"{'#' * min(6, max(1, level + 1))} {one_line(render_content(children(node)))}\n\n"
+    if ntype in ("bulletList", "orderedList"):
+        lines = []
+        for child in children(node):
+            if not isinstance(child, dict) or child.get("type") != "listItem":
+                continue
+            body = render_content(child.get("content")).strip()
+            marker = "-" if ntype == "bulletList" else "1."
+            lines.extend(f"{marker} {line}" for line in body.split("\n") if line)
+        return "\n".join(lines) + ("\n\n" if lines else "")
+    if ntype == "blockquote":
+        body = render_content(children(node)).strip()
+        return "".join(f"> {line}\n" for line in body.split("\n") if line) + "\n" if body else ""
+    if ntype == "codeBlock":
+        # The code as it is: its lines are its meaning (not one-lined), and
+        # the fence outlongs any backtick run inside, so the block never
+        # closes early.
+        body = "".join(str(c.get("text") or "") for c in children(node) if isinstance(c, dict))
+        fence = "`" * (3 + len(max(re.findall(r"`+", body), default="", key=len)))
+        return f"{fence}\n{body}\n{fence}\n\n"
+    # Unknown block node: its content, if any, as the best approximation.
+    return render_content(children(node))
+
+
+def _layer_prose(node: dict[str, Any] | None) -> str:
+    """The layer's TipTap prose as markdown, made inert, trailing space off."""
+    return defuse(_tiptap_markdown(node)).rstrip("\n") + "\n"
+
+
+def _cover_owner_names(project: dict[str, Any] | None) -> list[str]:
+    """The project's owners as the cover's default authors."""
+    owners = ((project or {}).get("permissions") or {}).get("owners") or []
+    names = []
+    for owner in owners:
+        if not isinstance(owner, dict):
+            continue
+        name = str(owner.get("username") or owner.get("email") or "").strip()
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
 # The closing part: what produced the data and the report, and what to cite.
 METHODS_HEADING = "Methods and citations"
+
+#: The element whose attributes carry the report's settings to its runtime.
+SETTINGS_MARKER_ID = "depictio-report-settings"
+
+#: Figures and tables without their number, when the report's settings say
+#: so: Quarto numbers every float and has no option to stop, so the page takes
+#: the "Figure 3: " off each caption once it has loaded (the PDF sets typst's
+#: own ``numbering: none``).
+UNNUMBER_SCRIPT = (
+    "<script>document.querySelectorAll('.quarto-float figcaption').forEach(function(c){"
+    "var n=c.firstChild;if(n&&n.nodeType===3)n.nodeValue=n.nodeValue.replace("
+    "/^\\s*(?:Figure|Table)[\\s\\u00a0]+\\d+[:.]?\\s*/,'')});</script>"
+)
 METHODS_ICON = "mdi:book-open-variant"
 
 # ``activeFilters.ts``: what the panel's summary prints for a filter's value.
@@ -209,9 +402,14 @@ class ExportPlan:
     tabs: list[dict[str, Any]]
     project: dict[str, Any] | None
     state: AnalysisState
-    dcs: list[DCPlan]
     stages: list[StagePlan]
     title: str
+    # The dashboard's report layer (#1457), as stored on its main tab: the
+    # export's intro, conclusion, cover and tile/tab placement. Raw dict, as
+    # stored; ``NotebookBuilder`` validates it and falls back to a layer-less
+    # export when it does not validate.
+    report_layer: dict[str, Any] | None = None
+    dcs: list[DCPlan] = field(default_factory=list)
     subtitle: str | None = None
     exported_by: str | None = None
     exported_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -274,6 +472,13 @@ class ExportPlan:
     # The PDF's colours: ``colour`` (tab colours on headings and in the
     # contents, tinted notes) or ``mono`` (print-friendly, the text colour).
     pdf_style: str = "colour"
+    # The report editor's exact preview, not a download (#1457): the document
+    # carries no export minute in its provenance (the day, not the minute —
+    # the preview cache key must not move with the clock) and Quarto renders
+    # it with ``embed-resources: false`` (``report.html`` beside a
+    # ``report_files/`` directory), since the editor serves the files itself.
+    # A downloaded report keeps the minute and embeds everything.
+    preview: bool = False
 
     @property
     def dashboard_id(self) -> str:
@@ -293,6 +498,19 @@ class ComponentEntry:
     # A highlight drawn in place: the highlight's own metadata, while ``unit``
     # holds the figure it shows (its source tab and its own definition).
     highlight: dict[str, Any] | None = None
+    # That highlight's own (tab id, index): the tile the report layer and the
+    # editor know, while ``unit`` is what is drawn and mounted.
+    own_ref: tuple[str, str] | None = None
+
+    @property
+    def layer_key(self) -> tuple[str, str]:
+        """The (tab id, component id) the report layer keys this tile by."""
+        if self.own_ref is not None:
+            return self.own_ref
+        return (
+            str(self.unit.tab.get("dashboard_id") or ""),
+            str(self.unit.meta.get("index") or ""),
+        )
 
 
 _FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
@@ -354,9 +572,63 @@ def _fmt_value(value: Any) -> str:
     return str(value)
 
 
+def _exported_stamp(exported_at: datetime, *, date_only: bool = False) -> str:
+    """The export's moment as the report's provenance prints it.
+
+    To the minute for a report a reader downloads. The day alone for a
+    preview: the preview cache key is the built document's hash, so the same
+    report previewed twice — once at 10:59, once at 11:01 — must build to the
+    same bytes, or every minute a new render would be queued.
+    """
+    if date_only:
+        return f"{exported_at:%Y-%m-%d} UTC"
+    return f"{exported_at:%Y-%m-%d %H:%M} UTC"
+
+
+def _without_emptied_sections(
+    out: list[tuple[MarkdownUnit | ComponentEntry, str | None]], emptied: set[int]
+) -> list[tuple[MarkdownUnit | ComponentEntry, str | None]]:
+    """``out`` without the sections the layer took every tile out of.
+
+    ``emptied`` holds the positions of sections that lost a tile to the layer.
+    One of them goes when no tile is left before the next section or tab: the
+    report never prints a heading over nothing. A section the dashboard itself
+    left empty stays as it is.
+    """
+    kept = []
+    for i, item in enumerate(out):
+        if i in emptied:
+            j = i + 1
+            while j < len(out):
+                nxt = out[j][0]
+                if isinstance(nxt, ComponentEntry) or nxt.kind in ("section", "tab"):
+                    break
+                j += 1
+            if j >= len(out) or not isinstance(out[j][0], ComponentEntry):
+                continue
+        kept.append(item)
+    return kept
+
+
 class NotebookBuilder:
     def __init__(self, plan: ExportPlan) -> None:
         self.plan = plan
+        self.layer = self._resolve_layer()
+        # The report's own options (Report settings in the editor); their
+        # defaults are the report as it was without them.
+        self.settings: ReportSettings = self.layer.settings if self.layer else ReportSettings()
+        # Tiles whose PDF page break their section's heading took (by ``id``).
+        self._moved_breaks: set[int] = set()
+        self._tiles_by_ref: dict[tuple[str, str], ReportTile] = (
+            {(t.tab_id, t.component_id): t for t in self.layer.tiles} if self.layer else {}
+        )
+        self._appendix_tab_ids: frozenset[str] = (
+            frozenset(t.tab_id for t in self.layer.tabs if t.placement == "appendix")
+            if self.layer
+            else frozenset()
+        )
+        if self.layer is not None and self.layer.tabs:
+            self._order_tabs_by_layer()
         self.names = NameAllocator()
         self.dc_by_id: dict[str, DCPlan] = {dc.dc_id: dc for dc in plan.dcs}
         self.df_names: dict[str, str] = {}
@@ -377,6 +649,115 @@ class NotebookBuilder:
         self.section_anchors = self._section_anchors()
         self._float_labels: set[str] = set()
         self._hero_cache: tuple[str, str, str | None] | None | bool = False
+
+    def _resolve_layer(self) -> ReportLayer | None:
+        """The plan's raw layer as a model, or ``None`` (export without it).
+
+        The layer is author input read from Mongo, not a plan the export built
+        itself, so a layer that does not validate — an older export's shape,
+        a hand-edited document — falls back to the layer-less report with a
+        warning in the preflight, not a failed export.
+        """
+        raw = self.plan.report_layer
+        if not raw:
+            return None
+        try:
+            return ReportLayer.model_validate(raw)
+        except Exception:
+            self.plan.warnings.append(
+                "The dashboard's report layer could not be read and was left out of this export."
+            )
+            return None
+
+    def _order_tabs_by_layer(self) -> None:
+        """Reorder the plan's tabs: body tabs in the layer's order, appendix
+        tabs after them (the conclusion goes between the two).
+
+        The main tab stays the first body tab — it carries the layer and the
+        cover, and the report opens on it. A tab the layer gives no order
+        keeps its dashboard order, after the ordered ones; a tab the layer
+        does not mention stays a body tab.
+        """
+        by_id = {t.tab_id: t for t in self.layer.tabs if self.layer}
+        natural_of = {id(t): i for i, t in enumerate(self.plan.tabs)}
+
+        def key(tab: dict[str, Any]) -> tuple[int, int, int, int]:
+            cfg = by_id.get(str(tab.get("dashboard_id") or ""))
+            natural = natural_of.get(id(tab), 0)
+            if cfg is None or tab is self.plan.tabs[0]:
+                # Unmentioned tabs (and the main tab) keep the dashboard order.
+                return (0, 1, 0, natural)
+            placement = 1 if cfg.placement == "appendix" else 0
+            if cfg.order is None:
+                return (placement, 1, 0, natural)
+            return (placement, 0, cfg.order, 0)
+
+        main, rest = self.plan.tabs[0], self.plan.tabs[1:]
+        rest.sort(key=key)
+        self.plan.tabs = [main, *rest]
+
+    def _layer_tile(self, entry: ComponentEntry) -> ReportTile | None:
+        """The layer's placement of one tile, by (tab id, component id)."""
+        return self._tiles_by_ref.get(entry.layer_key)
+
+    def _appendix_cut(self) -> int | None:
+        """Where the appendix tabs start in the reading order, or ``None``.
+
+        The layer's appendix tabs sit after the conclusion: their parts open
+        with the Appendices heading, like the second-and-later tabs of a
+        layer-less export, and keep their letter.
+        """
+        if not self._appendix_tab_ids:
+            return None
+        for i, (entry, _) in enumerate(self.entries()):
+            if (
+                isinstance(entry, MarkdownUnit)
+                and entry.kind == "tab"
+                and entry.dashboard_id in self._appendix_tab_ids
+            ):
+                return i
+        return None
+
+    def _cover_values(self) -> tuple[str, str | None, list[str], str]:
+        """The title block's four fields.
+
+        With a layer: the cover where set, the defaults where not — the
+        dashboard's title, the project's name, the project's owners, the day
+        of the export. Without one, the export's own provenance, as before.
+        """
+        plan = self.plan
+        if self.layer is None:
+            return (
+                plan.title,
+                plan.subtitle or f"Exported from Depictio on {plan.exported_at:%Y-%m-%d}",
+                [plan.exported_by] if plan.exported_by else [],
+                plan.exported_at.strftime("%Y-%m-%d"),
+            )
+        cover = self.layer.cover
+        project = plan.project or {}
+        title = (cover.title if cover and cover.title else plan.title) or "Report"
+        subtitle = (
+            (cover.subtitle if cover and cover.subtitle else None)
+            or str(project.get("name") or "")
+            or None
+        )
+        authors = (cover.authors if cover and cover.authors else None) or _cover_owner_names(
+            project
+        )
+        date = (cover.date if cover and cover.date else plan.exported_at.strftime("%Y-%m-%d")) or ""
+        return title, subtitle, authors, date
+
+    def _intro_cell(self) -> Cell | None:
+        """The layer's intro as the report's opening prose, or ``None``."""
+        if self.layer is None or not self.layer.intro:
+            return None
+        return md_cell(_layer_prose(self.layer.intro))
+
+    def _conclusion_cell(self) -> Cell | None:
+        """The layer's conclusion, after the results, or ``None``."""
+        if self.layer is None or not self.layer.conclusion:
+            return None
+        return md_cell(_layer_prose(self.layer.conclusion))
 
     def _section_anchors(self) -> dict[str, str]:
         """Each section heading's id, by name: what ``](section:Name)`` lands on.
@@ -437,6 +818,80 @@ class NotebookBuilder:
 
         return _TAB_LINK_RE.sub(sub, text)
 
+    def _has_params(self) -> bool:
+        """Whether the document holds the run's parameters (what ``params:`` links open)."""
+        return bool(((self.plan.project or {}).get("template_origin") or {}).get("run_provenance"))
+
+    def _tab_link(self, name: str) -> TabLinkInfo | None:
+        """What a link to the tab ``name`` shows of it, or ``None`` when the
+        document holds no such tab (``TabLinkTarget``: its icon and colour as
+        the sidebar shows them, its subtitle as the line a tile prints)."""
+        key = name.strip().lower()
+        anchor = self._anchor_by_tab_name.get(key)
+        if not anchor:
+            return None
+        tab = next(
+            (
+                t
+                for t in self.plan.tabs
+                if key
+                in {
+                    str(n).strip().lower()
+                    for n in (tab_display_name(t), t.get("title"), t.get("main_tab_name"))
+                    if n
+                }
+            ),
+            None,
+        )
+        if tab is None:
+            return None
+        color = palette_hex(
+            str(tab.get("tab_icon_color") or tab.get("icon_color") or "") or None, ""
+        )
+        return TabLinkInfo(
+            label=tab_display_name(tab),
+            anchor=anchor,
+            icon=tab_icon_id(tab),
+            color=color or palette_hex("gray", "#868e96"),
+            description=str(tab.get("subtitle") or "").strip() or None,
+        )
+
+    def _tile_accent(self, meta: dict[str, Any]) -> str:
+        """A text tile's accent as a colour: a palette name, a literal colour,
+        or ``tab:<name>`` for the colour that tab wears; ``""`` when unset or
+        unknown (``resolveAccent``, ``TextRenderer.tsx``)."""
+        raw = str(meta.get("accent") or "").strip()
+        if raw.startswith("tab:"):
+            info = self._tab_link(raw[4:])
+            return info.color if info else ""
+        return palette_hex(raw or None, "")
+
+    def _step_link(self, label: str, target: str) -> str | None:
+        """A stepper link as the live one: an icon alone, its name as the tooltip.
+
+        The tab's own icon in the tab's colour; the tune icon for the run's
+        parameters. ``""`` when the document lacks the target, ``None`` for
+        any other link (it stays a text link).
+        """
+        if target.startswith("tab:"):
+            info = self._tab_link(target[4:])
+            if info is None:
+                return ""
+            href, icon = info.anchor, self._icon_html(info.icon, info.color)
+        elif target.startswith("params:"):
+            if not self._has_params():
+                return ""
+            href, icon = PARAMS_ANCHOR, self._icon_html(PARAMS_ICON, "")
+        else:
+            return None
+        if not icon:
+            return None
+        name = _esc(label, quote=True)
+        return (
+            f'<a class="dpx-step-link" href="#{_esc(href, quote=True)}" title="{name}" '
+            f'aria-label="{name}">{icon}</a>'
+        )
+
     def _rewrite_links(self, text: str) -> str:
         """Every link a text tile can write, as a jump inside the document.
 
@@ -447,9 +902,7 @@ class NotebookBuilder:
         as stray text (``drop_orphan_links``).
         """
         text = self._mark_tab_links(text)
-        has_params = bool(
-            ((self.plan.project or {}).get("template_origin") or {}).get("run_provenance")
-        )
+        has_params = self._has_params()
 
         def params(m: re.Match[str]) -> str:
             return f"[{m.group(1)}](#{PARAMS_ANCHOR})" if has_params else ORPHAN
@@ -494,17 +947,28 @@ class NotebookBuilder:
             return self._entries
         out: list[tuple[MarkdownUnit | ComponentEntry, str | None]] = []
         current_tab: str | None = None
+        # Sections the layer took a tile out of, by their place in `out`.
+        section_at: int | None = None
+        emptied: set[int] = set()
         for unit in ordered_units(self.plan.tabs):
             if isinstance(unit, MarkdownUnit):
                 if unit.kind == "tab":
                     current_tab = unit.text
+                    section_at = None
+                elif unit.kind == "section":
+                    section_at = len(out)
                 out.append((unit, current_tab))
                 continue
             highlight: dict[str, Any] | None = None
+            own_ref: tuple[str, str] | None = None
             if unit.meta.get("component_type") == "highlight":
                 source = self._highlight_source(unit.meta)
                 if source is not None:
                     highlight = unit.meta
+                    own_ref = (
+                        str(unit.tab.get("dashboard_id") or ""),
+                        str(unit.meta.get("index") or ""),
+                    )
                     unit = replace(source, section=unit.section, persistent=unit.persistent)
             meta = unit.meta
             verdict = classify(meta)
@@ -530,14 +994,26 @@ class NotebookBuilder:
                         output="static" if meta.get("component_type") != "figure" else None,
                     )
             name = self._name_for(meta, verdict)
+            cfg = self._tiles_by_ref.get(
+                own_ref or (str(unit.tab.get("dashboard_id") or ""), str(meta.get("index") or ""))
+            )
+            if cfg is not None and not cfg.in_report:
+                # The layer left the tile out of the report: it goes from the
+                # reading order entirely, so the preflight lists what the
+                # export will contain, and nothing else does.
+                if section_at is not None:
+                    emptied.add(section_at)
+                continue
             out.append(
                 (
-                    ComponentEntry(unit=unit, verdict=verdict, name=name, highlight=highlight),
+                    ComponentEntry(
+                        unit=unit, verdict=verdict, name=name, highlight=highlight, own_ref=own_ref
+                    ),
                     current_tab,
                 )
             )
-        self._entries = out
-        return out
+        self._entries = _without_emptied_sections(out, emptied)
+        return self._entries
 
     def _highlight_source(self, meta: dict[str, Any]) -> ComponentUnit | None:
         """The figure a highlight shows, on the tab it lives on (``highlightTile.ts``).
@@ -650,6 +1126,13 @@ class NotebookBuilder:
         cells.append(self._connection_cell())
         cells.append(self._metric_card_cell())
         cells.append(md_cell(self._header()))
+        # The layer's intro: the report's opening prose, before any results,
+        # inside its part marker (always present, empty without prose).
+        cells.append(md_cell(part_div("intro")))
+        intro = self._intro_cell()
+        if intro is not None:
+            cells.append(intro)
+        cells.append(md_cell(PART_FENCE))
         cells.append(self._state_cell())
         cells.append(self._grouping_cell())
         cells.extend(self._data_cells())
@@ -659,7 +1142,18 @@ class NotebookBuilder:
         cells.extend(self._tile_cells())
         if self.plan.embed_runtime:
             cells.append(self._runtime_cell())
-        methods_md = self._methods()[0]
+        # The layer's conclusion, last of the narrative; the appendix parts
+        # follow it, then the provenance, as in a paper. Both carry their part
+        # markers, always present (empty when the layer sets nothing).
+        cells.append(md_cell(part_div("conclusion")))
+        conclusion = self._conclusion_cell()
+        if conclusion is not None:
+            cells.append(conclusion)
+        cells.append(md_cell(PART_FENCE))
+        cells.append(md_cell(part_div("appendix")))
+        cells.extend(self._appendix_cells())
+        cells.append(md_cell(PART_FENCE))
+        methods_md = self._methods()[0] if self.settings.methods else ""
         if methods_md:
             cells.append(md_cell(methods_md))
         if self.plan.pdf:
@@ -760,7 +1254,7 @@ class NotebookBuilder:
         """The cover's record, from the export's own data only."""
         plan = self.plan
         project = plan.project or {}
-        exported = f"{plan.exported_at:%Y-%m-%d %H:%M} UTC"
+        exported = _exported_stamp(plan.exported_at, date_only=plan.preview)
         if plan.exported_by:
             exported += f" by {plan.exported_by}"
         if plan.instance:
@@ -825,9 +1319,10 @@ class NotebookBuilder:
         plan = self.plan
         hero = self.hero
         colors, icons = self._heading_marks()
+        title, subtitle, _authors, _date = self._cover_values()
         return typst_preamble(
-            title=plan.title,
-            subtitle=plan.subtitle,
+            title=title,
+            subtitle=subtitle,
             primary=self._accent(),
             style=plan.pdf_style,
             dashboard_mark=plan.dashboard_logo,
@@ -837,6 +1332,9 @@ class NotebookBuilder:
             heading_colors=colors,
             heading_icons=icons,
             statement=self._cover_statement(),
+            contents=self.settings.toc,
+            landscape=self.settings.landscape,
+            numbering=self.settings.numbering,
         )
 
     def _dashboard_url(self) -> str:
@@ -844,6 +1342,14 @@ class NotebookBuilder:
 
     def _accent(self) -> str:
         return palette_hex((self.plan.brand or {}).get("primary"), "#228be6")
+
+    def _settings_marker(self) -> str:
+        """The settings the report's runtime reads in the page: where an
+        advanced viz draws its controls (``ReportRuntime``)."""
+        return (
+            f'<div id="{SETTINGS_MARKER_ID}" hidden '
+            f'data-viz-controls="{_esc(self.settings.viz_controls, quote=True)}"></div>'
+        )
 
     def _appbar(self) -> str:
         """The header bar: the dashboard's mark and "Powered by" Depictio.
@@ -909,7 +1415,7 @@ class NotebookBuilder:
             (str(project[k]) for k in ("citation", "how_to_cite") if project.get(k)), None
         )
         html = footer_html(
-            exported_at=f"{plan.exported_at:%Y-%m-%d %H:%M UTC}",
+            exported_at=_exported_stamp(plan.exported_at, date_only=plan.preview),
             exported_by=plan.exported_by,
             instance=plan.instance,
             version=plan.depictio_version,
@@ -933,18 +1439,31 @@ class NotebookBuilder:
     def front_matter(self) -> QuartoFrontMatter:
         plan = self.plan
         brand = plan.brand or {}
+        title, subtitle, authors, date = self._cover_values()
         return QuartoFrontMatter(
-            title=plan.title,
-            subtitle=plan.subtitle or f"Exported from Depictio on {plan.exported_at:%Y-%m-%d}",
-            author=plan.exported_by,
-            date=plan.exported_at.strftime("%Y-%m-%d"),
+            title=title,
+            subtitle=subtitle,
+            author=", ".join(authors) or None,
+            date=date,
+            # A downloaded report inlines everything (it must still work
+            # months later, off the network); the preview does not — its
+            # files are served beside it (``report_files/``, the editor's
+            # iframe), which keeps the render and the frame light.
+            embed_resources=not plan.preview,
+            toc=self.settings.toc,
+            code_tools=self.settings.code,
+            papersize="us-letter" if self.settings.paper == "letter" else "a4",
             # The dashboard's own mark on the browser tab when it has one (the
             # nf-core apple), the app's otherwise.
             favicon_data_uri=plan.dashboard_logo or plan.favicon_data_uri,
-            before_body=self._appbar(),
-            after_body=self._footer(),
+            before_body=self._appbar() + self._settings_marker(),
+            after_body=self._footer() + ("" if self.settings.numbering else UNNUMBER_SCRIPT),
             pdf=self.plan.pdf,
-            extra={"references": refs} if (refs := self._methods()[1]) else {},
+            extra=(
+                {"references": refs}
+                if self.settings.methods and (refs := self._methods()[1])
+                else {}
+            ),
             brand=(
                 paper_brand(
                     primary=self._primary()[0],
@@ -990,6 +1509,7 @@ class NotebookBuilder:
             "    funnel_stage,\n"
             "    StaticCard,\n"
             "    init_tables,\n"
+            "    set_page_orientation,\n"
             "    set_static_width,\n"
             "    show_table,\n"
             "    static_card_row,\n"
@@ -1097,8 +1617,7 @@ def card_row(cards):
 
     The column count is fixed by how many cards there are rather than left to
     `auto-fit`, which fits as many as the page happens to be wide enough for
-    and strands the remainder: up to four cards share one line, as the
-    dashboard's strip draws them; more run four (or three) to a line.
+    and strands the remainder: two cards share each line.
     `_repr_html_()` is the standard rich-display hook (IPython's HTML and Depictio's
     own components both implement it): calling it directly gets the actual
     card look, the same HTML each object would show if displayed bare —
@@ -1109,9 +1628,12 @@ def card_row(cards):
         from IPython.display import Markdown
 
         return Markdown(static_card_row(cards, mono=__MONO__))
-    n = len(cards)
-    cols = n if n <= 4 else (4 if n % 4 == 0 else 3)
-    items = "".join(c._repr_html_() for c in cards)
+    # Two cards to a line: a report is read down a page, and four in one line
+    # squeezed each card's number and label into a quarter of it.
+    cols = min(len(cards), 2)
+    # One slot per card, in the row's order: the report editor's preview
+    # takes each card's thumbnail from its own slot.
+    items = "".join(f'<div class="dpx-card-slot">{c._repr_html_()}</div>' for c in cards)
     return HTML(
         f'<div class="dpx-cards" style="display:grid;grid-template-columns:'
         f'repeat({cols},minmax(0,1fr));gap:0.75rem;margin:0 0 0.5rem">{items}</div>'
@@ -1155,6 +1677,7 @@ def card_row(cards):
                 project=self.plan.project,
                 exported_by=self.plan.exported_by,
                 exported_at=self.plan.exported_at,
+                date_only=self.plan.preview,
                 instance=self.plan.instance,
                 api_url=self.plan.api_url,
                 dashboard_id=self.plan.dashboard_id,
@@ -1162,9 +1685,10 @@ def card_row(cards):
                 state_version=self.plan.state.version,
                 warnings=self.plan.warnings,
                 params_icon=self.plan.icons.get(PROVENANCE_ICON, ""),
-                details_rows=self._export_details(),
+                details_rows=self._export_details() if self.settings.export_details else None,
                 details_icon=self.plan.icons.get(EXPORT_DETAILS_ICON, ""),
                 run_icon=self.plan.icons.get(RUN_ICON, ""),
+                how_to_run=self.settings.how_to_run,
             )
         )
 
@@ -1221,7 +1745,7 @@ def card_row(cards):
             ("Data collections", collections),
             ("Analysis state", state),
             ("Notebook", "Quarto document (.qmd)"),
-            ("Exported", f"{plan.exported_at:%Y-%m-%d %H:%M UTC}"),
+            ("Exported", _exported_stamp(plan.exported_at, date_only=plan.preview)),
         ]
 
     def _state_cell(self) -> Cell:
@@ -1836,25 +2360,130 @@ def card_row(cards):
 
     # ----------------------------------------------------------------- tiles
     def _tile_cells(self) -> list[Cell]:
+        """The results part: the body tabs, in the report's own order.
+
+        Without a layer this is every tab of the family, the second and every
+        later one an appendix of the PDF. With one, it is the body tabs only,
+        in the layer's order; the appendix tabs follow the conclusion, and
+        ``build`` places them (``_appendix_cells``).
+        """
         cells: list[Cell] = [md_cell(self._results_header_html())]
         self._section_i = 0
+        cut = self._appendix_cut()
+        body = self.entries() if cut is None else self.entries()[:cut]
+        self._walk_tiles(body, cells, appendices=(cut is None))
+        return cells
+
+    def _appendix_cells(self) -> list[Cell]:
+        """The layer's appendix tabs, after the conclusion: one part each,
+        lettered, under the Appendices heading (the PDF only)."""
+        cut = self._appendix_cut()
+        if cut is None:
+            return []
+        cells: list[Cell] = []
+        self._walk_tiles(self.entries()[cut:], cells, appendices=True, from_appendix=0)
+        return cells
+
+    def _walk_tiles(
+        self,
+        entries: list[tuple[MarkdownUnit | ComponentEntry, str | None]],
+        cells: list[Cell],
+        *,
+        appendices: bool,
+        from_appendix: int | None = None,
+    ) -> None:
+        """Lay one run of the reading order out, heading by heading.
+
+        ``appendices`` marks the run's later tabs as the PDF's appendices;
+        ``from_appendix`` letters every tab of the run, for the appendix run
+        of a layered report (its first tab is Appendix A, not an unfolded
+        body tab). The run continues the section anchors where the last one
+        stopped (``_section_i``), so the two runs of a layered report never
+        hand the same anchor to two headings.
+        """
         pending: list[ComponentEntry] = []
+        # The layer's own sections, per tab: tiles the author moved out of
+        # their section, kept for the end of that tab's part.
+        moved: dict[str, list[ComponentEntry]] = {}
+        moved_order: list[str] = []
         tab_doc: dict[str, Any] = self.plan.tabs[0] if self.plan.tabs else {}
+        # The preview's tab and section marker divs: open around each part's
+        # heading, closed by the next heading of the same kind or the run's end.
+        open_tab = False
+        open_section = False
+        # A heading whose first tile is a large table takes that table's page
+        # break: the page turns before the heading, which would otherwise be
+        # left alone at the foot of the page above its table.
+        lead_breaks = self._lead_page_breaks(entries)
+
+        def close_divs(*, tab: bool = False) -> None:
+            nonlocal open_section, open_tab
+            if open_section:
+                cells.append(md_cell(SECTION_FENCE))
+                open_section = False
+            if tab and open_tab:
+                cells.append(md_cell(TAB_FENCE))
+                open_tab = False
 
         def flush() -> None:
             # The run of tiles between two headings, laid out row by row as
-            # the dashboard's grid draws them.
-            for row in self._grid_rows(pending, grid_columns(tab_doc) or 12):
-                cells.extend(self._row_cells(row, grid_columns(tab_doc) or 12))
+            # the dashboard's grid draws them; a tile the layer moved to its
+            # own section leaves for that section's part.
+            in_place: list[ComponentEntry] = []
+            for e in pending:
+                cfg = self._layer_tile(e)
+                if cfg is not None and cfg.section and cfg.section.strip():
+                    name = cfg.section.strip()
+                    if name not in moved:
+                        moved[name] = []
+                        moved_order.append(name)
+                    moved[name].append(e)
+                else:
+                    in_place.append(e)
+            self._emit_rows(cells, in_place, tab_doc)
             pending.clear()
 
+        def flush_moved() -> None:
+            nonlocal open_section
+            for name in moved_order:
+                group = moved[name]
+                if not group:
+                    continue
+                if open_section:
+                    cells.append(md_cell(SECTION_FENCE))
+                    open_section = False
+                cells.append(md_cell(section_div(str(tab_doc.get("dashboard_id") or ""), name)))
+                open_section = True
+                cells.append(
+                    md_cell(
+                        self._markdown_unit_html(
+                            MarkdownUnit(level=SECTION_LEVEL, text=name, kind="section"),
+                            tab=tab_doc,
+                        )
+                    )
+                )
+                self._emit_rows(cells, group, tab_doc)
+                group.clear()
+                cells.append(md_cell(SECTION_FENCE))
+                open_section = False
+            # Both, or the next tab's tile joins a name `flush` still counts
+            # as seen and is never laid out.
+            moved_order.clear()
+            moved.clear()
+
         tabs_seen = 0
-        for entry, _tab in self.entries():
+        appendices_seen = 0
+        for entry, _tab in entries:
             if isinstance(entry, MarkdownUnit):
                 flush()
                 # The first tab opens unfolded, every other one folded: the
                 # report opens on its overview, not on every plot at once.
                 if entry.kind == "tab":
+                    close_divs()
+                    flush_moved()
+                    close_divs(tab=True)
+                    cells.append(md_cell(tab_div(str(entry.dashboard_id or ""))))
+                    open_tab = True
                     tabs_seen += 1
                     tab_doc = next(
                         (
@@ -1864,18 +2493,32 @@ def card_row(cards):
                         ),
                         tab_doc,
                     )
+                if entry.kind == "section":
+                    close_divs()
+                    if id(entry) in lead_breaks:
+                        cells.append(md_cell(TYPST_PAGE_BREAK_MD))
+                    cells.append(
+                        md_cell(section_div(str(tab_doc.get("dashboard_id") or ""), entry.text))
+                    )
+                    open_section = True
                 # In the PDF the first tab is the report and every other one an
                 # appendix, under a heading of their own (the page keeps its tabs).
                 appendix = None
-                if self.plan.pdf and entry.kind == "tab" and tabs_seen > 1:
-                    appendix = _appendix_letter(tabs_seen - 2)
-                    if tabs_seen == 2:
-                        cells.append(md_cell(APPENDICES_HEADING))
+                if appendices and self.plan.pdf and entry.kind == "tab":
+                    n = tabs_seen - 2 if from_appendix is None else from_appendix + appendices_seen
+                    if from_appendix is not None:
+                        appendices_seen += 1
+                    if n >= 0:
+                        appendix = _appendix_letter(n)
+                        if n == 0:
+                            cells.append(md_cell(APPENDICES_HEADING))
                 cells.append(
                     md_cell(
                         self._markdown_unit_html(
                             entry,
-                            folded=entry.kind == "tab" and tabs_seen > 1,
+                            folded=(
+                                entry.kind == "tab" and (tabs_seen > 1 or from_appendix is not None)
+                            ),
                             tab=tab_doc,
                             appendix=appendix,
                         )
@@ -1897,7 +2540,27 @@ def card_row(cards):
                 continue
             pending.append(entry)
         flush()
-        return cells
+        close_divs()
+        flush_moved()
+        close_divs(tab=True)
+
+    def _tile_order_key(self, entry: ComponentEntry) -> tuple[int, int]:
+        """The layer's order for a tile; unordered tiles keep their place (a
+        stable sort, so equal keys keep the reading order)."""
+        cfg = self._layer_tile(entry)
+        if cfg is not None and cfg.order is not None:
+            return (0, cfg.order)
+        return (1, 0)
+
+    def _emit_rows(
+        self, cells: list[Cell], entries: list[ComponentEntry], tab_doc: dict[str, Any]
+    ) -> None:
+        """A run of tiles as grid rows, the layer's order within the run."""
+        if not entries:
+            return
+        cols = grid_columns(tab_doc) or 12
+        for row in self._grid_rows(sorted(entries, key=self._tile_order_key), cols):
+            cells.extend(self._row_cells(row, cols))
 
     # ------------------------------------------------------------ grid rows
     @staticmethod
@@ -1913,14 +2576,15 @@ def card_row(cards):
 
         A row is a run of tiles at the same ``y`` whose widths fit the grid;
         a tile with no position stands alone, except a run of cards, which
-        the dashboard draws as a strip.
+        the dashboard draws as a strip. A tile the layer puts at full width
+        stands alone too, and the rest of its row keeps sharing it.
         """
         rows: list[list[ComponentEntry]] = []
         for entry in entries:
             lay = self._layout_of(entry)
             y, w = lay.get("y"), lay.get("w")
             last = rows[-1] if rows else None
-            if last:
+            if last and not (self._full_width(entry) or self._full_width(last[-1])):
                 prev = self._layout_of(last[-1])
                 if y is not None and prev.get("y") == y and isinstance(w, (int, float)):
                     used = sum(int(self._layout_of(e).get("w") or cols) for e in last)
@@ -1937,6 +2601,16 @@ def card_row(cards):
                     continue
             rows.append([entry])
         return rows
+
+    def _full_width(self, entry: ComponentEntry) -> bool:
+        """The layer asks for this tile across the whole page (cards excepted:
+        a card stays in its strip)."""
+        if self._is_card(entry):
+            return False
+        cfg = self._layer_tile(entry)
+        if cfg is not None and cfg.full_width is not None:
+            return cfg.full_width
+        return self.settings.tile_width == "full"
 
     @staticmethod
     def _is_card(entry: ComponentEntry) -> bool:
@@ -1967,16 +2641,32 @@ def card_row(cards):
     def _card_row_cells(self, row: list[ComponentEntry]) -> list[Cell]:
         """A strip of cards: one row cell, one note for their descriptions."""
         out: list[Cell] = []
-        if self.plan.embed_runtime:
-            out.append(md_cell(tile_open([self._tile_ref(e) for e in row])))
-        render_names = []
+        # One placeholder for the strip (its output is one cell), as the
+        # preview's marker and, with the runtime, the cards' mount point.
+        refs = [self._tile_ref(e) for e in row]
+        out.append(md_cell(tile_anchors(refs)))
+        out.append(md_cell(tile_open(refs)))
+        render_names: list[str] = []
+        pdf_names: list[str] = []
         for e in row:
             cell, render_name = self._tile_cell(e, show=False)
-            out.append(cell)
+            out.extend(self._maybe_hide_pdf(e, [cell]))
             render_names.append(render_name)
-        out.append(self._row_cell(render_names))
-        if self.plan.embed_runtime:
-            out.append(md_cell(tile_close()))
+            if self._tile_in_pdf(e):
+                pdf_names.append(render_name)
+        if self.plan.pdf and len(pdf_names) < len(render_names):
+            # A strip the PDF only partly carries prints twice: every card on
+            # the page, only the kept ones on paper (none kept: no PDF row).
+            out.append(md_cell(HTML_ONLY_OPEN))
+            out.append(self._row_cell(render_names))
+            out.append(md_cell(DIV_CLOSE))
+            if pdf_names:
+                out.append(md_cell(TYPST_ONLY_OPEN))
+                out.append(self._row_cell(pdf_names))
+                out.append(md_cell(DIV_CLOSE))
+        else:
+            out.append(self._row_cell(render_names))
+        out.append(md_cell(tile_close()))
         about = about_callout_many(
             [
                 (
@@ -2020,8 +2710,53 @@ def card_row(cards):
     def _data_badge(self, meta: dict[str, Any]) -> str:
         """Where the tile's data came from: its collection, the rows it read,
         and as of when (the pinned commit, else the export)."""
+        if not self.settings.provenance:
+            return ""
         text = self._data_badge_text(meta)
         return f'<span class="dpx-asof">{_esc(text)}</span>' if text else ""
+
+    def _dc_rows(self, meta: dict[str, Any]) -> int | None:
+        """The rows the tile's collection holds in the exported state."""
+        dc = self.dc_by_id.get(str(meta.get("dc_id") or ""))
+        if dc is None:
+            return None
+        rows = dc.initial_rows
+        for stage in self.plan.stages:
+            got = stage.rows_by_dc.get(dc.dc_id)
+            if got is not None:
+                rows = got
+        return rows
+
+    def _lead_page_breaks(
+        self, entries: list[tuple[MarkdownUnit | ComponentEntry, str | None]]
+    ) -> set[int]:
+        """The sections (by ``id``) whose first tile is a table that opens a
+        PDF page: the break goes before the section's heading, and that tile
+        drops its own (``self._moved_breaks``)."""
+        out: set[int] = set()
+        for i, (unit, _) in enumerate(entries):
+            if not (isinstance(unit, MarkdownUnit) and unit.kind == "section"):
+                continue
+            first = entries[i + 1][0] if i + 1 < len(entries) else None
+            if isinstance(first, ComponentEntry) and self._starts_a_pdf_page(first):
+                out.add(id(unit))
+                self._moved_breaks.add(id(first))
+        return out
+
+    def _starts_a_pdf_page(self, entry: ComponentEntry) -> bool:
+        """A table the PDF prints long (``TABLE_PAGE_ROWS`` rows or more, of
+        the page size it shows) opens a page of its own, so it is not cut
+        after a few lines at the foot of one."""
+        meta = entry.unit.meta
+        if not (self.plan.pdf and self.settings.table_page_break):
+            return False
+        if str(meta.get("component_type") or "") != "table":
+            return False
+        rows = self._dc_rows(meta)
+        if rows is None:
+            return False
+        page = int(meta.get("page_size") or 100)
+        return min(rows, page) >= TABLE_PAGE_ROWS
 
     def _data_badge_text(self, meta: dict[str, Any]) -> str:
         dc = self.dc_by_id.get(str(meta.get("dc_id") or ""))
@@ -2030,11 +2765,7 @@ def card_row(cards):
             return ""
         bits = [f"Data: {tag}"]
         if dc is not None:
-            rows = dc.initial_rows
-            for stage in self.plan.stages:
-                got = stage.rows_by_dc.get(dc.dc_id)
-                if got is not None:
-                    rows = got
+            rows = self._dc_rows(meta)
             if rows is not None:
                 bits.append(f"{rows:,} rows")
             if dc.version is not None:
@@ -2048,15 +2779,48 @@ def card_row(cards):
         out: list[Cell] = []
         meta = entry.unit.meta
         ctype = str(meta.get("component_type") or "")
+        cfg = self._layer_tile(entry)
+        if cfg is not None and cfg.page_break_before:
+            # The layer asks for a fresh page before this tile: a typst page
+            # break in the PDF, a CSS one in the HTML.
+            out.append(md_cell(PAGE_BREAK_MD))
+        elif not in_row and id(entry) not in self._moved_breaks and self._starts_a_pdf_page(entry):
+            # A large table opens its own PDF page (the report's settings).
+            out.append(md_cell(TYPST_PAGE_BREAK_MD))
         if entry.highlight is not None:
             out.append(self._highlight_note(entry))
         tile: Cell | list[Cell] = self._tile_cell(entry)  # type: ignore[assignment]
         assert isinstance(tile, Cell)
-        if self.plan.embed_runtime and self._mountable(entry):
-            # The runtime's placeholder; the cell's own output inside it is
-            # the fallback. The caption and the note stay the document's.
-            tile = [md_cell(tile_open([self._tile_ref(entry)])), tile, md_cell(tile_close())]
+        if (
+            cfg is not None
+            and cfg.orientation != "auto"
+            and tile.kind == "code"
+            and not tile.authored
+        ):
+            # The layer's page for this tile in the PDF; the call holds for
+            # this cell's output only. An author's own code is left as written.
+            tile = Cell(f"set_page_orientation({cfg.orientation!r})\n{tile.body}")
+        if self._mountable(entry):
+            # The preview's tile marker (contract §2), in every report — and,
+            # when the runtime is embedded, its placeholder at the same time:
+            # the cell's own output inside it is the fallback, the caption and
+            # the note stay the document's. Text and highlight tiles stay
+            # unwrapped: they are the narrative, and the runtime never mounts
+            # them.
+            own = tile_ref(*entry.own_ref) if entry.own_ref is not None else None
+            tile = [
+                md_cell(tile_open([self._tile_ref(entry)], as_ref=own)),
+                tile,
+                md_cell(tile_close()),
+            ]
+        elif meta.get("index"):
+            # Prose gets its own marker, which the runtime never looks at, so
+            # the editor's preview can still hide and move it (contract §2).
+            ref = _esc(self._tile_ref(entry))
+            tile = [md_cell(f'::: {{data-depictio-prose="{ref}"}}'), tile, md_cell(DIV_CLOSE)]
         tiles = tile if isinstance(tile, list) else [tile]
+        if meta.get("index"):
+            tiles = [md_cell(tile_anchors([tile_ref(*entry.layer_key)])), *tiles]
         if ctype == "text":
             surface = str(meta.get("surface") or "")
             if surface == "card":
@@ -2070,7 +2834,7 @@ def card_row(cards):
                     out.append(md_cell(DIV_CLOSE))
             else:
                 out.extend(tiles)
-            return out
+            return self._maybe_hide_pdf(entry, out)
         label = self._float_label(entry)
         if label is None:
             out.extend(tiles)
@@ -2086,8 +2850,16 @@ def card_row(cards):
             caption_bits = []
             if title:
                 caption_bits.append(f"**{_esc(title)}**.")
-            if entry.highlight is None and str(meta.get("caption") or "").strip():
-                caption_bits.append(self._rewrite_links(_author_line(meta["caption"])))
+            if entry.highlight is None:
+                # The layer's caption replaces the tile's own (an empty string
+                # drops it); without one, the tile's, as before.
+                own_caption = (
+                    cfg.caption
+                    if cfg is not None and cfg.caption is not None
+                    else meta.get("caption")
+                )
+                if str(own_caption or "").strip():
+                    caption_bits.append(self._rewrite_links(_author_line(str(own_caption))))
             badge = self._data_badge(meta)
             if badge and self.plan.pdf:
                 # The PDF's badge is typst: it stays silent under a tile that
@@ -2102,7 +2874,10 @@ def card_row(cards):
             caption = " ".join(caption_bits) or _esc(ctype)
             out.append(md_cell(f"::: {{#{label}}}"))
             out.extend(tiles)
-            out.append(md_cell(f"{caption}\n\n:::"))
+            # The caption inside a span the preview patches (contract §2): the
+            # last paragraph of the float stays the caption Quarto reads, and
+            # the span's attribute is dropped by the typst writer.
+            out.append(md_cell(f"{caption_marked(caption)}\n\n:::"))
         about = about_callout(
             str(meta.get("description") or ""),
             name=str(meta.get("title") or ""),
@@ -2110,7 +2885,20 @@ def card_row(cards):
         )
         if about:
             out.append(md_cell(about))
-        return out
+        return self._maybe_hide_pdf(entry, out)
+
+    def _maybe_hide_pdf(self, entry: ComponentEntry, cells: list[Cell]) -> list[Cell]:
+        """A tile the layer keeps out of the PDF, wrapped so only the HTML
+        shows it (no PDF is built, no wrapper: the tile stays as it was)."""
+        cfg = self._layer_tile(entry)
+        if self.plan.pdf and cfg is not None and not cfg.in_pdf:
+            return [md_cell(HTML_ONLY_OPEN), *cells, md_cell(DIV_CLOSE)]
+        return cells
+
+    def _tile_in_pdf(self, entry: ComponentEntry) -> bool:
+        """Whether the PDF carries this tile (the layer's say, kept by default)."""
+        cfg = self._layer_tile(entry)
+        return cfg is None or cfg.in_pdf
 
     # ---------------------------------------------------------- the runtime
     @property
@@ -2343,7 +3131,18 @@ def card_row(cards):
         if lines:
             # Markdown's hard break, not ``<br>``: a typst page drops raw HTML,
             # and the two sentences would run into each other there.
-            parts.append("\\\n".join(lines))
+            text = "\\\n".join(lines)
+            if self.plan.pdf:
+                # The PDF draws it through `dpx-lead` (definitions.typ): kept
+                # with what follows, and moved with its heading onto the
+                # landscape page of a wide first tile.
+                plain = [_MD_LINK_RE.sub(r"\1", line.strip("*")) for line in lines]
+                args = ", ".join(_typst_str(_html.unescape(x)) for x in plain)
+                text = (
+                    f'::: {{.content-visible when-format="html"}}\n{text}\n:::\n\n'
+                    f"```{{=typst}}\n#dpx-lead(({args},).join(linebreak()))\n```"
+                )
+            parts.append(text)
         bar = self._section_filter_bar(unit, tab)
         if bar:
             parts.append(bar)
@@ -2460,7 +3259,10 @@ def card_row(cards):
                 _comment(f'Table "{title}": the first {page} filtered rows, all of them shown'),
                 *prelude,
                 f"{name} = {source}{select}.head({page})",
-                f"show_table({name})",
+                # The dashboard's colours for a column's values, as chips.
+                f"show_table({name}, colors=depictio_category_colors)"
+                if self._category_colors()
+                else f"show_table({name})",
             ]
             return Cell("\n".join(body))
         if ctype == "figure":
@@ -2485,7 +3287,25 @@ def card_row(cards):
         # definition, carries the source's.
         caption = self._rewrite_tab_links(_author_line((entry.highlight or {}).get("caption")))
         line = f"*From the {where} tab.*"
-        return md_cell(line + (f" {caption}" if caption else ""))
+        body = line + (f" {caption}" if caption else "")
+        if not self.plan.pdf:
+            return md_cell(body)
+        # In the PDF the line and the figure's title, above it as the
+        # dashboard's tile header draws it, keep with the figure: a sticky
+        # block never stays alone at the foot of a page the figure leaves.
+        title = one_line(str(entry.unit.meta.get("title") or "")).strip()
+        head = (
+            f'#block(below: 0.45em, text(weight: "semibold", {_typst_str(title)}))\n'
+            if title
+            else ""
+        )
+        return md_cell(
+            "```{=typst}\n#block(sticky: true)[\n"
+            + head
+            + "```\n\n"
+            + body
+            + "\n\n```{=typst}\n]\n```"
+        )
 
     def _highlight_cell(self, meta: dict[str, Any], title: str) -> Cell:
         source = str(meta.get("source_component") or "a figure")
@@ -2539,21 +3359,34 @@ def card_row(cards):
             # the tab around it, and listed itself among the tabs.
             parts.append(demote_headings(body, level + 1 if title else level))
         text = "\n\n".join(parts) or "*(empty text tile)*"
+        tile_accent = self._tile_accent(meta)
         if self.plan.pdf:
-            # The PDF draws the stepper and the fact lists itself.
-            accent = palette_hex(str(meta.get("accent") or "") or None, self._accent())
+            # The PDF draws the stepper, the fact lists, the findings and the
+            # tab tiles itself.
             text = pdf_structures(
                 text,
                 lambda icon: self.plan.icons.get(icon),
-                accent=accent,
+                accent=tile_accent or self._accent(),
                 mono=self.plan.pdf_style == "mono",
+                tab_link=self._tab_link,
+                has_params=self._has_params(),
             )
         text = stepper_markdown(
             text,
             lambda icon: self._inline_icons(f"![](icon:{icon})"),
             rewrite_link=self._rewrite_links,
+            accent=tile_accent or None,
+            step_link=self._step_link,
         )
+        text = findings_markdown(text, tab_link=self._tab_link, icon_html=self._icon_html)
+        text = tab_tiles_markdown(text, tab_link=self._tab_link, icon_html=self._icon_html)
         text = self._inline_icons(self._rewrite_links(text))
+        if self.plan.pdf and 0 < text.count("#dpx-tab-tiles(") <= TAB_TILE_GROUPS_ON_A_PAGE:
+            # A map of the tabs reads whole: its groups are not split between
+            # pages, the last one left alone on the next.
+            text = (
+                "```{=typst}\n#block(breakable: false)[\n```\n\n" + text + "\n\n```{=typst}\n]\n```"
+            )
         legends = {
             f"legend:{c}": self._legend_html(c) for c in dict.fromkeys(_LEGEND_RE.findall(text))
         }

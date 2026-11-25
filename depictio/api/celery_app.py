@@ -1137,6 +1137,41 @@ _REPORT_SLOT = "report"
 _REPORT_SLOT_RETRY_S = 30
 
 
+def _preview_workdir(preview_cache: str) -> str:
+    """The persistent workdir of one user's preview of one dashboard.
+
+    Quarto's jupyter-cache keeps the executed cells of the last preview there
+    across jobs, so the next preview of the same dashboard re-executes only
+    what changed. The root is ``preview_cache_dir`` when configured, the
+    system temporary directory's ``depictio-preview`` otherwise.
+    """
+    import shutil
+    import tempfile
+    import time
+    from pathlib import Path
+
+    root = settings.notebook_export.preview_cache_dir or str(
+        Path(tempfile.gettempdir()) / "depictio-preview"
+    )
+    workdir = Path(root) / preview_cache
+    # The workdirs of this dashboard's older data (``<user>/<dashboard>/
+    # <data identity>``) are never read again: one left untouched for a day
+    # goes, so a dashboard keeps about one cache, not one per ingestion.
+    parent = workdir.parent
+    if parent.is_dir():
+        for sibling in parent.iterdir():
+            try:
+                if (
+                    sibling != workdir
+                    and sibling.is_dir()
+                    and time.time() - sibling.stat().st_mtime > 86400
+                ):
+                    shutil.rmtree(sibling, ignore_errors=True)
+            except OSError:
+                continue
+    return str(workdir)
+
+
 @celery_app.task(
     bind=True,
     name="render_notebook_report",
@@ -1158,6 +1193,9 @@ def render_notebook_report(
     combined: dict | None = None,
     filename: str | None = None,
     pdf: bool = False,
+    preview: bool = False,
+    preview_cache: str | None = None,
+    preview_force: bool = False,
     **_legacy: Any,
 ) -> dict:
     """Execute an exported notebook and keep the report Quarto renders from it.
@@ -1186,6 +1224,19 @@ def render_notebook_report(
     "Report | Dashboard" switch on. A failed manifest then fails the job: a
     combined file without its dashboard is not what was asked for.
 
+    ``preview_cache`` (``"<user_id>/<dashboard_id>"``, set by the report
+    editor's preview) renders into a persistent workdir of that name, where
+    Quarto's jupyter-cache keeps the executed cells across previews: a
+    text-only edit reuses the last run's outputs. ``preview_force`` maps to
+    ``--cache-refresh`` — re-execute every cell and refresh the cache with the
+    results. ``preview`` (the same editor's request) serves the report from
+    the API rather than as one download: the document was built with
+    ``embed-resources: false``, so Quarto writes it beside a
+    ``report_files/`` directory, and both are uploaded under a token minted
+    for this one job (``secrets.token_urlsafe``) — the capability URL the
+    editor's iframe opens, carried back in the result's ``preview_url``. No
+    downloadable report is kept: the preview is served, not downloaded.
+
     At most ``report_concurrency`` reports run at once on the deployment: a
     report holds its worker while the passes it waits on need workers too.
     A report finding no free slot is retried later rather than holding one.
@@ -1195,6 +1246,7 @@ def render_notebook_report(
     worker's log.
     """
     import asyncio
+    import secrets
 
     from beanie import init_beanie
     from celery.exceptions import SoftTimeLimitExceeded
@@ -1205,7 +1257,7 @@ def render_notebook_report(
     from depictio.api.v1.services.notebook_export import jobs, store
     from depictio.api.v1.services.notebook_export.render import (
         RenderUnavailable,
-        render_quarto_html,
+        render_quarto_html_files,
         render_quarto_pdf,
     )
     from depictio.api.v1.services.task_tokens import mint_task_token, revoke
@@ -1253,14 +1305,27 @@ def render_notebook_report(
             manifest = _runtime_manifest(job_id, runtime, required=bool(combined))
         self.update_state(state="PROGRESS", meta={"phase": "rendering", "job_id": job_id})
         notebook = store.get(notebook_key)
+        # The preview's persistent workdir: one per user and dashboard, so its
+        # Quarto cache (the executed cells) survives the job and serves the
+        # next preview of the same dashboard.
+        preview_render: dict[str, Any] = (
+            {
+                "workdir": _preview_workdir(preview_cache),
+                "cache": True,
+                "force": bool(preview_force),
+            }
+            if preview_cache
+            else {}
+        )
         try:
-            html = render_quarto_html(
+            html, report_files = render_quarto_html_files(
                 notebook,
                 stem=stem,
                 api_url=api_url,
                 api_token=token.access_token,
                 timeout_s=settings.notebook_export.render_timeout_s,
                 extra_env=extra_env,
+                **preview_render,
             )
         except RenderUnavailable as exc:
             if exc.log:
@@ -1270,16 +1335,33 @@ def render_notebook_report(
             self.update_state(state="PROGRESS", meta={"phase": "combining", "job_id": job_id})
             html = _embed_runtime(job_id, html, manifest, runtime, combined)
         self.update_state(state="PROGRESS", meta={"phase": "storing", "job_id": job_id})
-        store.put(html_key, html, store.HTML_MEDIA_TYPE)
-        logger.info(f"📄 Rendered notebook report {html_key} ({len(html) / 1e6:.1f} MB)")
+        if preview:
+            # The preview's report and its files, served by capability URL:
+            # a token minted for this one job names them in the store, and a
+            # new render is a new token, so a stale frame cannot keep serving
+            # a report the next preview replaced. (An embedded report's file
+            # set is empty — the report then carries everything itself.)
+            preview_token = secrets.token_urlsafe(32)
+            store.put(store.preview_key(preview_token, "report.html"), html, store.HTML_MEDIA_TYPE)
+            for rel, body in report_files.items():
+                store.put(
+                    store.preview_key(preview_token, rel),
+                    body,
+                    store.preview_content_type(rel),
+                )
+        else:
+            store.put(html_key, html, store.HTML_MEDIA_TYPE)
+            logger.info(f"📄 Rendered notebook report {html_key} ({len(html) / 1e6:.1f} MB)")
         out = {
             "status": "success",
             "job_id": job_id,
             "user_id": user_id,
-            "key": html_key,
+            "key": html_key if not preview else None,
             "filename": out_name,
             "size": len(html),
         }
+        if preview:
+            out["preview_url"] = store.preview_url(preview_token)
         if pdf:
             # The PDF is a second render (static figures); its failure never
             # costs the HTML report, it is reported beside it.

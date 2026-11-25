@@ -1186,6 +1186,10 @@ async def save_dashboard(
     # whole document, so saving it here would undo labels shared since the
     # editor loaded the dashboard.
     save_payload.pop("shared_labels", None)
+    # Written only by the report-layer route, and revision-stamped: a `/save`
+    # of a document the editor loaded earlier would both undo a colleague's
+    # report text and reset the layer to a stale revision.
+    save_payload.pop("report_layer", None)
 
     # `creation_time` is write-once: the client round-trips the whole dashboard
     # document, so trusting its payload would let a save clobber (or invent) the

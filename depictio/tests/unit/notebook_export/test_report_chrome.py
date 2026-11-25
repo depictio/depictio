@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import copy
 import re
+import shutil
+import subprocess
 
+import pytest
 import yaml
 
 from depictio.api.v1.services.notebook_export.generator import (
@@ -13,11 +16,18 @@ from depictio.api.v1.services.notebook_export.generator import (
     generate_qmd,
 )
 from depictio.api.v1.services.notebook_export.report_chrome import (
+    TabLinkInfo,
     about_callout,
     description_sections,
+    findings_markdown,
+    parse_stat_row,
+    pdf_structures,
     stepper_markdown,
+    tab_tiles_markdown,
 )
 from depictio.models.models.analysis_state import AnalysisState
+from depictio.models.models.report_layer import ReportLayer
+from depictio.notebook.typst import LANDSCAPE_TABLE_ROWS
 
 LOGO = "data:image/png;base64,iVBORw0KGgo="
 MARK = "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="
@@ -54,23 +64,58 @@ def _plan(tabs, **extra) -> ExportPlan:
 # ── Overview layout ─────────────────────────────────────────────────────────
 
 
+#: The report laid out in the dashboard's rows (its settings' other width).
+_ROWS = {"settings": {"tile_width": "row"}}
+
+
+def test_a_full_width_tile_leaves_its_row(ampliseq_tabs):
+    """The layer's ``full_width`` takes a tile out of the dashboard row it
+    shares: the 5:3 row splits into two tiles of their own, each the page's
+    width, in the same order."""
+    main, run = next(
+        (t, m) for t in ampliseq_tabs for m in t["stored_metadata"] if m.get("index") == "ov-run"
+    )
+    layer = ReportLayer.model_validate(
+        {
+            **_ROWS,
+            "tiles": [
+                {
+                    "tab_id": str(main["dashboard_id"]),
+                    "component_id": str(run["index"]),
+                    "full_width": True,
+                }
+            ],
+        }
+    )
+    before = _body(
+        generate_qmd(_plan(ampliseq_tabs, report_layer=ReportLayer.model_validate(_ROWS)))
+    )
+    src = _body(generate_qmd(_plan(ampliseq_tabs, report_layer=layer)))
+    # That row is gone (other tabs keep their own 5:3 rows), its tiles stay.
+    assert src.count('layout="[5,3]"') == before.count('layout="[5,3]"') - 1
+    study, own = src.index("The study"), src.index("'ov-run'")
+    assert study < own
+    assert 'layout="[5,3]"' not in src[study:own]
+
+
 def test_the_overview_keeps_its_grid_rows(ampliseq_tabs):
-    """About + The run share a row 5:3 as on the dashboard; the steps are a stepper."""
-    src = _body(generate_qmd(_plan(ampliseq_tabs)))
+    """The study + The run share a row 5:3 as on the dashboard (the report in
+    the dashboard's rows); the steps are a stepper."""
+    src = _body(generate_qmd(_plan(ampliseq_tabs, report_layer=ReportLayer.model_validate(_ROWS))))
     # Quarto's own layout: a flex row on the page, a typst grid in the PDF.
     assert '::: {.dpx-grid layout="[5,3]"}' in src
     grid = src.index('layout="[5,3]"')
-    assert src.index("About this dashboard") > grid
+    assert src.index("The study") > grid
     assert src.index("'ov-run'") > grid
     # Both are card surfaces, as `surface: card` draws them.
     assert src.count("{.dpx-cell .dpx-surface-card") >= 3
     # The steps list as the stepper's parts: a mark, a label, its links.
-    assert "::: {.steps .dpx-steps}" in src
+    assert "::: {.steps .dpx-steps" in src
     assert 'class="dpx-step-label">Trim</span>' in src
     assert 'class="dpx-step-text">Primers cut by Cutadapt</span>' in src
-    # The four key-figure cards stay one strip, four across.
+    # The four key-figure cards stay one strip, two to a line.
     assert "card_row([viz_samples, viz_phyla, viz_shannon_diversity, viz_reads_kept])" in src
-    assert "cols = n if n <= 4" in src
+    assert "cols = min(len(cards), 2)" in src
 
 
 def test_a_remote_logo_is_never_linked(ampliseq_tabs):
@@ -88,10 +133,13 @@ def test_a_section_filter_bar_shows_its_controls(ampliseq_tabs):
 
 def test_links_to_sections_and_parameters_land_in_the_document(ampliseq_tabs):
     project = {"template_origin": {"run_provenance": [{"key": "a", "value": 1}]}}
-    src = _body(generate_qmd(_plan(ampliseq_tabs, project=project)))
+    src = _body(
+        generate_qmd(_plan(ampliseq_tabs, project=project, icons={"mdi:tune-variant": "<svg/>"}))
+    )
     assert "](params:" not in src and "](section:" not in src
     assert '<details id="export-parameters">' in src
-    assert "[Settings](#export-parameters)" in src
+    # An icon alone (the live stepper's), its name as the tooltip.
+    assert 'class="dpx-step-link" href="#export-parameters" title="Settings"' in src
     # Without a parameters block the step keeps no dangling "Settings".
     src = _body(generate_qmd(_plan(ampliseq_tabs)))
     assert "[Settings]" not in src and "](params:" not in src
@@ -216,6 +264,151 @@ def test_stepper_markup():
     # A link the document cannot hold is dropped, not left dangling.
     out = stepper_markdown(md, lambda i: "", rewrite_link=lambda s: s.split("](")[0][1:])
     assert "dpx-step-links" not in out
+
+
+def test_a_steps_accent_and_icon_links():
+    md = (
+        "::: steps\n"
+        "1. ![](icon:mdi:dna) **Denoise** DADA2 · [Settings](params:x) · [Tree](tab:Phylogeny)"
+        " · [Docs](https://example.org)\n"
+        ":::"
+    )
+
+    def step_link(label, target):
+        if target.startswith("tab:"):
+            return f'<a class="dpx-step-link" title="{label}"><i>tab</i></a>'
+        return "" if target.startswith("params:") else None
+
+    out = stepper_markdown(
+        md,
+        lambda i: "",
+        rewrite_link=lambda s: s,
+        accent="#40c057",
+        step_link=step_link,
+    )
+    assert out.splitlines()[0] == '::: {.steps .dpx-steps style="--dpx-accent: #40c057"}'
+    # The tab as an icon link, the missing params dropped, the external link kept as text.
+    assert '<a class="dpx-step-link" title="Tree"><i>tab</i></a> [Docs](https://example.org)' in out
+    assert "Settings" not in out
+
+
+def _tab(name):
+    return {
+        "community": TabLinkInfo("Community", "tab-community", "mdi:bacteria", "#12b886", "Who?"),
+        "alpha": TabLinkInfo("Alpha", "tab-alpha", "mdi:chart", "#be4bdb", None),
+    }.get(name.strip().lower())
+
+
+_FINDINGS = (
+    "- **{{share}}** of the community is {{top}} – the most abundant phylum"
+    " [Community](tab:Community)\n"
+    "- **5%** FDR – ANCOM-BC [Gone](tab:Nowhere)\n"
+)
+
+
+def test_a_findings_list_is_read_as_the_live_one():
+    row = parse_stat_row("**{{share}}** is high – context [Community](tab:Community)")
+    assert row and (row.stat, row.claim, row.context) == ("{{share}}", "is high", "context")
+    assert row.link == "[Community](tab:Community)"
+    # A figure with no digit, a fact without context or link: not a result.
+    assert parse_stat_row("**Samples** are many – context") is None
+    assert parse_stat_row("**16S** amplicons") is None
+    out = findings_markdown(_FINDINGS, tab_link=_tab)
+    assert out.count("{.dpx-finding}") == 2 and "::: {.dpx-findings}" in out
+    # The figure wears its tab's colour; the way in is the document's anchor.
+    assert '[{{share}}]{.dpx-finding-stat style="color: #12b886"}' in out
+    assert (
+        '[[Community](#tab-community)]{.dpx-finding-link style="--dpx-link-color: #12b886"}' in out
+    )
+    # A tab the document lacks: the row stays, without a link or a colour.
+    assert "[5%]{.dpx-finding-stat}" in out and "Gone" not in out
+    # Any other list is left as written, and one item that is no result keeps it so.
+    plain = "- a\n- b\n"
+    assert findings_markdown(plain, tab_link=_tab) == plain
+    mixed = _FINDINGS + "- just text\n"
+    assert findings_markdown(mixed, tab_link=_tab) == mixed
+
+
+def _icon(icon, color):
+    return f'<svg data-color="{color}"/>' if icon else ""
+
+
+def test_a_list_of_tab_links_is_drawn_as_tiles():
+    md = "### Taxa\n- [Community & Diversity](tab:Community)\n- [Alpha](tab:Alpha): own line\n"
+    out = tab_tiles_markdown(md, tab_link=_tab, icon_html=_icon)
+    assert "::: {.dpx-tab-tiles}" in out and out.count("{.dpx-tab-tile ") == 2
+    assert 'style="--dpx-tile-color: #12b886"' in out
+    assert '<svg data-color="#12b886"/>' in out
+    assert "[Community & Diversity](#tab-community){.dpx-tab-tile-name}" in out
+    # The tab's own subtitle, unless the author wrote a line.
+    assert "[Who?]{.dpx-tab-tile-line}" in out and "[own line]{.dpx-tab-tile-line}" in out
+    # A numbered list numbers its tiles.
+    numbered = tab_tiles_markdown(
+        "1. [Alpha](tab:Alpha)\n2. [Community](tab:Community)\n", tab_link=_tab, icon_html=_icon
+    )
+    assert "[01]{.dpx-tab-tile-num}" in numbered and "[02]{.dpx-tab-tile-num}" in numbered
+    # Prose that merely mentions a tab stays a list.
+    prose = "- see [Alpha](tab:Alpha) for more\n- [Community](tab:Community)\n"
+    assert tab_tiles_markdown(prose, tab_link=_tab, icon_html=_icon) == prose
+    # Every tab missing: the list goes, and the heading announcing it.
+    gone = "text\n\n### Data\n- [X](tab:Nowhere)\n\nafter\n"
+    out = tab_tiles_markdown(gone, tab_link=_tab, icon_html=_icon)
+    assert "Data" not in out and "Nowhere" not in out and "after" in out
+
+
+def test_the_pdf_draws_findings_tiles_and_step_icons():
+    svg = '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M0 0h24v24z"/></svg>'
+    md = (
+        _FINDINGS
+        + "\nBetween.\n\n- [Community](tab:Community)\n- [Alpha](tab:Alpha)\n\n"
+        + "::: steps\n1. ![](icon:mdi:dna) **Trim** Cut · [Settings](params:p) · [T](tab:Community)\n:::\n"
+    )
+    out = pdf_structures(md, lambda i: svg, accent="#40c057", tab_link=_tab)
+    assert '#dpx-findings((("{{share}}", "of the community is {{top}}"' in out
+    assert 'rgb("#12b886")' in out and "#dpx-tab-tiles(" in out
+    steps = re.search(r"#dpx-steps\(\(\((.*)\), rgb", out)
+    assert steps and steps.group(1).count('fill=\\"#12b886\\"') >= 1
+    # The page keeps the list as written, in an HTML-only block.
+    assert out.count('when-format="html"') >= 3
+    # A params icon only when the document holds the parameters.
+    bare = pdf_structures(md, lambda i: svg, accent="#40c057", tab_link=_tab, has_params=False)
+    assert bare.count("<svg") < out.count("<svg")
+
+
+@pytest.mark.skipif(shutil.which("quarto") is None, reason="quarto (typst) is not installed")
+def test_the_typst_definitions_compile(tmp_path):
+    from depictio.api.v1.services.notebook_export.pdf_typst import typst_preamble
+
+    svg = '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M0 0h24v24z"/></svg>'
+    md = (
+        _FINDINGS.replace("{{share}}", "41%").replace("{{top}}", "X")
+        + "\nBetween.\n\n1. [Community](tab:Community)\n2. [Alpha](tab:Alpha)\n\n"
+        + "::: steps\n1. ![](icon:mdi:dna) **Trim** Cut · [Settings](params:p) · [T](tab:Community)\n"
+        + "2. **Next** No links\n:::\n"
+    )
+    out = pdf_structures(md, lambda i: svg, accent="#40c057", tab_link=_tab)
+    calls = "\n".join(re.findall(r"````\{=typst\}\n(.*?)\n````", out, re.S))
+    assert calls.count("#dpx-") == 3
+    doc = tmp_path / "doc.typ"
+    doc.write_text(typst_preamble(title="T", subtitle=None, primary="#228be6") + "\n" + calls)
+    done = subprocess.run(
+        ["quarto", "typst", "compile", str(doc), str(tmp_path / "doc.pdf")],
+        capture_output=True,
+        text=True,
+    )
+    assert done.returncode == 0, done.stderr
+    assert (tmp_path / "doc.pdf").stat().st_size > 0
+
+
+def test_the_overview_draws_its_steps_findings_and_tiles(ampliseq_tabs):
+    src = _body(generate_qmd(_plan(ampliseq_tabs, icons={"mdi:tune-variant": "<svg/>"})))
+    # The stepper takes the tile's own accent (green on the dashboard).
+    assert '::: {.steps .dpx-steps style="--dpx-accent: #40c057"}' in src
+    # The findings list, each figure in its tab's colour.
+    assert "::: {.dpx-findings}" in src and "{.dpx-finding-stat style=" in src
+    # The how-to-read lists: one tile per tab the document holds.
+    assert "::: {.dpx-tab-tiles}" in src and "{.dpx-tab-tile-name}" in src
+    assert "](tab:" not in src
 
 
 # ── Methods and citations ───────────────────────────────────────────────────
@@ -574,7 +767,10 @@ def test_the_table_builder():
     assert '"1,000"' in out and '"0.1235"' in out
     # Widths from what the columns hold, never more than the page.
     assert re.search(r"columns: \((\d+\.\d+fr, ?)+\)", out)
-    assert "Showing 30 of 40 rows · 8 of 12 columns" in out
+    # 12 columns: more than a portrait page holds, all of them on a
+    # landscape one (the mark the preamble's show rule reads).
+    assert "#dpx-wide[" in out
+    assert f"Showing {LANDSCAPE_TABLE_ROWS} of 40 rows; the HTML report has the whole table." in out
 
 
 def test_a_tile_that_cannot_be_drawn_is_named_not_numbered():
@@ -726,3 +922,155 @@ def test_a_failed_tiles_caption_does_not_claim_data(ampliseq_tabs):
     html_only = _body(generate_qmd(_plan(ampliseq_tabs)))
     assert "dpx-asof(" not in html_only and TYPST_TILE_DONE not in html_only
     assert '<span class="dpx-asof">Data: ' in html_only
+
+
+# ── Report settings ─────────────────────────────────────────────────────────
+
+
+def _with_settings(tabs, **settings) -> str:
+    layer = ReportLayer.model_validate({"settings": settings})
+    return generate_qmd(_plan(tabs, report_layer=layer, pdf=True))
+
+
+def test_report_settings_default_to_the_report_as_it_was(ampliseq_tabs):
+    """A layer with every setting at its default exports what no layer does."""
+    assert _with_settings(ampliseq_tabs) == generate_qmd(
+        _plan(ampliseq_tabs, report_layer=ReportLayer().model_dump(), pdf=True)
+    )
+    src = _with_settings(ampliseq_tabs)
+    front = _front(src)
+    assert front["format"]["html"]["toc"] is True
+    assert front["format"]["html"]["code-tools"] is True
+    assert front["format"]["typst"]["papersize"] == "a4"
+    for part in ("Export details", "How to run", "Methods and citations", "dpx-asof", "Contents"):
+        assert part in src
+    assert "#set figure(numbering: none)" not in src
+    assert "#set page(flipped: true)" not in src
+    assert 'data-viz-controls="popover"' in front["format"]["html"]["include-before-body"]["text"]
+
+
+def test_report_settings_take_parts_out(ampliseq_tabs):
+    src = _with_settings(
+        ampliseq_tabs,
+        toc=False,
+        code=False,
+        export_details=False,
+        how_to_run=False,
+        methods=False,
+        provenance=False,
+    )
+    front = _front(src)
+    assert front["format"]["html"]["toc"] is False
+    assert front["format"]["html"]["code-tools"] is False
+    assert "references" not in front
+    body = _body(src)
+    # The typst preamble still defines ``dpx-asof``; no tile calls it.
+    for part in (
+        "Export details",
+        "How to run",
+        "Methods and citations",
+        'class="dpx-asof"',
+        "`#dpx-asof(",
+        "[Contents]",
+    ):
+        assert part not in body, part
+
+
+def test_report_settings_shape_the_pdf_and_the_captions(ampliseq_tabs):
+    src = _with_settings(
+        ampliseq_tabs, paper="letter", landscape=True, numbering=False, viz_controls="rail"
+    )
+    front = _front(src)
+    assert front["format"]["typst"]["papersize"] == "us-letter"
+    assert "#set page(flipped: true)" in src
+    assert "#set figure(numbering: none)" in src
+    assert "(?:Figure|Table)" in front["format"]["html"]["include-after-body"]["text"]
+    assert 'data-viz-controls="rail"' in front["format"]["html"]["include-before-body"]["text"]
+
+
+def test_every_tile_is_full_width_by_default(ampliseq_tabs):
+    """A report reads top to bottom: no dashboard row unless asked for."""
+    before = _body(_with_settings(ampliseq_tabs, tile_width="row"))
+    assert 'layout="[5,3]"' in before
+    src = _body(generate_qmd(_plan(ampliseq_tabs)))
+    assert 'layout="[5,3]"' not in src
+    # Cards keep their strip.
+    assert "card_row([viz_samples, viz_phyla, viz_shannon_diversity, viz_reads_kept])" in src
+
+
+def test_a_tile_can_keep_its_dashboard_row(ampliseq_tabs):
+    """Under the full-width default, two tiles both set to their row share it."""
+    main = next(
+        t for t in ampliseq_tabs for m in t["stored_metadata"] if m.get("index") == "ov-run"
+    )
+    row = [m["index"] for m in main["stored_metadata"] if m.get("index") in ("ov-run", "ov-study")]
+    layer = ReportLayer.model_validate(
+        {
+            "tiles": [
+                {"tab_id": str(main["dashboard_id"]), "component_id": str(i), "full_width": False}
+                for i in row
+            ]
+        }
+    )
+    src = _body(generate_qmd(_plan(ampliseq_tabs, report_layer=layer)))
+    assert src.count('layout="[5,3]"') == 1
+
+
+def test_a_large_table_opens_a_pdf_page(ampliseq_tabs):
+    on = _with_settings(ampliseq_tabs)
+    off = _with_settings(ampliseq_tabs, table_page_break=False)
+    assert "`#pagebreak(weak: true)`{=typst}" in on
+    assert "`#pagebreak(weak: true)`{=typst}" not in off
+
+
+def test_a_section_opening_on_a_large_table_turns_the_page_before_its_heading(ampliseq_tabs):
+    # The break sits before the section's heading, never between the heading
+    # and its table: a heading alone at the foot of a page is not read.
+    on = _with_settings(ampliseq_tabs)
+    br = "`#pagebreak(weak: true)`{=typst}"
+    section = on.index(':Sample sheet"}')
+    head = on.rindex("::::", 0, section)
+    assert on[:head].rstrip().endswith(br)
+    heading = on.index("Sample sheet</span>", section)
+    table = on.index("{#tbl-", heading)
+    assert br not in on[heading:table]
+
+
+def test_a_highlight_keeps_its_lead_and_title_with_its_figure_in_the_pdf(ampliseq_tabs):
+    # The "From the ... tab." line was left at the foot of a page the figure
+    # moved off; in the PDF it rides a sticky block with the figure's title.
+    src = _with_settings(ampliseq_tabs)
+    at = src.index("*From the [")
+    opened = src.rindex("#block(sticky: true)[", 0, at)
+    assert "```" not in src[opened:at].replace("```\n\n", "", 1)
+    assert "Phylum composition per group" in src[opened:at]
+    assert src.index("```{=typst}\n]\n```", at) > at
+    html = generate_qmd(_plan(ampliseq_tabs))
+    assert "*From the [" in html and "#block(sticky: true)[" not in html
+
+
+def test_a_section_description_keeps_with_what_follows_in_the_pdf(ampliseq_tabs):
+    # "Key figures" and its line were left at the foot of a page whose cards
+    # moved on; a section opening on a wide table left both on a portrait page
+    # before its landscape one. The PDF draws the line through `dpx-lead`,
+    # which keeps with the tile and moves with its heading.
+    src = _with_settings(ampliseq_tabs)
+    heading = src.index("Key figures</span>")
+    lead = src.index("#dpx-lead((", heading)
+    assert '"The run in four numbers.' in src[lead : src.index("\n", lead)]
+    assert src.rindex('{.content-visible when-format="html"}', heading, lead) > heading
+    html = generate_qmd(_plan(ampliseq_tabs))
+    assert "#dpx-lead(" not in html and "*The run in four numbers" in html
+
+
+def test_a_tab_map_is_kept_on_one_pdf_page(ampliseq_tabs):
+    src = _with_settings(ampliseq_tabs)
+    tiles = src.index("#dpx-tab-tiles(")
+    opened = src.rindex("#block(breakable: false)[", 0, tiles)
+    assert "```{=typst}\n]\n```" in src[tiles:]
+    assert src.count("#dpx-tab-tiles(", opened, src.index("```{=typst}\n]\n```", tiles)) >= 2
+
+
+def test_tables_wear_the_dashboard_colours(ampliseq_tabs):
+    src = _body(generate_qmd(_plan(ampliseq_tabs)))
+    assert "colors=depictio_category_colors)" in src

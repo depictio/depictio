@@ -9,7 +9,7 @@
  * timeline, "what changed"), Delta history and the previews that read object
  * storage — is hidden in a bundle by `useIsStaticBundle()`, and swapped for
  * these at build time (`projectServerParts.json`, read by
- * vite.static.config.ts and scripts/check-static-shim.mjs), so none of it is
+ * vite.combined.config.ts and scripts/check-static-shim.mjs), so none of it is
  * compiled in: no code that could reach a server, and no bytes against the
  * runtime's budget.
  *

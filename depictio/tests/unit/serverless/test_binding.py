@@ -16,11 +16,12 @@ from typing import Any
 import polars as pl
 import pytest
 
-from depictio.models.models.serverless import BindingTable
+from depictio.models.models.serverless import BindingTable, TierReason
 from depictio.serverless.binding import (
     BindingMiss,
     build_binding,
     build_binding_with_reason,
+    miss_tier_reason,
     planned_figure_miss,
 )
 
@@ -323,6 +324,31 @@ def test_a_text_axis_trendline_freezes(penguins: pl.DataFrame) -> None:
         _figure(x="flipper_length_mm", y="body_mass_g", trendline="lowess"), frame
     )
     assert table is None and miss is BindingMiss.TRENDLINE_NON_NUMERIC
+
+
+def test_a_trendline_miss_maps_to_its_own_tier_reason(penguins: pl.DataFrame) -> None:
+    """A trendline the runtime cannot refit is a fact the badge has its own
+    sentence for, so it must not read as a generic matching failure."""
+    component = _figure(
+        x="flipper_length_mm",
+        y="body_mass_g",
+        trendline="lowess",
+        trendline_options={"frac": 0.5, "it": 0},
+    )
+    table, miss = build_binding_with_reason(component, penguins)
+    assert table is None and miss is BindingMiss.TRENDLINE_UNSUPPORTED
+    assert miss_tier_reason(miss) is TierReason.TRENDLINE
+    # Every trendline-specific bail-out, present and future, maps the same way.
+    for member in BindingMiss:
+        if member.name.startswith("TRENDLINE_"):
+            assert miss_tier_reason(member) is TierReason.TRENDLINE
+
+
+def test_a_non_trendline_miss_stays_a_binding_miss() -> None:
+    empty = pl.DataFrame({"x": [], "y": []}, schema={"x": pl.Float64, "y": pl.Float64})
+    table, miss = build_binding_with_reason(_figure(x="x", y="y"), empty)
+    assert table is None and miss is BindingMiss.NO_DATA
+    assert miss_tier_reason(miss) is TierReason.BINDING_MISS
 
 
 # ---------------------------------------------------------------------------

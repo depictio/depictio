@@ -24,6 +24,7 @@ import {
   STATIC_TIER_BADGE_COLOR,
 } from 'depictio-react-core';
 import type {
+  AnalysisState,
   StaticExportPreflight,
   StaticExportPythonRuntime,
   StaticExportSizeEstimate,
@@ -170,6 +171,9 @@ interface ExportStaticModalProps {
   dashboardId: string | null;
   /** Used for the downloaded filename; falls back to the dashboard id. */
   dashboardTitle?: string | null;
+  /** The view on screen, read when the build starts: the bundle's frozen tiles
+   *  are computed at its filters and the bundle opens on them. */
+  getAnalysisState?: () => AnalysisState;
 }
 
 /**
@@ -183,6 +187,7 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
   onClose,
   dashboardId,
   dashboardTitle,
+  getAnalysisState,
 }) => {
   const [preflight, setPreflight] = useState<StaticExportPreflight | null>(null);
   const [preflightLoading, setPreflightLoading] = useState(false);
@@ -257,6 +262,7 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
       const job = await dispatchStaticExport(
         dashboardId,
         pythonChoice ? 'on' : 'off',
+        getAnalysisState ? getAnalysisState() : null,
       );
       if (cancelledRef.current) return;
       if (job.status === 'failed') {
@@ -516,6 +522,13 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
             onChange={setPythonChoice}
             disabled={exporting}
           />
+        )}
+
+        {getAnalysisState && (
+          <Text size="xs" c="dimmed" data-testid="export-static-state-note">
+            The bundle opens on the filters shown now. Tiles that cannot be redrawn in the
+            browser are computed at those filters, and keep that view if a reader changes them.
+          </Text>
         )}
 
         <Group justify="flex-end" gap="xs" mt="sm">

@@ -35,13 +35,33 @@ export interface StaticTierEntry {
 export type StaticTierMap = Record<string, StaticTierEntry>;
 
 const StaticBadgeContext = createContext<StaticTierMap | null>(null);
+/** True when the bundle was exported at a filtered view (its manifest's
+ *  `initial_filters` is not empty): a frozen tile then shows that view, not the
+ *  whole dataset, and its explanation must say so. */
+const ExportedStateContext = createContext(false);
 
 export const StaticBadgeProvider: React.FC<{
   tiers: StaticTierMap;
+  /** The manifest's `initial_filters` held at least one filter. */
+  exportedState?: boolean;
   children: React.ReactNode;
-}> = ({ tiers, children }) => (
-  <StaticBadgeContext.Provider value={tiers}>{children}</StaticBadgeContext.Provider>
+}> = ({ tiers, exportedState = false, children }) => (
+  <StaticBadgeContext.Provider value={tiers}>
+    <ExportedStateContext.Provider value={exportedState}>{children}</ExportedStateContext.Provider>
+  </StaticBadgeContext.Provider>
 );
+
+/** An explanation rewritten for a bundle exported at a filtered view: what a
+ *  snapshot holds is that view, not the whole dataset. */
+function atExportedState(text: string): string {
+  return text
+    .replace(/(?:over|of) the whole dataset/g, 'at the filters the dashboard was exported with')
+    .replace(/, over the whole dataset,/g, ', at the filters the dashboard was exported with,');
+}
+
+/** The sentence a snapshot tile adds under an exported view. */
+const EXPORTED_STATE_NOTE =
+  'Changing the filters here does not change this view: it keeps the filters the dashboard was exported with.';
 
 /** True when a `StaticBadgeProvider` is mounted above the caller — i.e. the
  *  app is running inside a serverless static bundle. Server builds mount no
@@ -135,6 +155,8 @@ const REASON_TEXT: Record<string, string> = {
     'This chart is produced by a Python script, which needs a server to run. It shows the result over the whole dataset.',
   binding_miss:
     'The export could not tell which columns each part of this chart comes from, so it ships as a snapshot of the whole dataset instead of being redrawn in your browser.',
+  trendline:
+    'The trend line on this chart uses settings the browser cannot recompute, so the chart is a snapshot of the whole dataset.',
   max_points:
     'The points drawn here are not the same selection the live dashboard makes, so density and rare points can look different.',
   link_table_too_big:
@@ -252,6 +274,7 @@ export const StaticTierBadge: React.FC<{ componentIndex: string | undefined }> =
   componentIndex,
 }) => {
   const tiers = useContext(StaticBadgeContext);
+  const exportedState = useContext(ExportedStateContext);
   const [detailOpen, setDetailOpen] = useState(false);
   if (!tiers || !componentIndex) return null;
   const entry = tiers[componentIndex];
@@ -274,7 +297,10 @@ export const StaticTierBadge: React.FC<{ componentIndex: string | undefined }> =
   );
 
   const headline = TIER_HEADLINE[tier];
-  const explanation = staticTierExplanation(tier, entry?.reason);
+  const snapshot = tier === 'frozen' || tier === 'partial';
+  const baseExplanation = staticTierExplanation(tier, entry?.reason);
+  const explanation =
+    baseExplanation && exportedState && snapshot ? atExportedState(baseExplanation) : baseExplanation;
   const detail = technicalDetail(entry?.detail);
 
   return (
@@ -313,6 +339,11 @@ export const StaticTierBadge: React.FC<{ componentIndex: string | undefined }> =
             {explanation && (
               <Text size="xs" lh={1.35}>
                 {explanation}
+              </Text>
+            )}
+            {exportedState && tier === 'frozen' && (
+              <Text size="xs" lh={1.35} c="dimmed" data-testid="static-tier-exported-state">
+                {EXPORTED_STATE_NOTE}
               </Text>
             )}
             {detail && (

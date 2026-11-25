@@ -185,6 +185,8 @@ GUARDED: set[tuple[str, str]] = {
     (_DASH, "import_dashboard_from_json"),
     # labels shared on a dashboard are part of its content
     ("dashboards_endpoints.shared_labels_routes", "put_shared_labels"),
+    # the report layer (#1457): the export's intro, conclusion and placement
+    ("dashboards_endpoints.report_layer_routes", "put_report_layer"),
     # versions: rewriting a published dashboard from its history
     (_VER, "delete_dashboard_version"),
     (_VER, "restore_dashboard_version"),
@@ -279,6 +281,10 @@ EXEMPT: dict[tuple[str, str], str] = {
     ("dashboards_endpoints.notebook_export", "notebook_export"): _READ,
     ("dashboards_endpoints.notebook_export", "notebook_export_render"): (
         "renders a report into the caller's own S3 prefix; the dashboard is only read"
+    ),
+    ("dashboards_endpoints.notebook_export", "notebook_export_preview"): (
+        "renders the editor's exact preview into the caller's own S3 prefix; the "
+        "dashboard is only read, nothing of the project is written"
     ),
     ("dashboards_endpoints.embed", "component_embed"): _READ,
     ("dashboards_endpoints.embed", "component_figure"): _READ,

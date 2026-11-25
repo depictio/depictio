@@ -1,0 +1,18 @@
+/* The structure's tile grid: two columns on the half-width editor column, one
+ * when narrow. A KPI card takes one cell, everything else the whole row, and
+ * so does anything that is not a tile (the inspector slot under a tile). */
+.rpt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(max(200px, 45%), 1fr));
+  gap: 6px;
+  align-items: start;
+}
+
+.rpt-grid > * {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.rpt-grid > .rpt-tile--half {
+  grid-column: auto;
+}

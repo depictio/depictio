@@ -417,6 +417,104 @@ def test_stacked_bar_is_a_stacked_bar_chart() -> None:
     assert {trace["type"] for trace in spec["data"]} == {"bar"}
 
 
+class TestStackedBarDrawsInTheDashboardsColours:
+    """The export wears what the live tile wears: pinned colours, named blanks, the strip."""
+
+    # More phyla than the palette has slots, so the free ones overflow to grey
+    # unless the universe is the shown top-N, as the renderer's is.
+    PHYLA = [f"Phylum{i:02d}" for i in range(14)]
+
+    def _rows(self) -> dict:
+        samples = ["s1", "s2", "s3", "s4"]
+        sample, taxon, rank, ab, habitat = [], [], [], [], []
+        for s in samples:
+            for i, name in enumerate([*self.PHYLA, ""]):
+                sample.append(s)
+                taxon.append(name)
+                rank.append("Phylum")
+                ab.append(float(100 - i))
+                habitat.append("Soil" if s in ("s1", "s2") else "Sediment")
+        return {
+            "sample": sample,
+            "taxon": taxon,
+            "rank": rank,
+            "abundance": ab,
+            "habitat": habitat,
+        }
+
+    CONFIG = {
+        **TAXONOMY_CONFIG,
+        "top_n": 3,
+        "normalise_to_one": True,
+        "default_rank": "Phylum",
+        "annotation_strips": [{"column": "habitat", "label": "Habitat", "position": "top"}],
+    }
+
+    def _build(self, colors: dict | None) -> dict:
+        return build(
+            "stacked_bar",
+            config=self.CONFIG,
+            rows=self._rows(),
+            theme="light",
+            category_colors=colors,
+        )
+
+    def _bar_colours(self, spec: dict) -> dict[str, str]:
+        return {t["name"]: t["marker"]["color"] for t in spec["data"] if t["type"] == "bar"}
+
+    def test_a_pinned_phylum_keeps_its_colour_and_none_is_grey(self) -> None:
+        pinned = {"Phylum": {"Phylum01": "#112233", "Unclassified": "#868e96", "*": "auto"}}
+        colours = self._bar_colours(self._build(pinned))
+        assert colours["Phylum01"] == "#112233"
+        grey = {c.lower() for c in (colours["Other"], "#adb5bd")}
+        for name in ("Phylum00", "Phylum01", "Phylum02"):
+            assert colours[name].lower() not in grey
+
+    def test_the_taxon_palette_wins_over_the_dashboard(self) -> None:
+        config = {**self.CONFIG, "taxon_palette": {"Phylum01": "#abcdef"}}
+        spec = build(
+            "stacked_bar",
+            config=config,
+            rows=self._rows(),
+            theme="light",
+            category_colors={"Phylum": {"Phylum01": "#112233"}},
+        )
+        assert self._bar_colours(spec)["Phylum01"] == "#abcdef"
+
+    def test_a_blank_taxon_is_named_unclassified(self) -> None:
+        config = {**self.CONFIG, "top_n": 20}
+        spec = build(
+            "stacked_bar",
+            config=config,
+            rows=self._rows(),
+            theme="light",
+            category_colors={"Phylum": {"Unclassified": "#868e96"}},
+        )
+        names = [t["name"] for t in spec["data"] if t["type"] == "bar"]
+        assert "Unclassified" in names and "" not in names
+        assert self._bar_colours(spec)["Unclassified"] == "#868e96"
+
+    def test_the_strip_is_drawn_in_the_dashboards_group_colours(self) -> None:
+        spec = self._build({"habitat": {"Soil": "#eda100", "Sediment": "#1baf7a"}})
+        (strip,) = [t for t in spec["data"] if t["type"] == "heatmap"]
+        assert strip["y"] == ["Habitat"] and strip["yaxis"] == "y2"
+        assert strip["customdata"] == [["Soil", "Soil", "Sediment", "Sediment"]]
+        # categories sort: Sediment (0), Soil (1)
+        assert [c[1] for c in strip["colorscale"]][::2] == ["#1baf7a", "#eda100"]
+        layout = spec["layout"]
+        assert layout["yaxis2"]["domain"][1] == 1
+        assert layout["yaxis"]["domain"][1] == layout["yaxis2"]["domain"][0] - 0.027
+        assert {a["text"] for a in layout["annotations"]} == {"Soil", "Sediment"}
+
+    def test_the_legend_is_titled_with_the_rank(self) -> None:
+        assert self._build(None)["layout"]["legend"]["title"]["text"].strip() == "Phylum"
+
+    def test_the_strip_column_is_fetched_with_the_rows(self) -> None:
+        from depictio.api.v1.services.advanced_viz.figure_registry import required_columns
+
+        assert "habitat" in required_columns("stacked_bar", self.CONFIG)
+
+
 # --- manhattan --------------------------------------------------------------
 
 MANHATTAN_CONFIG = {

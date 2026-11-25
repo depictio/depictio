@@ -179,6 +179,37 @@ class TestExportDrawsThePlan:
         assert spec["data"], "the MA builder drew from the MA table's columns"
 
 
+class TestExportHandsTheDashboardsColours:
+    def test_a_stacked_taxonomy_is_drawn_in_the_pinned_colour(self) -> None:
+        from unittest.mock import patch
+
+        from depictio.api.v1.services.export.plotly_export import _python_advanced_viz_spec
+
+        component = _av(
+            "stacked_bar",
+            sample_id_col="s",
+            taxon_col="t",
+            rank_col="r",
+            abundance_col="a",
+            default_rank="Phylum",
+        )
+        rows = {"s": ["x", "x"], "t": ["P1", "P2"], "r": ["Phylum"] * 2, "a": [1.0, 1.0]}
+        with patch(
+            "depictio.api.v1.services.advanced_viz.data.load_tidy_columns",
+            return_value={"rows": rows},
+        ):
+            spec = _python_advanced_viz_spec(
+                component,
+                [],
+                object(),
+                None,
+                None,
+                category_colors={"Phylum": {"P1": "#123456"}},
+            )
+        colours = {t["name"]: t["marker"]["color"] for t in spec["data"]}
+        assert colours["P1"] == "#123456"
+
+
 class TestLiveEmbedding:
     def test_payload_is_the_one_the_renderer_dispatches(self) -> None:
         from depictio.api.v1.services.export.compute import _embedding_payload

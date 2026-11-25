@@ -42,6 +42,7 @@ import {
   roundReference,
   roundSigFigs,
   runPrologue,
+  sankeyFromColumns,
   sortSlice,
   translateViaTable,
   type AdvancedVizTailSpec,
@@ -53,9 +54,12 @@ import {
   type DCLinkLike,
   type DataRef,
   type FilterLike,
+  type GroupingOutcome,
+  type GroupingRequest,
   type PrologueOp,
   type QueryEngine,
   type ResolveHop,
+  type SankeyRequest,
   type SortSpec,
   type TableHandle,
 } from 'depictio-static-core';
@@ -585,11 +589,14 @@ export async function renderFigureLive(
   binding: BindingTable,
   dcId: string,
   filters: InteractiveFilter[],
+  grouping?: GroupingRequest,
 ): Promise<{
   figure: { data: unknown[]; layout: Record<string, unknown> };
   displayed: number;
   total: number;
   filterApplied: boolean;
+  /** Set when the figure was recoloured by `grouping` (see `grouping.ts`). */
+  grouping?: GroupingOutcome;
 }> {
   const { handle } = await tableFor(dcId);
   const bound = toBoundFilters(await resolveLinkFilters(dcId, filters));
@@ -598,6 +605,7 @@ export async function renderFigureLive(
     binding,
     columns: (names) => engine.columns(handle, names),
     mask,
+    grouping,
   });
   return { ...result, filterApplied: bound.length > 0 };
 }
@@ -1250,6 +1258,48 @@ export async function contactMapLive(req: ContactMapLiveRequest): Promise<Record
   return { ...out, compute_ms: Math.round(performance.now() - startedAt) };
 }
 
+/** `SankeyPayload` (api.ts) minus `wf_id`: there is one workflow in a bundle
+ *  and the DC id alone keys the bundled table. */
+export interface SankeyLiveRequest extends SankeyRequest {
+  dc_id: string;
+  filter_metadata?: InteractiveFilter[];
+}
+
+/**
+ * `compute_sankey` (celery_tasks.py) over the bundled Parquet: the dashboard
+ * filters (links resolved) are the load's row mask, the projection is the
+ * task's (`step_cols` + `option_cols`, then `value_col`), and the rest is
+ * `_sankey_result_from_frame` — ported as static-core's `sankeyFromColumns`
+ * and pinned against the Python function by fixtures/sankey-expected.json.
+ */
+export async function sankeyLive(req: SankeyLiveRequest): Promise<Record<string, unknown>> {
+  const startedAt = performance.now();
+  const ref = dataRefFor(req.dc_id);
+  if (!ref) throw new Error(`static bundle: no data_ref for dc "${req.dc_id}"`);
+  const stepCols = req.step_cols ?? [];
+  // Endpoint request validation (celery_tasks.py): ≥2 steps, no duplicates —
+  // duplicate steps would land in the same ambiguous group_by the task rejects.
+  if (stepCols.length < 2) {
+    throw new Error('compute_sankey: step_cols must have ≥2 columns');
+  }
+  if (new Set(stepCols).size !== stepCols.length) {
+    throw new Error('compute_sankey: step_cols must not contain duplicates');
+  }
+  const { handle } = await tableFor(req.dc_id);
+  // Projection = the task's `project_cols`, schema-guarded: pruning put
+  // exactly these columns in the bundle, but a stale bundle must degrade to a
+  // readable error inside the compute rather than throw inside the engine.
+  const schema = new Set(userColumns(ref).map((c) => c.name));
+  const projectCols = [...new Set([...stepCols, ...(req.option_cols ?? [])])];
+  if (req.value_col && !projectCols.includes(req.value_col)) projectCols.push(req.value_col);
+  const projection = projectCols.filter((c) => schema.has(c));
+  const bound = toBoundFilters(await resolveLinkFilters(req.dc_id, req.filter_metadata ?? []));
+  const mask = bound.length ? (await engine.mask(handle, bound)).mask : null;
+  const cols = await engine.columns(handle, projection);
+  const out = sankeyFromColumns(cols, ref.rows, mask, req);
+  return { ...out, compute_ms: Math.round(performance.now() - startedAt) };
+}
+
 /** The distinct values of `column` among the rows `filters` keep (links
  *  resolved), as strings; `null` when no filter applies. */
 export async function keptValues(
@@ -1386,6 +1436,9 @@ export async function columnRangeLive(
   return { min: jsonNumber(min) as number | null, max: jsonNumber(max) as number | null };
 }
 
+/** Text dtypes, the ones whose distinct count the specs carry. */
+const STRING_DTYPE_RE = /^(string|utf8|str|object|categorical)/i;
+
 /** Specs in the list shape fetchColumnRange's real implementation expects —
  *  built lazily from the DataRef's column list with engine min/max. */
 export async function specsLive(dcId: string): Promise<Record<string, unknown>> {
@@ -1395,7 +1448,14 @@ export async function specsLive(dcId: string): Promise<Record<string, unknown>> 
   const entries = await Promise.all(
     (ref.columns ?? []).map(async (c) => {
       const [min, max] = await engine.minMax(handle, null, c.name);
-      return { name: c.name, type: c.dtype, specs: { min: jsonNumber(min), max: jsonNumber(max) } };
+      const specs: Record<string, unknown> = { min: jsonNumber(min), max: jsonNumber(max) };
+      // The server's specs carry `nunique` for text columns, and the "colour
+      // by a column" picker offers only those it can count. Without it no
+      // text column would ever be offered offline.
+      if (STRING_DTYPE_RE.test(c.dtype) && !c.name.startsWith('__')) {
+        specs.nunique = (await engine.unique(handle, null, c.name)).length;
+      }
+      return { name: c.name, type: c.dtype, specs };
     }),
   );
   return entries as unknown as Record<string, unknown>;

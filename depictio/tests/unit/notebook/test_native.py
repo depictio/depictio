@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from pathlib import Path
 
 import httpx
@@ -205,6 +206,31 @@ def test_a_record_card_with_no_pick_lists_the_records_it_picks_from(client):
     assert "No record was picked" in html and "<table" in html
 
 
+def test_a_record_card_with_no_pick_prints_a_typst_table_in_the_pdf(client, monkeypatch):
+    """The PDF reads markdown, not the tile's HTML stripped to one run-on line."""
+    from depictio.notebook import components
+
+    monkeypatch.setenv(components.STATIC_FIGURES_ENV, "1")
+    meta = next(
+        m
+        for _, m in SEED_TILES
+        if m["viz_kind"] == "record_card" and not m["config"].get("default_record")
+    )
+    bundle = component_for(client, "dash", meta, {"filters": []})._repr_mimebundle_()
+    md = bundle[components.MARKDOWN_MIME]
+    assert md.count("#dpx-table(") == 1 and "```{=typst}" in md
+    assert "No record was picked when this was exported." in md
+    assert "interactive in the [live dashboard](<" in md
+    assert " ." not in md and meta["title"] not in md
+    # a few key fields, not every column of the data collection
+    header = md.split("header: (", 1)[1].split(",)", 1)[0]
+    assert header.count('"') // 2 <= 7
+    # off the PDF render, the HTML report has no markdown output
+    monkeypatch.delenv(components.STATIC_FIGURES_ENV)
+    plain = component_for(client, "dash", meta, {"filters": []})._repr_mimebundle_()
+    assert components.MARKDOWN_MIME not in plain and "<table" in plain["text/html"]
+
+
 def test_a_record_card_follows_the_pick_in_the_state(client):
     meta = next(m for _, m in SEED_TILES if m["config"].get("default_record") == "GENE072")
     pick = {
@@ -327,6 +353,45 @@ def test_the_tree_of_lifes_group_strip_wears_the_group_colours(client, api):
         if t.marker is not None and isinstance(t.marker.color, str)
     }
     assert "#e24a33" in strip
+
+
+def test_the_tree_of_lifes_tip_dot_name_and_strip_do_not_overlap(client, api):
+    """Dot, then name and share, then the strip in its own column: the name
+    starts past the dot's radius, the strip past the longest name, and the
+    rotated headers fit the margins (a pixel rule, whatever the tree's depth)."""
+    meta = next(m for _, m in SEED_TILES if m.get("index") == "ov-tree")
+    fig = component_for(client, "dash", meta, {"filters": []}).figure
+    tips = next(
+        t for t in fig.data if t.marker.size is not None and len(set(t.x)) == 1 and len(t.y) > 1
+    )
+    tip_x = tips.x[0]
+    notes = [a for a in fig.layout.annotations if a.textangle in (None, 0)]
+    assert notes and len(notes) == len(tips.y)
+    ends = []
+    for a, size in zip(sorted(notes, key=lambda a: a.y), tips.marker.size, strict=True):
+        assert a.xanchor == "left" and a.xshift >= size / 2 + 4
+        plain = re.sub(r"<[^>]+>", "", a.text)
+        ends.append(a.xshift + phylo.text_px(plain, phylo.LABEL_FONT, bold=True))
+    strip = sorted({t.x[0] for t in fig.data if t.marker.opacity == 0.85})
+    assert len(strip) >= 2
+    # the first strip dot's left edge is past the longest label
+    assert strip[0] - tip_x - phylo.STRIP_MAX / 2 > max(ends)
+    assert all(b - a >= phylo.STRIP_MAX for a, b in zip(strip, strip[1:], strict=False))
+    heads = [a for a in fig.layout.annotations if a.textangle]
+    assert heads and fig.layout.margin.t > 0 and fig.layout.margin.r > 0
+
+
+def test_tip_geometry_keeps_the_strip_past_the_longest_label_at_any_width():
+    labels = [("Pseudomonadota", "40%"), ("Nitrospirota", "2.7%")]
+    for width in (320, 480, 720, 1000):
+        geo = phylo.tip_geometry(labels, [30, 12], ["Soil", "Sediment"], 4, width)
+        label_end = max(
+            geo["label_shift"][i] + phylo.text_px(g + "  " + p, phylo.LABEL_FONT, bold=True)
+            for i, (g, p) in enumerate(labels)
+        )
+        assert geo["label_shift"][0] > 15 and geo["label_shift"][1] > 6
+        assert geo["strip_x"][0] - geo["tip_x"] > label_end
+        assert geo["strip_x"][1] - geo["strip_x"][0] >= phylo.STRIP_MAX
 
 
 def test_pinned_colours_win_and_the_rest_keep_the_palette():

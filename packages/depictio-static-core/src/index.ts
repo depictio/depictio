@@ -15,6 +15,8 @@ export * from './valueOrder';
 export * from './cardLayouts';
 export * from './multiqcSamples';
 export * from './contactMap';
+export * from './sankey';
 export * from './reportMount';
 export * from './bundledFiles';
 export * from './combined';
+export * from './grouping';

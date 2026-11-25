@@ -1,15 +1,17 @@
 /**
- * The module swaps and resolution shared by the two hosts of the static
- * runtime: the serverless bundle (`vite.static.config.ts`, the whole viewer App
- * in one HTML file) and the runtime a report embeds (`vite.combined.config.ts`,
- * the same renderers mounted into a Quarto report, plus the App for the
- * combined file's dashboard view). One list, so the two can never disagree on
- * which module reaches a server: a shim added for one host is a shim for both.
+ * The module swaps and resolution of the static runtime, built once
+ * (`vite.combined.config.ts`) for both of its hosts: the serverless bundle (the
+ * whole viewer App in one HTML file, composed from this runtime by
+ * `depictio/serverless/bundle_html.py`) and a Quarto report (the same
+ * renderers mounted into the report, plus the App for the combined file's
+ * dashboard view). One list, so no host can reach a server a shim covers.
  *
  * Swapped by the module-shim plugin (RFC errata #5/#6):
  *
  *   - depictio-react-core api.ts        -> src/static-runtime/tabApiShim.ts
  *                                          -> src/static-runtime/apiShim.ts
+ *   - depictio-react-core selectionGroups.ts -> src/static-runtime/selectionGroupsShim.ts
+ *                                          (groups kept in memory, seeded from the manifest)
  *   - viewer hooks/useCurrentUser.ts    -> src/static-runtime/useCurrentUserShim.ts
  *   - depictio-react-core realtime.ts   -> src/static-runtime/realtimeShim.ts
  *   - viewer hooks/useServerStatus.ts   -> src/static-runtime/serverStatusShim.ts
@@ -56,6 +58,9 @@ export function staticRuntimeShim(): Plugin {
       // the real api.ts.
       [path.join(CORE_SRC, 'api.ts')]: path.join(RUNTIME, 'tabApiShim.ts'),
       [path.join(CORE_SRC, 'realtime.ts')]: path.join(RUNTIME, 'realtimeShim.ts'),
+      // Groups a reader makes live in memory, never in localStorage; the store
+      // opens on the manifest's `initial_grouping`.
+      [path.join(CORE_SRC, 'selectionGroups.ts')]: path.join(RUNTIME, 'selectionGroupsShim.ts'),
       [path.resolve(VIEWER, 'src/hooks/useCurrentUser.ts')]: path.join(
         RUNTIME,
         'useCurrentUserShim.ts',
@@ -123,7 +128,7 @@ export const staticRuntimeAliases: Alias[] = [
   // 3Dmol.js is a CONDITIONAL add-on: never compiled into the base
   // runtime (budget), appended by the producer only to bundles holding a
   // molecule_3d tile (scripts/build-static-addons.mjs builds it next to
-  // static.html). This module forwards to the global the add-on defines,
+  // combined-runtime.js). This module forwards to the global the add-on defines,
   // and behaves as the catalog stub without it.
   { find: /^3dmol$/, replacement: path.join(RUNTIME, 'threeDmolAddon.ts') },
 ];

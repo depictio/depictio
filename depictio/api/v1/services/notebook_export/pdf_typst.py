@@ -117,6 +117,145 @@ def _image_fn(name: str, svg: str | None) -> str:
 DEFINITIONS = asset("definitions.typ")
 
 
+# The notes ("About this component"), printed under a figure: a quiet card, the
+# accent on its edge, a small info icon before its title. Quarto hands the
+# callout one body of paragraphs; the lead of a part ("How to read.",
+# "Sources.", ...) is read back from that body, so the HTML's markup stays as
+# it is. Each part is a row: a light line icon in the muted colour, its label
+# semibold, its text in the ink; a paragraph with no label is the opening (the
+# question), and a bare bold line (a card's name in a note for a row of cards)
+# heads its part. A short note stays on one page, a long one may break, but
+# never inside a row.
+_ABOUT_ICONS: dict[str, str] = {
+    # Lucide (ISC), 24px grid, drawn as outlines.
+    "info": '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+    "question": (
+        '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>'
+        '<path d="M12 17h.01"/>'
+    ),
+    "read": (
+        '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 '
+        '10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>'
+    ),
+    "lines": '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/>',
+    "source": (
+        '<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 '
+        '4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>'
+    ),
+    "note": '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
+    "warn": (
+        '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>'
+        '<path d="M12 9v4"/><path d="M12 17h.01"/>'
+    ),
+}
+ABOUT_ICON_STROKE = 1.5
+
+ABOUT_TYPST = r"""
+#let dpx-about-icons = (__ICONS__)
+#let dpx-about-kinds = ("how to read": "read", "lines and annotations": "lines",
+  "annotations": "lines", "reference lines": "lines", "source": "source",
+  "sources": "source", "note": "note", "warning": "warn", "caution": "warn")
+#let dpx-space = [ ].func()
+#let dpx-seq = [].func()
+#let dpx-about-icon(kind) = box(baseline: 14%, image(bytes(dpx-about-icons.at(kind)), height: 1.05em))
+#let dpx-about-flat(c) = if type(c) == content and c.func() == dpx-seq {
+  c.children.map(dpx-about-flat).flatten()
+} else { (c,) }
+#let dpx-about-text(c) = {
+  if type(c) == str { c }
+  else if c.func() == dpx-seq { c.children.map(dpx-about-text).join("") }
+  else if c.func() == dpx-space { " " }
+  else if c.has("text") { c.text }
+  else if c.has("body") { dpx-about-text(c.body) }
+  else { "" }
+}
+// The note's paragraphs: arrays of the elements between paragraph breaks.
+#let dpx-about-paras(body) = {
+  let paras = ()
+  let cur = ()
+  for c in dpx-about-flat(body) {
+    if c.func() == parbreak {
+      paras.push(cur)
+      cur = ()
+    } else { cur.push(c) }
+  }
+  paras.push(cur)
+  paras.filter(p => p.any(c => c.func() != dpx-space))
+}
+// A paragraph's lead: its bold opening words, when it has them.
+#let dpx-about-lead(p) = {
+  let at = p.position(c => c.func() != dpx-space)
+  if p.at(at).func() == strong { (at, dpx-about-text(p.at(at).body)) } else { none }
+}
+#let dpx-about-rows(body) = {
+  let rows = ()
+  let after-name = true
+  for p in dpx-about-paras(body) {
+    let lead = dpx-about-lead(p)
+    let label = if lead != none { lower(lead.at(1)).trim(".").trim() }
+    let kind = if label != none { dpx-about-kinds.at(label, default: none) }
+    let bare = lead != none and p.slice(lead.at(0) + 1).all(c => c.func() == dpx-space)
+    if kind != none {
+      rows.push((kind, p.map(c => if c.func() == strong { text(weight: "semibold")[#c.body] } else { c }).join()))
+      after-name = false
+    } else if lead != none and bare {
+      rows.push((none, text(weight: "semibold")[#lead.at(1)]))
+      after-name = true
+    } else if after-name or rows.len() == 0 {
+      rows.push(("question", p.join()))
+      after-name = false
+    } else {
+      // More of the part before it (a list under its label, a second paragraph).
+      let (k, c) = rows.pop()
+      rows.push((k, [#c #parbreak() #p.join()]))
+    }
+  }
+  rows
+}
+#let dpx-about-card(rows, title, kind, breakable) = block(width: 100%, breakable: breakable,
+  inset: (x: 10pt, y: 8pt), radius: 4pt, stroke: (left: 2pt + dpx-accent,
+  top: 0.5pt + dpx-hair, right: 0.5pt + dpx-hair, bottom: 0.5pt + dpx-hair))[
+  #set text(size: 8.5pt, fill: dpx-ink)
+  #set par(leading: 0.66em, spacing: 0.6em)
+  #block(sticky: true, below: 7.5pt)[#text(fill: dpx-muted)[#dpx-about-icon(kind)]#h(5pt)#text(size: 8pt, weight: "semibold", fill: dpx-muted)[#title]]
+  // A row hangs its icon in the margin: two levels of nesting per note, so a
+  // malformed note that swallowed later ones cannot exhaust typst's show depth.
+  #for (k, c) in rows {
+    if k == none {
+      block(breakable: false, above: 10pt, below: 4pt)[#c]
+    } else {
+      block(breakable: false, below: 7.5pt, inset: (left: 17pt))[#place(top + left, dx: -17pt, text(fill: dpx-muted)[#dpx-about-icon(k)])#c]
+    }
+  }
+]
+#let callout(body: [], title: "Note", background_color: none, icon: none,
+  icon_color: none, body_background_color: none) = {
+  let rows = dpx-about-rows(body)
+  let kind = dpx-about-kinds.at(lower(dpx-about-text(title)), default: "info")
+  // Short (a few hundred words at most, well under a page): kept whole on one
+  // page. Long: free to break between its rows. Judged by its text, not by
+  // measuring it: a measure would lay the card out twice, and a malformed
+  // note that swallowed later ones would nest that cost.
+  let long = dpx-about-text(body).len() > 1500
+  dpx-about-card(rows, title, kind, long)
+}
+"""
+
+
+def about_typst() -> str:
+    """The note's typst: its functions and the light icons, drawn in the muted colour."""
+    icons = ", ".join(
+        f"{kind}: "
+        + tstr(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" '
+            f'stroke="{MUTED}" stroke-width="{ABOUT_ICON_STROKE}" stroke-linecap="round" '
+            f'stroke-linejoin="round">{body}</svg>'
+        )
+        for kind, body in _ABOUT_ICONS.items()
+    )
+    return ABOUT_TYPST.replace("__ICONS__", icons)
+
+
 def typst_preamble(
     *,
     title: str,
@@ -131,6 +270,9 @@ def typst_preamble(
     heading_icons: dict[str, str] | None = None,
     statement: str | None = None,
     tab_level: int = TAB_LEVEL,
+    contents: bool = True,
+    landscape: bool = False,
+    numbering: bool = True,
 ) -> str:
     """The raw typst block the PDF opens with (see the module docstring).
 
@@ -215,17 +357,18 @@ def typst_preamble(
         "#show heading.where(level: 1): it => { "
         'if it.has("label") and str(it.label) == "appendices" { pagebreak(weak: true) }; it }'
     )
+    # Last of the heading rules, so it sees the heading before they draw it: a
+    # heading right before a wide float moves onto its landscape page
+    # (definitions.typ, ``dpx-heading-copy``). Here it draws nothing: the
+    # element stays in the document, so the contents still list and link it.
+    add(
+        "#show heading: it => context { let next = dpx-next(it.location()); "
+        "if next != none and dpx-flips(next) { [] } else { it } }"
+    )
     add("#show figure.caption: set text(size: 8pt, fill: dpx-muted)")
     add("#show link: set text(fill: dpx-accent)")
-    # The notes ("About this component"): a quiet card, the accent on its edge.
-    add(
-        '#let callout(body: [], title: "Note", background_color: none, icon: none, '
-        "icon_color: none, body_background_color: none) = block(width: 100%, breakable: true, "
-        "inset: (x: 10pt, y: 8pt), radius: 4pt, stroke: (left: 2pt + dpx-accent, "
-        "top: 0.5pt + dpx-hair, right: 0.5pt + dpx-hair, bottom: 0.5pt + dpx-hair))"
-        '[#text(size: 8pt, weight: "semibold", fill: dpx-muted)[#title] #v(2pt) '
-        "#text(size: 8.5pt)[#body]]"
-    )
+    # The notes ("About this component"): see ABOUT_TYPST.
+    add(about_typst())
 
     # Page 1: the cover. What this is, whose, and the export's record.
     rows = "".join(
@@ -264,11 +407,19 @@ def typst_preamble(
     )
     # Page 2: the contents, alone, in the text colour (the headings carry the
     # tabs' colours; a contents page of a dozen hues reads as noise).
-    add('#show outline.entry.where(level: 1): set text(weight: "semibold")')
-    add(
-        "#page(header: none, footer: none, numbering: none)["
-        f"#outline(title: text(size: 17pt)[Contents], depth: {CONTENTS_DEPTH}, indent: 1.1em)]"
-    )
+    if contents:
+        add('#show outline.entry.where(level: 1): set text(weight: "semibold")')
+        add(
+            "#page(header: none, footer: none, numbering: none)["
+            f"#outline(title: text(size: 17pt)[Contents], depth: {CONTENTS_DEPTH}, indent: 1.1em)]"
+        )
+    # The report's settings: figures and tables without a number (their
+    # caption alone), and the body on landscape pages (a tile's own
+    # orientation still turns its page).
+    if not numbering:
+        add("#set figure(numbering: none)")
+    if landscape:
+        add("#set page(flipped: true)")
     # The body: a running header and footer on every page. The header says
     # what the file is, the footer who made it.
     add(

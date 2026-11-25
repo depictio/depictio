@@ -13,6 +13,7 @@ import {
   parseAnnotations,
   parseSharedColumns,
 } from './sessionAnnotations';
+import type { AnalysisState } from './analysisState';
 import type { BrandTheme } from './brandTheme';
 import { enqueueFetch } from './fetchQueue';
 import type { GroupStatusEntry } from './groupStatus';
@@ -1374,6 +1375,8 @@ export interface NotebookRenderStatus {
   pdf_filename?: string | null;
   /** Why the PDF is missing, when it was asked for and failed. */
   pdf_error?: string | null;
+  /** A ready report preview: the address of its `report.html`, to put in a frame. */
+  preview_url?: string | null;
 }
 
 /** What an export will contain, before anything is generated. `state` is an
@@ -1493,6 +1496,231 @@ export async function downloadNotebookRender(
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   return filename;
+}
+
+/** A finished render's file as a Blob, without saving it: the report editor
+ *  opens the exact PDF in a tab instead of downloading it. */
+export async function fetchNotebookRenderBlob(
+  jobId: string,
+  format: 'html' | 'pdf' = 'html',
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/notebook_export/render/${jobId}/download?format=${format}`,
+    { signal },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to download the report');
+  return res.blob();
+}
+
+// ── Report layer: what the report says around the tiles ────────────────────
+
+/** TipTap's JSON document (`editor.getJSON()`). */
+export interface ReportDoc {
+  type: string;
+  content?: unknown[];
+  [key: string]: unknown;
+}
+
+export interface ReportCover {
+  title: string | null;
+  subtitle: string | null;
+  authors: string[];
+  date: string | null;
+}
+
+export type ReportOrientation = 'auto' | 'portrait' | 'landscape';
+export type ReportTabPlacement = 'body' | 'appendix';
+
+/** One tile's place in the report. A tile with no entry takes the defaults. */
+export interface ReportTile {
+  tab_id: string;
+  component_id: string;
+  caption: string | null;
+  in_report: boolean;
+  in_pdf: boolean;
+  order: number | null;
+  orientation: ReportOrientation;
+  section: string | null;
+  page_break_before: boolean;
+  /** Across the whole page, out of the dashboard row it shares. */
+  /** True: the page's width; false: its dashboard row; null: the report's settings. */
+  full_width?: boolean | null;
+}
+
+export interface ReportTab {
+  tab_id: string;
+  placement: ReportTabPlacement;
+  order: number | null;
+}
+
+/** The layer stored on a dashboard: the prose, cover and per-tile choices the
+ *  report adds around what the dashboard already is. */
+/** The report's own options, for the whole document (Report settings). */
+export interface ReportSettings {
+  paper: 'a4' | 'letter';
+  landscape: boolean;
+  table_page_break: boolean;
+  tile_width: 'row' | 'full';
+  viz_controls: 'popover' | 'rail' | 'header';
+  toc: boolean;
+  export_details: boolean;
+  how_to_run: boolean;
+  methods: boolean;
+  code: boolean;
+  numbering: boolean;
+  provenance: boolean;
+}
+
+export interface ReportLayer {
+  intro: ReportDoc | null;
+  conclusion: ReportDoc | null;
+  cover: ReportCover | null;
+  state: AnalysisState | null;
+  revision: number;
+  style: 'colour' | 'mono' | null;
+  /** Absent from a layer written before the settings existed. */
+  settings?: ReportSettings;
+  tiles: ReportTile[];
+  tabs: ReportTab[];
+  /** The intro was drafted from the dashboard notes, not written here. */
+  seeded_from_notes: boolean;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+export interface ReportOutlineEntry {
+  kind: 'tab' | 'section' | 'component';
+  tab_id: string;
+  title: string;
+  level: number | null;
+  component_id: string | null;
+  component_type: string | null;
+  caption: string | null;
+  in_report: boolean;
+  in_pdf: boolean;
+  orientation: ReportOrientation;
+  section: string | null;
+  page_break_before: boolean;
+  /** True: the page's width; false: its dashboard row; null: the report's settings. */
+  full_width?: boolean | null;
+  order: number | null;
+  /** A section's own look, as the dashboard draws its header: an Iconify id,
+   *  a Mantine palette name and the line under its title. Sections only. */
+  icon?: string | null;
+  color?: string | null;
+  description?: string | null;
+}
+
+export interface ReportOutlineTab {
+  tab_id: string;
+  title: string;
+  placement: ReportTabPlacement;
+  order: number | null;
+  /** The tab's Iconify id, as the dashboard shows it. */
+  icon?: string | null;
+  /** The tab's accent colour (hex), the one the report uses. */
+  color?: string | null;
+  entries: ReportOutlineEntry[];
+}
+
+/** The report's structure as the generator would lay it out, in its own order. */
+export interface ReportOutline {
+  dashboard_id: string;
+  title: string;
+  revision: number;
+  tabs: ReportOutlineTab[];
+  cover_defaults: ReportCover;
+  preview_available: boolean;
+  preview_unavailable_reason: string | null;
+}
+
+/** Someone else wrote the layer since this editor last read it (HTTP 409). */
+export interface ReportLayerConflictDetail {
+  message: string;
+  layer: ReportLayer | null;
+  revision: number | null;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+export class ReportLayerConflict extends Error {
+  readonly detail: ReportLayerConflictDetail;
+
+  constructor(detail: ReportLayerConflictDetail) {
+    super(detail.message);
+    this.name = 'ReportLayerConflict';
+    this.detail = detail;
+  }
+}
+
+export async function fetchReportLayer(
+  dashboardId: string,
+  signal?: AbortSignal,
+): Promise<ReportLayer> {
+  const res = await authFetch(`${API_BASE}/dashboards/report_layer/${dashboardId}`, { signal });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load the report layer');
+  return res.json();
+}
+
+/** Store the layer. `baseRevision` is the revision this editor last saw; a
+ *  newer one on the server throws `ReportLayerConflict` instead of overwriting. */
+export async function saveReportLayer(
+  dashboardId: string,
+  baseRevision: number,
+  layer: ReportLayer,
+  /** `keepalive`: the request outlives the page (a save on leaving it). */
+  opts: { keepalive?: boolean } = {},
+): Promise<ReportLayer> {
+  const res = await authFetch(`${API_BASE}/dashboards/report_layer/${dashboardId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ base_revision: baseRevision, layer }),
+    keepalive: opts.keepalive,
+  });
+  if (res.status === 409) {
+    let detail: Partial<ReportLayerConflictDetail> = {};
+    try {
+      const body = await res.json();
+      if (body?.detail && typeof body.detail === 'object') detail = body.detail;
+    } catch {
+      // A 409 without a readable body is still a conflict.
+    }
+    throw new ReportLayerConflict({
+      message: detail.message ?? 'The report was changed by someone else.',
+      layer: detail.layer ?? null,
+      revision: detail.revision ?? null,
+      updated_by: detail.updated_by ?? null,
+      updated_at: detail.updated_at ?? null,
+    });
+  }
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to save the report layer');
+  return res.json();
+}
+
+export async function fetchReportOutline(
+  dashboardId: string,
+  signal?: AbortSignal,
+): Promise<ReportOutline> {
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}/outline`, {
+    signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load the report outline');
+  return res.json();
+}
+
+/** Render the real report for the editor's live preview. The job is rendered
+ *  on a neutral layer; once ready its status carries `preview_url`, the address
+ *  of the report to show in a frame. Poll it with `fetchNotebookRenderStatus`. */
+export async function startReportPreview(
+  dashboardId: string,
+  options: { force?: boolean } = {},
+): Promise<NotebookRenderStatus> {
+  const res = await authFetch(`${API_BASE}/dashboards/notebook_export/${dashboardId}/preview`, {
+    method: 'POST',
+    body: JSON.stringify(options.force ? { force: true } : {}),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to start the report preview');
+  return res.json();
 }
 
 /** Payload for a card's numeric / QC secondary layout (histogram, threshold,
@@ -3653,6 +3881,7 @@ export interface ServerInfo {
     changes_since?: boolean;
     static_export?: boolean;
     notebook_export?: boolean;
+    report_editor?: boolean;
   };
 }
 
@@ -8997,10 +9226,20 @@ export async function preflightStaticExport(
 export async function dispatchStaticExport(
   dashboardId: string,
   pythonRuntime: PythonRuntimeMode = 'auto',
+  /** An `AnalysisState` (see `analysisState.ts`). */
+  state: unknown = null,
 ): Promise<StaticExportJob> {
+  // With a state, the bundle's frozen tiles are computed at that view and the
+  // bundle opens on it; without one, at the dashboard's interactive defaults.
   const res = await authFetch(
     `${API_BASE}/serverless/export-static/${dashboardId}?python_runtime=${pythonRuntime}`,
-    { method: 'POST' },
+    state
+      ? {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ state }),
+        }
+      : { method: 'POST' },
   );
   if (!res.ok) await throwHttpDetailError(res, 'Failed to dispatch static export');
   return res.json();

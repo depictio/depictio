@@ -193,7 +193,10 @@ NotebookTheme = Literal["paper", "classic"]
 class NotebookExportRequest(BaseModel):
     """The analysis state to export. The export is one Quarto document (``.qmd``)."""
 
-    state: AnalysisState
+    # ``None``: the export is drawn at the dashboard's report layer's state
+    # (#1457), the filters the report is written for — or its defaults when
+    # the layer holds none.
+    state: AnalysisState | None = None
     theme: NotebookTheme = "paper"
     # The report host of the static runtime: tiles drawn in the page by the
     # dashboard's own renderers, over the same manifest a static export
@@ -218,6 +221,14 @@ class NotebookExportRequest(BaseModel):
     # in the contents and tints the notes; "mono" prints them in the text
     # colour (print-friendly; figures are left as they are).
     pdf_style: Literal["colour", "mono"] = "colour"
+
+
+class ExportStaticRequest(BaseModel):
+    """A static-bundle export's optional body: the view the bundle freezes on
+    and opens on. An absent body (or a ``None`` state) is the pre-state
+    contract: the dashboard's own interactive defaults."""
+
+    state: AnalysisState | None = None
 
 
 class NotebookPreflightComponent(BaseModel):
@@ -277,6 +288,9 @@ class NotebookRenderStatus(BaseModel):
     # when it was asked for and failed (the HTML report stands on its own).
     pdf_filename: str | None = None
     pdf_error: str | None = None
+    # A preview job's report, served by its capability URL (the job's token)
+    # once the render is ready; ``None`` for every other status and job.
+    preview_url: str | None = None
 
 
 # ---------------------------------------------------------------------------

@@ -814,6 +814,12 @@ export {
   startNotebookRender,
   fetchNotebookRenderStatus,
   downloadNotebookRender,
+  fetchNotebookRenderBlob,
+  ReportLayerConflict,
+  fetchReportLayer,
+  saveReportLayer,
+  fetchReportOutline,
+  startReportPreview,
   // MultiQC management (multipart uploads)
   createAssetDataCollection,
   createMultiQCDataCollection,
@@ -1453,6 +1459,18 @@ export type {
   NotebookTheme,
   NotebookRenderOutput,
   CombinedDefaultView,
+  ReportDoc,
+  ReportCover,
+  ReportOrientation,
+  ReportTabPlacement,
+  ReportTile,
+  ReportTab,
+  ReportLayer,
+  ReportSettings,
+  ReportOutlineEntry,
+  ReportOutlineTab,
+  ReportOutline,
+  ReportLayerConflictDetail,
   // MultiQC management types
   CreateMultiQCDCInput,
   MultiQCMutationResult,
@@ -1973,3 +1991,6 @@ export {
   resolveCategoricalPalette,
   stableColorMap,
 } from './colors';
+// How a table draws a coloured value: the dashboard's dot, or a report's chip.
+export { CategoryCellStyleContext } from './components/tableCategoryCell';
+export type { CategoryCellStyle } from './components/tableCategoryCell';

@@ -265,7 +265,7 @@ class ServerlessCapability:
 _LIVE = ServerlessCapability("live", "data")
 
 _CELERY_REASON = (
-    "computed on the server ({kind}); frozen at the export's default filter state, "
+    "computed on the server ({kind}); frozen at the exported filter state, "
     "so filters do not reach it"
 )
 _OBJECTS_REASON = (
@@ -329,14 +329,19 @@ SERVERLESS_KINDS: dict[str, ServerlessCapability] = {
     "coverage_track": ServerlessCapability("live", "compute_live"),
     **{
         kind: ServerlessCapability("frozen", "celery", _CELERY_REASON.format(kind=kind))
-        for kind in ("complex_heatmap", "upset_plot", "sankey")
+        for kind in ("complex_heatmap", "upset_plot")
     },
     "phylogenetic": ServerlessCapability(
         "frozen",
         "tree",
-        "also reads a Newick tree data collection; frozen at the export's default filter "
+        "also reads a Newick tree data collection; frozen at the exported filter "
         "state with the tree merged in",
     ),
+    # Every step of the sankey aggregation (step filters, (missing) coercion,
+    # weight aggregation, link ranking, min_link_value) commutes with the
+    # filters, so the runtime replays it over the bundled Parquet
+    # (static-core ``sankey.ts`` + ``sankeyLive``), any filter state.
+    "sankey": ServerlessCapability("live", "compute_live"),
     # Every step of a contact-map window (filter mask, sample, resolution
     # partition, square window, sort, cell budget) commutes with the filters,
     # so the runtime replays it over the bundled Parquet
@@ -384,7 +389,7 @@ _SERVERLESS_ALIASES = {"upset": "upset_plot"}
 #: ``compute_method`` values an ``embedding`` dispatches to Celery with.
 EMBEDDING_COMPUTE_REASON = (
     "embedding computed on the server ({method}); the coordinates are frozen at the "
-    "export's default filter state, and the points the current filters exclude are "
+    "exported filter state, and the points the current filters exclude are "
     "dropped in the browser (matched on the sample column), so the layout is not "
     "recomputed"
 )

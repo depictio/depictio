@@ -5,8 +5,8 @@ against a temp data dir derived from the repo's penguins CSVs, and asserts the
 manifest contract: stable synthetic dc_ids, complete data_refs (columns /
 dtypes / companions / codebooks / hash), exact pruning, frozen figure payloads,
 the tier table, and that the inline blob round-trips to a polars-readable
-snappy Parquet. Manifest assembly is tested without the HTML template; the
-injection assertions are skipped when ``dist-static/static.html`` is absent
+snappy Parquet. Manifest assembly is tested without the built runtime; the
+composition assertions are skipped when ``dist-static/combined-runtime.js`` is absent
 (CI may not have built the viewer).
 """
 
@@ -30,7 +30,8 @@ from depictio.models.models.serverless import (
 )
 from depictio.serverless.preflight import classify_spec
 from depictio.serverless.producer_b import (
-    TEMPLATE_PATH,
+    RUNTIME_PATH,
+    TEMPLATE_PATH_ENV,
     BuildResult,
     ProducerBError,
     build_manifest,
@@ -324,7 +325,7 @@ def test_text_labelled_figure_binds_and_keeps_its_label_column(data_dir: Path) -
 
 
 def test_unbindable_figure_falls_back_to_frozen(data_dir: Path) -> None:
-    """A figure the matcher refuses keeps the frozen path + binding_miss."""
+    """A figure the matcher refuses keeps the frozen path + its tier reason."""
     import yaml
 
     from depictio.models.models.dashboards import DashboardDataLite
@@ -343,10 +344,10 @@ def test_unbindable_figure_falls_back_to_frozen(data_dir: Path) -> None:
     assert "scatter-mass-flipper" not in manifest.bindings
     entry = manifest.tiers["scatter-mass-flipper"]
     assert entry.tier is ComponentTier.FROZEN
-    assert entry.reason is TierReason.BINDING_MISS
+    assert entry.reason is TierReason.TRENDLINE
     # The detail names the actual bail-out (build_binding's BindingMiss), so
     # assert the shared clause rather than one refusal's wording.
-    assert entry.detail and "frozen at the default filter state" in entry.detail
+    assert entry.detail and "frozen at the exported filter state" in entry.detail
     frozen = manifest.frozen["scatter-mass-flipper"]
     assert frozen.kind == "figure"
     assert frozen.filter_state == []  # default filter state
@@ -844,16 +845,44 @@ def test_data_yaml_map_overrides_layout(tmp_path: Path) -> None:
 
 
 def test_render_bundle_html_injects_manifest(manifest: BundleManifest) -> None:
-    if not TEMPLATE_PATH.exists():
-        pytest.skip("dist-static/static.html not built (run `pnpm run build:static`)")
+    if not RUNTIME_PATH.exists():
+        pytest.skip("dist-static/combined-runtime.js not built (run `pnpm run build:static`)")
     html = render_bundle_html(manifest)
     assert "__BUNDLE_MANIFEST__" not in html
     assert '"producer": "B"' in html or '"producer":"B"' in html
 
 
+def test_render_bundle_html_composes_from_a_runtime_override(
+    manifest: BundleManifest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``DEPICTIO_SERVERLESS_TEMPLATE_PATH`` at a ``.js`` file composes the page
+    from it and the ``.css`` beside it (no built viewer needed)."""
+    (tmp_path / "combined-runtime.js").write_text("window.__runtime=1;")
+    (tmp_path / "combined-runtime.css").write_text("body{margin:0}")
+    monkeypatch.setenv(TEMPLATE_PATH_ENV, str(tmp_path / "combined-runtime.js"))
+    html = render_bundle_html(manifest)
+    assert '<div id="root"></div>' in html
+    assert '<script id="bundle-manifest" type="application/json">' in html
+    assert "<style>body{margin:0}</style>" in html
+    assert html.rstrip().endswith("<script>window.__runtime=1;</script></body></html>")
+    assert "<title>Penguins — static bundle example</title>" in html
+
+
+def test_render_bundle_html_says_what_is_missing(
+    manifest: BundleManifest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "combined-runtime.js").write_text("x")
+    monkeypatch.setenv(TEMPLATE_PATH_ENV, str(tmp_path / "combined-runtime.js"))
+    with pytest.raises(ProducerBError, match=r"combined-runtime\.css is missing"):
+        render_bundle_html(manifest)
+    monkeypatch.setenv(TEMPLATE_PATH_ENV, str(tmp_path / "nope.js"))
+    with pytest.raises(ProducerBError, match="static-runtime bundle not built"):
+        render_bundle_html(manifest)
+
+
 def test_build_static_end_to_end(data_dir: Path, tmp_path: Path) -> None:
-    if not TEMPLATE_PATH.exists():
-        pytest.skip("dist-static/static.html not built (run `pnpm run build:static`)")
+    if not RUNTIME_PATH.exists():
+        pytest.skip("dist-static/combined-runtime.js not built (run `pnpm run build:static`)")
     out = tmp_path / "nested" / "bundle.html"
     result = build_static(EXAMPLE_SPEC, data_dir, out)
     assert out.exists()

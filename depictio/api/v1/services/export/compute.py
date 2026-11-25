@@ -67,13 +67,46 @@ def _embedding_payload(config: dict, base: dict) -> dict:
     }
 
 
+def _upset_payload(
+    config: dict, base: dict, category_colors: dict[str, dict[str, str]] | None = None
+) -> dict:
+    """The payload UpsetRenderer dispatches, at the config's own settings.
+
+    The config names the annotation tracks ``default_annotation_cols``, which is
+    only what seeds the renderer's picker; the task reads ``annotation_cols``.
+    Spread as is, the config sent none and the figure came without its tracks.
+    The renderer's master annotations switch (``show_annotations``) gates the
+    tracks, the set-size bars and the count labels together.
+    """
+    annotated = config.get("show_annotations", True) is not False
+    tracks = list(config.get("default_annotation_cols") or []) if annotated else []
+    # The dashboard's pins for the tracks, as the renderer sends them
+    # (`pinsForColumns`): only when there are some.
+    pins = {
+        c: {v: k for v, k in ((category_colors or {}).get(c) or {}).items() if v != "*" and k}
+        for c in tracks
+    }
+    pins = {c: m for c, m in pins.items() if m}
+    return {
+        **config,
+        **base,
+        **({"category_colors": pins} if pins else {}),
+        "annotation_cols": tracks or None,
+        "show_set_sizes": annotated and bool(config.get("show_set_sizes", True)),
+        "show_values": annotated and bool(config.get("show_values", False)),
+    }
+
+
 def run_compute(
     kind: str,
     component: dict,
     filter_metadata: list[dict],
     access_token: str | None,
+    category_colors: dict[str, dict[str, str]] | None = None,
 ) -> Any:
     """Return the task's result for one component, as its poll route would.
+
+    ``category_colors`` (the dashboard's) pins an UpSet's annotation tracks.
 
     Raises:
         HTTPException: 422 for a kind with no inline compute.
@@ -94,7 +127,12 @@ def run_compute(
         "dc_id": str(component.get("dc_id")),
         "filter_metadata": list(filter_metadata or []),
     }
-    payload = _embedding_payload(config, base) if kind == "embedding" else {**config, **base}
+    if kind == "embedding":
+        payload = _embedding_payload(config, base)
+    elif kind == "upset_plot":
+        payload = _upset_payload(config, base, category_colors)
+    else:
+        payload = {**config, **base}
     _apply_link_filters_to_payload(payload, access_token, kind)
     if kind == "complex_heatmap":
         _resolve_annotation_join(payload)

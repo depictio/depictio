@@ -155,7 +155,22 @@ def test_a_missing_file_collection_degrades_to_partial_with_the_reason(
     assert row.detail and "no files under" in row.detail
 
 
-def test_render_appends_the_addon_before_body(
+def test_render_puts_the_addon_before_the_runtime_script(
+    tmp_path: Path, fake_addons: Path, monkeypatch
+) -> None:
+    from depictio.serverless import producer_b
+
+    (tmp_path / "combined-runtime.js").write_text("window.__runtime=1;")
+    (tmp_path / "combined-runtime.css").write_text("body{margin:0}")
+    monkeypatch.setenv(producer_b.TEMPLATE_PATH_ENV, str(tmp_path / "combined-runtime.js"))
+    result = producer_b.build_manifest(
+        producer_b.load_spec(PROTEIN_SPEC), _protein_data_dir(tmp_path / "data")
+    )
+    html = producer_b.render_bundle_html(result.manifest)
+    assert html.index('<script data-depictio-addon="3dmol">') < html.index("window.__runtime=1;")
+
+
+def test_render_appends_the_addon_before_body_of_a_legacy_template(
     tmp_path: Path, fake_addons: Path, monkeypatch
 ) -> None:
     from depictio.serverless import producer_b

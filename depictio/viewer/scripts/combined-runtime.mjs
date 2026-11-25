@@ -36,6 +36,34 @@ export function readCombinedRuntime(distStatic) {
   return { js: readFileSync(js, 'utf-8'), css: readFileSync(css, 'utf-8') };
 }
 
+/**
+ * The single-file bundle page: the JS twin of
+ * depictio/serverless/bundle_html.py::compose_bundle_html. The add-ons go
+ * before the runtime's script so their globals exist when it runs. `manifest`
+ * null composes the bare floor (no data), for the byte budgets.
+ */
+export function composeBundle({ js, css, manifest, title = '', addons = '' }) {
+  const blob = JSON.stringify(manifest ?? null)
+    .replace(/<\//g, '<\\/')
+    .replace(/<!--/g, '<\\u0021--');
+  const escaped = (title || 'Depictio')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return (
+    '<!doctype html><html lang="en"><head><meta charset="UTF-8" />' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1.0" />' +
+    '<meta name="color-scheme" content="light dark" />' +
+    `<title>${escaped}</title>` +
+    `<style>${css.replace(/<\/style/gi, '<\\/style')}</style>` +
+    '</head><body><div id="root"></div>' +
+    `<script id="bundle-manifest" type="application/json">${blob}</script>` +
+    addons +
+    `<script>${scriptText(js)}</script>` +
+    '</body></html>'
+  );
+}
+
 /** `output`: 'report' (the report alone) or 'combined' (with the dashboard). */
 export function composeRuntime({
   js,

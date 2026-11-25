@@ -20,8 +20,12 @@ const FIXTURE = join(__dirname, '..', 'fixtures', 'manifest-basic.json');
 const TABS_FIXTURE = join(__dirname, '..', 'fixtures', 'manifest-tabs.json');
 const TAB = 'f1x70000000000000000c0de';
 
+/** The shared fixture opens ungrouped here: its `initial_grouping` pins the
+ *  contract in manifest.test.ts, and is its own case below. */
 function fixture(): BundleManifest {
-  return parseManifest(JSON.parse(readFileSync(FIXTURE, 'utf-8')));
+  const m = parseManifest(JSON.parse(readFileSync(FIXTURE, 'utf-8')));
+  m.initial_grouping = null;
+  return m;
 }
 
 describe('parseTileRefs', () => {
@@ -76,6 +80,23 @@ describe('tileMountVerdict', () => {
     expect(verdict.mount).toBe(false);
     expect(verdict.mount === false && verdict.reason).toMatch(/default state/);
     // A live tile follows the filters, so the initial state does not matter.
+    expect(tileMountVerdict(m, { tabId: TAB, index: 'comp-text-1' }).mount).toBe(true);
+  });
+
+  it('keeps a frozen tile\'s fallback when the report opens coloured or filtered by groups', () => {
+    const m = parseManifest(JSON.parse(readFileSync(FIXTURE, 'utf-8')));
+    const ref = { tabId: TAB, index: 'comp-figure-1' };
+    // colour-by on: the frozen figure was drawn without it
+    expect(m.initial_grouping?.color_by.kind).toBe('groups');
+    const verdict = tileMountVerdict(m, ref);
+    expect(verdict.mount === false && verdict.reason).toMatch(/selection groups/);
+    // groups that only sit there change nothing a frozen tile shows
+    m.initial_grouping!.color_by = { kind: 'none' };
+    expect(tileMountVerdict(m, ref).mount).toBe(true);
+    // ... until one of them filters
+    m.initial_grouping!.groups[0].filter_active = true;
+    expect(tileMountVerdict(m, ref).mount).toBe(false);
+    // a live tile follows the groups itself
     expect(tileMountVerdict(m, { tabId: TAB, index: 'comp-text-1' }).mount).toBe(true);
   });
 

@@ -9,10 +9,10 @@
 # -----------------------------
 # serverless template stage
 # -----------------------------
-# The Celery task `export_static` (producer C) injects a manifest into the
-# prebuilt single-file runtime `pnpm run build:static` writes. It is gitignored
+# The Celery task `export_static` (producer C) composes a bundle page from the
+# prebuilt static runtime `pnpm run build:static` writes. It is gitignored
 # build output, so without this stage every static export dispatched to the
-# worker fails with "static runtime template not built". Node/pnpm pins mirror
+# worker fails with "static-runtime bundle not built". Node/pnpm pins mirror
 # docker-images/Dockerfile.api; the runtime layer below carries no Node.
 FROM node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS static-template-builder
 WORKDIR /build
@@ -180,13 +180,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra server --extra render --group worker-reload \
     || uv sync --no-dev --extra server --extra render --group worker-reload
 
-# The serverless bundle template, built in the stage above.
-COPY --from=static-template-builder --chown=depictio:depictio \
-    /build/depictio/viewer/dist-static/static.html \
-    /app/depictio/viewer/dist-static/static.html
-# The runtime a rendered report embeds, built by the same `build:static`:
-# `render_notebook_report` embeds it after the render, beside producer A's
-# manifest, so the report's tiles are the dashboard's own renderers, and the
+# The static runtime, built in the stage above (`build:static`). One runtime,
+# two hosts: the serverless bundle page is composed from it, and a rendered
+# report embeds it: `render_notebook_report` embeds it after the render, beside
+# producer A's manifest, so the report's tiles are the dashboard's own renderers, and the
 # combined file also holds the dashboard (depictio/serverless/combined.py).
 # Without it the report keeps every tile's own output. Its add-ons (JBrowse,
 # 3Dmol.js) ride along when a dashboard needs one.

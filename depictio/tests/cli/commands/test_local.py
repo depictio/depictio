@@ -106,6 +106,24 @@ def test_server_env_keeps_the_realtime_opt_in_and_only_that(paths, monkeypatch):
     assert "DEPICTIO_EVENTS_REDIS_DB" not in env
 
 
+def test_server_env_keeps_the_offline_output_switches(paths, monkeypatch):
+    # Off by default on the server; a local user turns them on from their shell.
+    monkeypatch.setenv("DEPICTIO_NOTEBOOK_EXPORT_ENABLED", "true")
+    monkeypatch.setenv("DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED", "true")
+    monkeypatch.setenv("DEPICTIO_REPORT_EDITOR_ENABLED", "true")
+    monkeypatch.setenv("DEPICTIO_STATIC_EXPORT_ENABLED", "true")
+    ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
+    env = server_env(paths, ports, SECRETS, "none", False)
+
+    for key in (
+        "DEPICTIO_NOTEBOOK_EXPORT_ENABLED",
+        "DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED",
+        "DEPICTIO_REPORT_EDITOR_ENABLED",
+        "DEPICTIO_STATIC_EXPORT_ENABLED",
+    ):
+        assert env[key] == "true", key
+
+
 def test_server_env_keeps_the_export_api_settings(paths, monkeypatch):
     monkeypatch.setenv("DEPICTIO_FASTAPI_EMBED_ENABLED", "true")
     monkeypatch.setenv("DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS", "http://localhost:8899")

@@ -34,6 +34,19 @@ def json_safe(o: Any) -> Any:
     return o
 
 
+def json_blob(payload: Any) -> str:
+    """``payload`` as JSON that no ``<script>`` element can be closed by.
+
+    Passed through :func:`json_safe`; ``</`` and ``<!--`` are escaped inside the
+    JSON strings (see :func:`inject`), so the parsed value is unchanged.
+    """
+    return (
+        json.dumps(json_safe(payload), default=str)
+        .replace("</", "<\\/")
+        .replace("<!--", "<\\u0021--")
+    )
+
+
 def inject(template: str, token: str, payload: Any) -> str:
     """Embed a computed payload into a prebuilt single-file HTML template.
 
@@ -46,9 +59,15 @@ def inject(template: str, token: str, payload: Any) -> str:
     the real ``</script>`` no longer closes the element and the bundle fails to
     load. Both escapes sit inside JSON strings, so the parsed value is unchanged.
     """
-    blob = (
-        json.dumps(json_safe(payload), default=str)
-        .replace("</", "<\\/")
-        .replace("<!--", "<\\u0021--")
-    )
-    return template.replace(token, blob)
+    return template.replace(token, json_blob(payload))
+
+
+def script_text(text: str) -> str:
+    """``text`` safe inside a ``<script>`` element (run, or inert ``text/plain``).
+
+    Inside script data, ``</script`` ends the element and ``<!--`` can switch
+    the tokenizer into its escaped states. In a minified bundle both only ever
+    sit in string or regex literals, where ``<\\/`` and ``<\\!`` read the
+    same; in CSS a ``\\/`` reads as ``/``.
+    """
+    return text.replace("</script", "<\\/script").replace("<!--", "<\\!--")

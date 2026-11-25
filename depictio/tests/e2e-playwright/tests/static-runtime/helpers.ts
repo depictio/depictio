@@ -1,9 +1,11 @@
 /**
  * Shared setup for the backend-less static-runtime specs.
  *
- * Injects a manifest fixture into the built single-file bundle
- * (depictio/viewer/dist-static/static.html) the same way the Python producers
- * do — token replacement with `</`-escaping — and serves it from file://.
+ * Composes a bundle page from the built static runtime
+ * (depictio/viewer/dist-static/combined-runtime.{js,css}) and a manifest
+ * fixture the same way the Python producers do
+ * (depictio/serverless/bundle_html.py) — `</`-escaped manifest, add-ons before
+ * the runtime's script — and serves it from file://.
  */
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,10 +14,9 @@ import type { Page, TestInfo } from "@playwright/test";
 import { test } from "@playwright/test";
 
 const REPO_ROOT = resolve(__dirname, "../../../../..");
-export const BUNDLE_TEMPLATE = join(
-  REPO_ROOT,
-  "depictio/viewer/dist-static/static.html",
-);
+const DIST_STATIC = join(REPO_ROOT, "depictio/viewer/dist-static");
+export const RUNTIME_JS = join(DIST_STATIC, "combined-runtime.js");
+const RUNTIME_CSS = join(DIST_STATIC, "combined-runtime.css");
 export const FIXTURE_MANIFEST = join(
   REPO_ROOT,
   "packages/depictio-static-core/fixtures/manifest-basic.json",
@@ -66,15 +67,15 @@ export const GENOMESPY_MANIFEST = join(
 );
 const ADDONS_DIR = join(REPO_ROOT, "depictio/viewer/dist-static/addons");
 
-/** Append the add-ons a manifest names before `</body>` — the producers' rule
- *  (depictio/serverless/addons.py::apply_addons). */
-export function applyAddons(template: string, names: string[]): string {
-  if (!names.length) return template;
+/** The add-ons a manifest names, as markup — the producers' rule
+ *  (depictio/serverless/addons.py::addons_html). */
+export function addonsHtml(names: string[]): string {
+  if (!names.length) return "";
   const registry = JSON.parse(readFileSync(join(ADDONS_DIR, "addons.json"), "utf-8")) as Record<
     string,
     { file: string }
   >;
-  const scripts = names
+  return names
     .map((n) => {
       const info = registry[n];
       if (!info) throw new Error(`add-on ${n} is not built (pnpm run build:static)`);
@@ -82,13 +83,11 @@ export function applyAddons(template: string, names: string[]): string {
       return `<script data-depictio-addon="${n}">${body}</script>`;
     })
     .join("");
-  const at = template.lastIndexOf("</body>");
-  return at < 0 ? template + scripts : template.slice(0, at) + scripts + template.slice(at);
 }
 
 export function skipUnlessBundleBuilt(): void {
   test.skip(
-    !existsSync(BUNDLE_TEMPLATE),
+    !existsSync(RUNTIME_JS) || !existsSync(RUNTIME_CSS),
     "static bundle not built — run `pnpm run build:static` in depictio/viewer first",
   );
 }
@@ -108,17 +107,25 @@ export function fixtureDir(prefix: string): string {
   return dir;
 }
 
-/** Inject a manifest into the built bundle; returns a file:// URL. */
+/** Compose the bundle page for a manifest from the built runtime (the
+ *  producers' composition, depictio/serverless/bundle_html.py); returns a
+ *  file:// URL. */
 export function injectedBundleUrl(manifestPath: string = FIXTURE_MANIFEST): string {
-  const template = readFileSync(BUNDLE_TEMPLATE, "utf-8");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
-  // Same convention as depictio/catalog/payload.py::_inject. replaceAll +
-  // a function replacement: a plain string replacement would interpret `$`
-  // sequences in the JSON, and Python's .replace (which producers use)
-  // replaces every occurrence.
-  const blob = JSON.stringify(manifest).replace(/<\//g, "<\\/");
+  // `</` and `<!--` cannot close or wedge open the manifest's script element.
+  const blob = JSON.stringify(manifest).replace(/<\//g, "<\\/").replace(/<!--/g, "<\\u0021--");
   const names = ((manifest.addons ?? []) as { name: string }[]).map((a) => a.name);
-  const html = applyAddons(template, names).replaceAll("__BUNDLE_MANIFEST__", () => blob);
+  const html =
+    '<!doctype html><html lang="en"><head><meta charset="UTF-8" />' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1.0" />' +
+    '<meta name="color-scheme" content="light dark" />' +
+    `<title>${escapeHtml(manifest.dashboard?.title || "Depictio")}</title>` +
+    `<style>${readFileSync(RUNTIME_CSS, "utf-8").replace(/<\/style/gi, "<\\/style")}</style>` +
+    '</head><body><div id="root"></div>' +
+    `<script id="bundle-manifest" type="application/json">${blob}</script>` +
+    addonsHtml(names) +
+    `<script>${scriptText(readFileSync(RUNTIME_JS, "utf-8"))}</script>` +
+    "</body></html>";
   const dir = fixtureDir("depictio-static-");
   const out = join(dir, "bundle-fixture.html");
   writeFileSync(out, html);
@@ -170,8 +177,6 @@ export async function blockNetwork(page: Page): Promise<string[]> {
 // dashboard in one HTML (the combined file)
 // ---------------------------------------------------------------------------
 
-const DIST_STATIC = join(REPO_ROOT, "depictio/viewer/dist-static");
-export const RUNTIME_JS = join(DIST_STATIC, "combined-runtime.js");
 /** The report skeleton: the DOM Quarto renders from the notebook generator's
  *  placeholders, for the penguins demo manifest. Regenerate with
  *  `depictio/serverless/examples/generate_report_fixture.py`. */
@@ -191,6 +196,8 @@ const jsonScript = (id: string, payload: unknown) =>
 
 const scriptText = (text: string) =>
   text.replace(/<\/script/g, "<\\/script").replace(/<!--/g, "<\\!--");
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /** The penguins report with the runtime and the manifest inlined once at its
  *  end — the producer's composition (depictio/serverless/combined.py) for a
@@ -211,7 +218,7 @@ function runtimeReportUrl(
     jsonScript("depictio-report-config", config) +
     jsonScript("depictio-report-manifest", manifest) +
     `<script type="text/plain" data-depictio-runtime="css">${scriptText(
-      readFileSync(join(DIST_STATIC, "combined-runtime.css"), "utf-8"),
+      readFileSync(RUNTIME_CSS, "utf-8"),
     )}</script>` +
     `<script data-depictio-runtime="js">${scriptText(readFileSync(RUNTIME_JS, "utf-8"))}</script>`;
   const html = readFileSync(PENGUINS_REPORT, "utf-8").replace(

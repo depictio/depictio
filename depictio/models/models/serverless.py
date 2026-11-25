@@ -19,6 +19,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from depictio.models.models.analysis_state import AnalysisGroup, ColorBy, SplitPanel
+
 MANIFEST_VERSION = 1
 
 
@@ -54,6 +56,7 @@ class TierReason(str, Enum):
     CELERY_COMPUTE = "celery_compute"
     CODE_MODE = "code_mode"
     BINDING_MISS = "binding_miss"
+    TRENDLINE = "trendline"  # a trendline the runtime cannot refit
     MAX_POINTS = "max_points"
     LINK_TABLE_TOO_BIG = "link_table_too_big"
     MAP_TILES = "map_tiles"
@@ -217,6 +220,14 @@ class BindingTable(BaseModel):
     group_cols: list[str] = Field(
         default_factory=list,
         description="px grouping columns in order [color, symbol, line_dash, line_group, pattern_shape, facet_row, facet_col]",
+    )
+    color_col: str | None = Field(
+        default=None,
+        description=(
+            "The discrete column the figure is coloured by (px ``color``), None when it has "
+            "none. Lets the runtime recolour the figure by selection groups: the traces of "
+            "that colour are merged and re-cut by the group a row belongs to"
+        ),
     )
     traces: list[TraceBinding]
     trendlines: list[TrendlineBinding] = Field(default_factory=list)
@@ -837,7 +848,7 @@ class ResolvedStructure(BaseModel):
 class RuntimeAddon(BaseModel):
     """An optional runtime piece embedded only into bundles that need it.
 
-    The base runtime (``static.html``) stays inside its byte budget; a producer
+    The base runtime (``combined-runtime.js``) stays inside its byte budget; a producer
     appends an add-on's script when a component needs it, and records it here so
     the runtime and the tier table can say what was embedded and why.
     """
@@ -878,6 +889,68 @@ class PythonComponent(BaseModel):
             "polars is built without its Parquet reader. Same rows and order as the Parquet "
             "data_ref, user columns only, so the browser's row mask applies as is"
         )
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class InitialGrouping(BaseModel):
+    """The grouping half of an analysis state a bundle or report opens on.
+
+    The shapes are the analysis state's own (``analysis_state.py``), so a
+    producer copies them across and the runtime reads the viewer's types.
+    ``split_panels`` is what the viewer derived from the display when the state
+    was built; the runtime derives its own from ``groups`` and ``display_mode``.
+    """
+
+    groups: list[AnalysisGroup] = Field(default_factory=list)
+    color_by: ColorBy = Field(default_factory=ColorBy)
+    display_mode: Literal["color", "facet"] = "color"
+    show_other: bool = True
+    show_overall: bool = True
+    split_panels: list[SplitPanel] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @property
+    def active(self) -> bool:
+        """True when the state holds anything the runtime must seed."""
+        return bool(self.groups) or self.color_by.kind != "none"
+
+
+class PinnedCollection(BaseModel):
+    """A collection a pinned export left live, and why.
+
+    The reason is the resolver's own (``data_versions.py``): ``not_in_version``
+    for a collection added after the version was taken, or the stamp's recorded
+    reason for one the version could not pin.
+    """
+
+    dc_id: str
+    reason: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PinnedVersion(BaseModel):
+    """The dashboard version a pinned export froze on.
+
+    Filled only when the exported state's pins name a version
+    (``as_of_version`` / ``definition_version``); a bundle of the live
+    dashboard leaves it null. ``unresolved`` says which collections stayed
+    live anyway, so a reader is never shown a past version's label over data
+    the version could not pin.
+    """
+
+    version_id: str
+    seq: int | None = Field(default=None, description="The version's timeline number")
+    label: str | None = Field(default=None, description="Its saved name, when it has one")
+    created_at: str | None = Field(
+        default=None, description="ISO 8601 timestamp of the version save"
+    )
+    unresolved: list[PinnedCollection] = Field(
+        default_factory=list,
+        description="Collections the version could not pin, reading current data",
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -974,6 +1047,15 @@ class BundleManifest(BaseModel):
             "when the add-on is embedded)"
         ),
     )
+    initial_grouping: InitialGrouping | None = Field(
+        default=None,
+        description=(
+            "The selection groups, colour-by and split the runtime opens on (the exported "
+            "analysis state's own). The viewer's group store is seeded from it, in memory: "
+            "a reader can add, edit and delete groups, none of it saved. None opens with no "
+            "group, colouring the figures as built"
+        ),
+    )
     initial_filters: list[dict[str, Any]] = Field(
         default_factory=list,
         description=(
@@ -982,6 +1064,15 @@ class BundleManifest(BaseModel):
             "A report (the Quarto export's host of the runtime) sets it to the exported "
             "analysis state and opens on exactly that (empty = no filter); a bundle leaves "
             "it empty and opens on the dashboard's own defaults"
+        ),
+    )
+    pinned_version: PinnedVersion | None = Field(
+        default=None,
+        description=(
+            "The dashboard version this bundle froze on, when the exported state's pins "
+            "named one; null for a bundle of the live dashboard. Its `unresolved` "
+            "collections read current data — the bundle never claims a version's label "
+            "for data that version could not pin"
         ),
     )
 

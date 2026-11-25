@@ -22,9 +22,16 @@ from bson import ObjectId
 
 from depictio.models.models.analysis_state import AnalysisState, NotebookExportRequest
 from depictio.serverless import combined, report
-from depictio.serverless.producer_a import ExportUser, ProducerAError, export_manifest
+from depictio.serverless.producer_a import (
+    ExportUser,
+    ProducerAError,
+    VersionPinsError,
+    export_manifest,
+)
 from depictio.tests.api.test_serverless_export import (  # noqa: F401 (fixture)
+    AV_DC_OID,
     DASHBOARD_OID,
+    DC2_OID,
     DC_OID,
     PROJECT_OID,
     _dashboard_doc,
@@ -40,11 +47,11 @@ def _state(**extra: Any) -> AnalysisState:
         {
             "filters": [
                 {
-                    "index": "ms-1",
-                    "column_name": "species",
+                    "index": "filter-1",
+                    "column_name": "year",
                     "interactive_component_type": "MultiSelect",
-                    "value": ["Adelie"],
-                    "metadata": {"dc_id": str(DC_OID), "column_name": "species"},
+                    "value": [2021],
+                    "metadata": {"dc_id": str(DC_OID), "column_name": "year"},
                 }
             ],
             "context": {"dashboard_id": str(DASHBOARD_OID)},
@@ -72,7 +79,9 @@ def _comparable(dump: dict[str, Any]) -> dict[str, Any]:
 @pytest.mark.usefixtures("offline_stack")
 def test_the_report_manifest_is_producer_a_manifest():
     state = _state()
-    bundled = export_manifest(str(DASHBOARD_OID), ADMIN).manifest
+    # The report's build runs WITH the state, so its frozen tiles agree with
+    # the initial_filters the runtime opens on.
+    bundled = export_manifest(str(DASHBOARD_OID), ADMIN, state=state).manifest
     reported = report.build_report_manifest(str(DASHBOARD_OID), ADMIN, state)
     assert bundled is not None
     assert _comparable(reported.model_dump(mode="json")) == _comparable(
@@ -113,34 +122,82 @@ def test_no_user_is_never_read_as_the_admin():
         report.build_report_manifest(str(DASHBOARD_OID), None, _state())
 
 
-@pytest.mark.parametrize(
-    "extra,needle",
-    [
-        ({"pins": {"as_of_version": "v1"}}, "pinned"),
-        ({"pins": {"data_versions": {str(DC_OID): 2}}}, "pinned"),
-        ({"color_by": {"kind": "groups"}}, "selection groups"),
-        ({"split_panels": [{"name": "A", "constraints": []}]}, "selection groups"),
-        (
-            {
-                "groups": [
-                    {
-                        "id": "g",
-                        "name": "G",
-                        "color": "#000",
-                        "column_name": "species",
-                        "filter_active": True,
-                    }
-                ]
-            },
-            "selection group",
-        ),
+GROUPED = {
+    "groups": [
+        {
+            "id": "g",
+            "name": "G",
+            "color": "#e03131",
+            "dc_id": str(DC_OID),
+            "column_name": "year",
+            "values": ["2021"],
+            "filter_active": True,
+        }
     ],
-)
-def test_a_state_the_page_cannot_reproduce_is_refused(extra, needle):
-    state = _state(**extra)
-    assert needle in (report.ineligibility(state) or "")
-    with pytest.raises(report.ReportRuntimeRefused):
-        report.build_report_manifest(str(DASHBOARD_OID), ADMIN, state)
+    "color_by": {"kind": "groups"},
+    "display_mode": "facet",
+    "split_panels": [{"name": "G", "constraints": []}],
+}
+
+
+def test_a_grouped_coloured_split_state_is_eligible():
+    """The runtime keeps a group store, colours by it and splits, so a state
+    that uses them is embedded rather than refused."""
+    assert report.ineligibility(_state(**GROUPED)) is None
+
+
+@pytest.mark.usefixtures("offline_stack")
+def test_the_report_manifest_carries_the_groups_colour_by_and_split():
+    state = _state(**GROUPED)
+    manifest = report.build_report_manifest(str(DASHBOARD_OID), ADMIN, state)
+    grouping = manifest.initial_grouping
+    assert grouping is not None
+    assert [g.name for g in grouping.groups] == ["G"]
+    assert grouping.groups[0].filter_active is True
+    assert grouping.color_by.kind == "groups"
+    assert grouping.display_mode == "facet"
+    assert [p.name for p in grouping.split_panels] == ["G"]
+    # a plain state carries none
+    plain = report.build_report_manifest(str(DASHBOARD_OID), ADMIN, _state())
+    assert plain.initial_grouping is None
+
+
+@pytest.mark.usefixtures("offline_stack")
+def test_a_pinned_state_is_eligible_and_the_manifest_names_the_version(monkeypatch):
+    """A pinned export is NOT refused: the manifest ships the pinned version's
+    data and definitions and says which version it froze on."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+
+    version_id = "507f1f77bcf86cd799439011"
+    stamps = [
+        {"dc_id": str(dc), "version_kind": "delta", "delta_version": 0}
+        for dc in (DC_OID, DC2_OID, AV_DC_OID)
+    ]
+    monkeypatch.setattr(
+        version_store,
+        "dashboard_versions_collection",
+        _FakeCollection(
+            [
+                {
+                    "version_id": version_id,
+                    "family_id": str(DASHBOARD_OID),
+                    "seq": 2,
+                    "label": "v2",
+                    "created_at": None,
+                    "data_collections": stamps,
+                    "tabs": [],
+                }
+            ]
+        ),
+    )
+    state = _state(pins={"as_of_version": version_id})
+    assert report.ineligibility(state) is None
+    manifest = report.build_report_manifest(str(DASHBOARD_OID), ADMIN, state)
+    assert manifest.pinned_version is not None
+    assert manifest.pinned_version.version_id == version_id
+    assert manifest.pinned_version.seq == 2
+    assert manifest.pinned_version.label == "v2"
+    assert manifest.pinned_version.unresolved == []
 
 
 def test_a_plain_state_is_eligible_and_group_filters_never_ride_along():
@@ -149,7 +206,7 @@ def test_a_plain_state_is_eligible_and_group_filters_never_ride_along():
     state.filters.append(
         state.filters[0].model_copy(update={"index": "__g__", "source": "group_filter"})
     )
-    assert [f["index"] for f in report.initial_filters(state)] == ["ms-1"]
+    assert [f["index"] for f in report.initial_filters(state)] == ["filter-1"]
 
 
 # ---------------------------------------------------------------------------
@@ -224,9 +281,8 @@ def test_only_an_owner_gets_the_runtime(gate):
     assert "owners" in (ep._runtime_refusal(DASHBOARD_OID, _state(), user) or "")
     gate.add(str(user.id))
     assert ep._runtime_refusal(DASHBOARD_OID, _state(), user) is None
-    assert "pinned" in (
-        ep._runtime_refusal(DASHBOARD_OID, _state(pins={"as_of_version": "v"}), user) or ""
-    )
+    # A pinned state is reproducible now: the manifest ships the pinned data.
+    assert ep._runtime_refusal(DASHBOARD_OID, _state(pins={"as_of_version": "v"}), user) is None
 
 
 def test_a_runtime_that_is_not_built_is_a_refusal_of_its_own(gate, built_runtime):
@@ -245,14 +301,18 @@ def test_render_embeds_by_default_and_the_download_does_not(gate):
 
     owner = ExportUser(id=ObjectId())
     gate.add(str(owner.id))
-    assert ep._embed_runtime(_request(), DASHBOARD_OID, owner, default=True) is True
-    assert ep._embed_runtime(_request(), DASHBOARD_OID, owner, default=False) is False
-    assert ep._embed_runtime(_request(embed_runtime=True), DASHBOARD_OID, owner, default=False)
-    assert not ep._embed_runtime(_request(embed_runtime=False), DASHBOARD_OID, owner, default=True)
+    assert ep._embed_runtime(_request(), DASHBOARD_OID, _state(), owner, default=True) is True
+    assert ep._embed_runtime(_request(), DASHBOARD_OID, _state(), owner, default=False) is False
+    assert ep._embed_runtime(
+        _request(embed_runtime=True), DASHBOARD_OID, _state(), owner, default=False
+    )
+    assert not ep._embed_runtime(
+        _request(embed_runtime=False), DASHBOARD_OID, _state(), owner, default=True
+    )
     # Asked for, but not an owner: the document is the plain notebook.
     stranger = ExportUser(id=ObjectId())
     assert not ep._embed_runtime(
-        _request(embed_runtime=True), DASHBOARD_OID, stranger, default=True
+        _request(embed_runtime=True), DASHBOARD_OID, _state(), stranger, default=True
     )
 
 
@@ -308,13 +368,15 @@ def test_the_manifest_route_queues_a_job_for_an_owner(monkeypatch):
             str(DASHBOARD_OID), _request(), current_user=ExportUser(id=ObjectId())
         )
     assert denied.value.status_code == 404
-    with pytest.raises(HTTPException) as refused:
-        routes.post_report_manifest(
-            str(DASHBOARD_OID),
-            NotebookExportRequest(state=_state(pins={"as_of_version": "v1"})),
-            current_user=owner,
-        )
-    assert refused.value.status_code == 409
+    # A pinned state queues too: the manifest ships the pinned version's data
+    # (the state rides along in the job's runtime argument).
+    out = routes.post_report_manifest(
+        str(DASHBOARD_OID),
+        NotebookExportRequest(state=_state(pins={"as_of_version": "v1"})),
+        current_user=owner,
+    )
+    assert out["status"] == "queued"
+    assert queued["kwargs"]["runtime"]["state"]["pins"]["as_of_version"] == "v1"
 
 
 def test_the_manifest_poll_answers_the_job(monkeypatch):
@@ -341,7 +403,8 @@ def test_the_manifest_poll_answers_the_job(monkeypatch):
     assert other.value.status_code == 404
     # A refusal answers as the route would have.
     for exc, status in (
-        (report.ReportRuntimeRefused("pinned"), 409),
+        (report.ReportRuntimeRefused("selection groups"), 409),
+        (VersionPinsError("Version v1 no longer exists."), 400),
         (ProducerAError("permission denied"), 404),
         (RuntimeError("boom"), 500),
     ):
@@ -385,4 +448,4 @@ def test_the_manifest_job_stores_the_manifest_under_its_requester(monkeypatch):
     assert stored[out["key"]] == b'{"ok":true}'
     dashboard_id, export_user, state = seen["args"]
     assert dashboard_id == str(DASHBOARD_OID) and export_user.id == user["id"]
-    assert state.filters[0].index == "ms-1"
+    assert state.filters[0].index == "filter-1"

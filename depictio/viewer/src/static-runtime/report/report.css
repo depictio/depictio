@@ -21,10 +21,11 @@
   margin: 0.75rem 0 1.25rem;
 }
 
-/* A row of cards, as the dashboard lays a card strip out. */
+/* A row of cards, two to a line: a report is read down the page, and four
+   in one line left each card a quarter of it. One card alone keeps half. */
 .depictio-report-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 

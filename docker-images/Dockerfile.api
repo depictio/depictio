@@ -3,12 +3,13 @@
 # -----------------------------
 # Carries only what `depictio.api.main:app` needs at runtime: Python +
 # uv-installed deps. No Playwright (worker owns screenshots), no Dash assets.
-# The only Node artefacts it needs are two single-file bundles, built in the
-# stage below and copied in — the runtime layer itself still carries no Node:
+# The only Node artefacts it needs are two single-file bundles and the static
+# runtime, built in the stage below and copied in — the runtime layer itself
+# still carries no Node:
 #   catalog-preview.html  GET /catalog/output/{id}/preview-html
 #   embed.html            GET /export/dashboards/{id}/components/{cid}?format=html
-#   static.html           serverless export (producer A; the bundle template
-#                         `depictio/serverless` injects the manifest into)
+#   combined-runtime.*    serverless export (producer A composes the bundle
+#                         page from it) and the runtime a report embeds
 # -----------------------------
 
 # -----------------------------
@@ -123,14 +124,11 @@ COPY --from=catalog-preview-builder --chown=depictio:depictio \
 COPY --from=catalog-preview-builder --chown=depictio:depictio \
     /build/depictio/viewer/dist-embed/embed.html \
     /app/depictio/viewer/dist-embed/embed.html
-# The serverless bundle template (`pnpm run build:static`): without it every
-# static export fails with "static runtime template not built".
-COPY --from=catalog-preview-builder --chown=depictio:depictio \
-    /build/depictio/viewer/dist-static/static.html \
-    /app/depictio/viewer/dist-static/static.html
-# The runtime a rendered report embeds (same `build:static`): the API checks it
-# is built before offering the runtime in a report (the worker embeds it), and
-# serves it to a reader rendering their own .qmd (GET /serverless/report-runtime).
+# The static runtime (`pnpm run build:static`), shipped once for both of its
+# hosts. Without it every static export fails with "static-runtime bundle not
+# built". It is also what a rendered report embeds: the API checks it is built
+# before offering the runtime in a report (the worker embeds it), and serves it
+# to a reader rendering their own .qmd (GET /serverless/report-runtime).
 COPY --from=catalog-preview-builder --chown=depictio:depictio \
     /build/depictio/viewer/dist-static/combined-runtime.js \
     /build/depictio/viewer/dist-static/combined-runtime.css \
