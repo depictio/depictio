@@ -53,7 +53,15 @@ import { useReportEditorEnabled } from '../hooks/useReportEditorEnabled';
 import { useNotebookExportEnabled } from '../hooks/useNotebookExportEnabled';
 import { useStaticExportEnabled } from '../hooks/useStaticExportEnabled';
 import { usePublicDownloadEnabled } from '../hooks/usePublicDownloadEnabled';
-import PublicCopyCard from '../components/publicDownload/PublicCopyCard';
+import {
+  ExportNote,
+  PublicCopyButton,
+  publicCopyNote,
+  publicCopySize,
+  usePublicCopy,
+} from '../components/publicDownload/PublicCopy';
+import type { PublicBundleStatus } from 'depictio-react-core';
+import { useCurrentUser } from '../hooks/useCurrentUser';
 
 /** Client-side mirror of the server's upload cap (routes.py). */
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
@@ -678,7 +686,18 @@ const ExportBlock: React.FC<{
   } | null;
   /** The reader may edit this dashboard's report. */
   canEditReport?: boolean;
-}> = ({ dashboard, getAnalysisState, staticExport, canEditReport }) => {
+  /** The ready copies the project's owner offers visitors (#1480), or null. */
+  publicCopy?: PublicBundleStatus | null;
+  /** A signed-in reader (or single-user mode): only they may render a report. */
+  signedIn?: boolean;
+}> = ({
+  dashboard,
+  getAnalysisState,
+  staticExport,
+  canEditReport,
+  publicCopy = null,
+  signedIn = true,
+}) => {
   const [opened, setOpened] = useState<ExportChoice | null>(null);
   const reportEditorEnabled = useReportEditorEnabled();
   const dashboardId = String(dashboard?.dashboard_id ?? dashboard?._id ?? '');
@@ -713,19 +732,31 @@ const ExportBlock: React.FC<{
       }
     />
   );
+  // A ready copy beside an action renames that action: it then exports the
+  // view the reader has now, the copy being the default view.
+  const currentLabel = (fallback: string) => (publicCopy ? 'Export current view' : fallback);
+  const pdfSize = publicCopySize(publicCopy, 'pdf');
+  const combinedSize = publicCopySize(publicCopy, 'report');
+  const renderRefusal = signedIn ? null : SIGN_IN_HINT;
+  const combinedRefusal = renderRefusal ?? (staticExport?.allowed === false ? OWNER_GATE_HINT : null);
   const reportCard = (
     <ExportFormatCard
       icon="mdi:file-document-outline"
       title="Report (HTML / PDF)"
       description="The dashboard written up as a document, with a cover, text around the figures and an optional PDF."
       testId="export-report-card"
+      footer={renderRefusal && <ExportNote testId="export-report-reason">{renderRefusal}</ExportNote>}
     >
+      {pdfSize !== undefined && (
+        <PublicCopyButton dashboardId={dashboardId} file="pdf" sizeBytes={pdfSize} />
+      )}
       {showCustomise && (
         <Button
           component="a"
           href={`/dashboard-report/${dashboardId}`}
           onMouseEnter={prewarm}
           onFocus={prewarm}
+          variant="light"
           size="sm"
           leftSection={<Icon icon="mdi:file-document-edit-outline" width={16} />}
           data-testid="export-customise-report"
@@ -734,14 +765,14 @@ const ExportBlock: React.FC<{
         </Button>
       )}
       <Button
-        variant={showCustomise ? 'light' : 'filled'}
+        variant="light"
         size="sm"
         leftSection={<Icon icon="mdi:notebook-outline" width={16} />}
         onClick={() => setOpened('report')}
-        disabled={!dashboardId}
+        disabled={!dashboardId || Boolean(renderRefusal)}
         data-testid="export-report"
       >
-        Export report
+        {currentLabel('Export report')}
       </Button>
     </ExportFormatCard>
   );
@@ -777,7 +808,9 @@ const ExportBlock: React.FC<{
   return (
     <Stack gap="sm" data-testid="export-section">
       <Text size="sm" c="dimmed">
-        Every format uses the filters you have right now.
+        {publicCopy
+          ? 'Download a ready copy of the default view, or export the view you have now.'
+          : 'Every format uses the filters you have right now.'}
       </Text>
       {reportCard}
       <ExportFormatCard
@@ -785,15 +818,22 @@ const ExportBlock: React.FC<{
         title="Report + dashboard"
         description="One HTML file to send: the rendered report and the whole interactive dashboard one click away. It opens without a server."
         testId="export-combined-card"
+        footer={
+          combinedRefusal && <ExportNote testId="export-combined-reason">{combinedRefusal}</ExportNote>
+        }
       >
+        {combinedSize !== undefined && (
+          <PublicCopyButton dashboardId={dashboardId} file="report" sizeBytes={combinedSize} />
+        )}
         <Button
+          variant="light"
           size="sm"
           leftSection={<Icon icon="mdi:export-variant" width={16} />}
           onClick={() => setOpened('combined')}
-          disabled={!dashboardId}
+          disabled={!dashboardId || Boolean(combinedRefusal)}
           data-testid="export-combined"
         >
-          Export report + dashboard
+          {currentLabel('Export report + dashboard')}
         </Button>
       </ExportFormatCard>
       {staticExport && (
@@ -802,7 +842,11 @@ const ExportBlock: React.FC<{
           previewing={staticExport.previewing}
           allowed={staticExport.allowed}
           onExportStatic={staticExport.onExportStatic}
+          publicCopy={publicCopy}
         />
+      )}
+      {publicCopy && (
+        <ExportNote testId="public-copy-note">{publicCopyNote(publicCopy)}</ExportNote>
       )}
       {notebookCard}
       {modal}
@@ -821,6 +865,8 @@ const ExportBlock: React.FC<{
 const OWNER_GATE_HINT =
   "Exporting needs owner rights on this dashboard's project: a bundle carries the " +
   "project's data. Ask a project owner to export it.";
+const SIGN_IN_HINT =
+  'Rendering a report needs a signed-in account: sign in to export the view you have now.';
 const PREVIEW_HINT =
   'A static export draws the live dashboard and its current data, not this past ' +
   'version. Leave the version preview to export.';
@@ -866,18 +912,25 @@ const ExportStaticBlock: React.FC<{
   /** The server's answer (`useCanExportStatic`); null while it is asked. */
   allowed: boolean | null;
   onExportStatic: () => void;
-}> = ({ dashboardId, previewing, allowed, onExportStatic }) => {
+  /** The ready copies the project's owner offers visitors (#1480), or null. */
+  publicCopy?: PublicBundleStatus | null;
+}> = ({ dashboardId, previewing, allowed, onExportStatic, publicCopy = null }) => {
   const reason = previewing ? PREVIEW_HINT : allowed === false ? OWNER_GATE_HINT : null;
   return (
     <ExportFormatCard
       icon="mdi:monitor-dashboard"
       title="Dashboard only (serverless)"
-      description={
-        reason ??
-        'The interactive dashboard alone, as one self-contained HTML file that opens without a server.'
-      }
+      description="The interactive dashboard alone, as one self-contained HTML file that opens without a server."
       testId="export-static-section"
+      footer={reason && <ExportNote testId="export-static-reason">{reason}</ExportNote>}
     >
+      {publicCopy && dashboardId && (
+        <PublicCopyButton
+          dashboardId={dashboardId}
+          file="dashboard"
+          sizeBytes={publicCopySize(publicCopy, 'dashboard')}
+        />
+      )}
       <Tooltip label={reason} disabled={!reason} withArrow>
         <Button
           leftSection={<Icon icon="mdi:export-variant" width={16} />}
@@ -887,7 +940,7 @@ const ExportStaticBlock: React.FC<{
           disabled={!dashboardId || previewing || allowed !== true}
           data-testid="export-static-btn"
         >
-          Dashboard only
+          {publicCopy ? 'Export current view' : 'Dashboard only'}
         </Button>
       </Tooltip>
     </ExportFormatCard>
@@ -1178,6 +1231,13 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   const staticExportAllowed = useCanExportStatic(
     onExportStatic && !isStaticBundle && staticExportEnabled ? (dashboardId ?? null) : null,
   );
+  // A reader who may not build gets the copies the owner offers (#1480).
+  const publicCopy = usePublicCopy(
+    publicDownloadEnabled && staticExportAllowed === false && dashboardId ? dashboardId : null,
+  );
+  // Unknown while the auth status loads: nothing is disabled on a guess.
+  const { user: currentUser, isSingleUserMode, loading: userLoading } = useCurrentUser();
+  const signedIn = userLoading || isSingleUserMode || currentUser != null;
   const surface: Surface =
     onChangeBrandTheme ||
     onToggleFunnelFiltering ||
@@ -1332,15 +1392,13 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
             : 'The report, or its Quarto source',
       body: (
         <Stack gap="lg">
-          {/* A reader who may not build gets the copy the owner offers (#1480). */}
-          {publicDownloadEnabled && staticExportAllowed === false && dashboardId && (
-            <PublicCopyCard dashboardId={dashboardId} />
-          )}
           {showNotebookExport && getAnalysisState ? (
             <ExportBlock
               dashboard={dashboard}
               getAnalysisState={getAnalysisState}
               canEditReport={canEditReport}
+              publicCopy={publicCopy}
+              signedIn={signedIn}
               staticExport={
                 showStaticExport && onExportStatic
                   ? { previewing, allowed: staticExportAllowed, onExportStatic }
@@ -1350,12 +1408,18 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
           ) : (
             showStaticExport &&
             onExportStatic && (
-              <ExportStaticBlock
-                dashboardId={dashboardId}
-                previewing={previewing}
-                allowed={staticExportAllowed}
-                onExportStatic={onExportStatic}
-              />
+              <>
+                <ExportStaticBlock
+                  dashboardId={dashboardId}
+                  previewing={previewing}
+                  allowed={staticExportAllowed}
+                  onExportStatic={onExportStatic}
+                  publicCopy={publicCopy}
+                />
+                {publicCopy && (
+                  <ExportNote testId="public-copy-note">{publicCopyNote(publicCopy)}</ExportNote>
+                )}
+              </>
             )
           )}
         </Stack>
