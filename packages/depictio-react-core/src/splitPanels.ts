@@ -24,6 +24,7 @@
 import type { AdvancedVizKind, InteractiveFilter } from './api';
 import { GROUP_FILTER_INDEX_PREFIX, GROUP_FILTER_SOURCE } from './selectionGroups';
 import type { GroupRenderDef, GroupRenderState } from './selectionGroups';
+import { phyloGroupingMode } from './components/advanced_viz/phyloGrouping';
 
 /** One cell of a split: what to call it, and what to add to the filters. */
 export interface PanelSpec {
@@ -41,6 +42,7 @@ function valueConstraint(
   columnName: string,
   values: string[],
   dcId?: string,
+  exclude = false,
 ): InteractiveFilter {
   return {
     index: `${GROUP_FILTER_INDEX_PREFIX}panel:${key}`,
@@ -52,14 +54,19 @@ function valueConstraint(
       dc_id: dcId,
       column_name: columnName,
       interactive_component_type: 'MultiSelect',
+      // "In none of these": the server negates the value test, after resolving
+      // the values through links like any other (`filter_excludes`).
+      ...(exclude ? { exclude: true } : {}),
     },
   };
 }
 
-/** One panel per analysis group.
- *
- *  There is no "Other" panel: a MultiSelect projects `is_in`, and "in none of
- *  these groups" is not expressible that way. */
+/** The rows no group holds. Kept in step with `OTHER_LABEL` / `OTHER_COLOR` in
+ *  `depictio/api/v1/services/figure/groups.py`, which names the same rows in a
+ *  server-faceted figure. */
+export const OTHER_LABEL = 'Other';
+export const OTHER_COLOR = '#adb5bd';
+
 /** The first panel of the "what's new" split: every row. Kept in step with
  *  `OVERALL_LABEL` in `depictio/api/v1/services/figure/groups.py`. */
 export const OVERALL_LABEL = 'All';
@@ -70,14 +77,47 @@ export function withOverallPanel(panels: PanelSpec[]): PanelSpec[] {
   return panels.length > 1 ? [{ name: OVERALL_LABEL, color: OVERALL_COLOR, constraints: [] }, ...panels] : panels;
 }
 
-export function panelsFromGroups(groups: GroupRenderDef[]): PanelSpec[] {
-  return groups
-    .filter((g) => (g.values ?? []).length > 0)
-    .map((g) => ({
-      name: g.name,
-      color: g.color,
-      constraints: [valueConstraint(g.name, g.column_name, g.values, g.dc_id)],
-    }));
+/** One panel per analysis group, then "Other" when `showOther`: the rows in
+ *  none of the groups, like the figures the server facets.
+ *
+ *  "Other" is one excluding constraint per (collection, column) the groups were
+ *  drawn on, holding all their values there: a row is in no group when no
+ *  group's values name it, and the constraints of a panel are a conjunction.
+ *  Without it a single saved group was one panel, below the two a split needs,
+ *  so it never split, while a column of the metadata panel (two values or
+ *  more) did. */
+export function panelsFromGroups(
+  groups: GroupRenderDef[],
+  { showOther = false }: { showOther?: boolean } = {},
+): PanelSpec[] {
+  const kept = groups.filter((g) => (g.values ?? []).length > 0);
+  const panels: PanelSpec[] = kept.map((g) => ({
+    name: g.name,
+    color: g.color,
+    constraints: [valueConstraint(g.name, g.column_name, g.values, g.dc_id)],
+  }));
+  if (!showOther || kept.length === 0) return panels;
+  const union = new Map<string, { columnName: string; dcId?: string; values: Set<string> }>();
+  for (const g of kept) {
+    const key = `${g.dc_id ?? ''}\u0000${g.column_name}`;
+    const slot = union.get(key) ?? { columnName: g.column_name, dcId: g.dc_id, values: new Set<string>() };
+    for (const value of g.values) slot.values.add(value);
+    union.set(key, slot);
+  }
+  panels.push({
+    name: OTHER_LABEL,
+    color: OTHER_COLOR,
+    constraints: [...union.values()].map((slot) =>
+      valueConstraint(
+        `${OTHER_LABEL}:${slot.columnName}`,
+        slot.columnName,
+        [...slot.values],
+        slot.dcId,
+        true,
+      ),
+    ),
+  });
+  return panels;
 }
 
 /** One panel per distinct value of a column — the other half of the "Color by"
@@ -159,7 +199,10 @@ export function panelsForGrouping(
 ): PanelSpec[] {
   if (!groupRender || groupRender.display !== 'facet') return [];
   if (groupRender.colorByGroup) {
-    const panels = panelsFromGroups(groupRender.groups ?? []);
+    // The "what's new" split (keepColor) compares runs, all of them named:
+    // there is no "Other" there, only its optional "All" panel.
+    const showOther = !groupRender.keepColor && groupRender.showOther !== false;
+    const panels = panelsFromGroups(groupRender.groups ?? [], { showOther });
     return groupRender.showOverall ? withOverallPanel(panels) : panels;
   }
   const column = groupRender.colorByColumn;
@@ -241,6 +284,7 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   // (a tree, a clustered matrix, set intersections), so panels would not be
   // comparable. Drawn whole and badged, so the tile does not pass for one that
   // honoured the split. Whatever they already do with filters is untouched.
+  // The full tree. Summarised by rank it splits: `groupingModeForComponent`.
   phylogenetic: 'none',
   dot_plot: 'none',
   upset_plot: 'none',
@@ -325,6 +369,17 @@ export function groupingModeForKind(vizKind: string): GroupingMode {
     : 'split';
 }
 
+/** The policy for one component: its kind's, except where the answer depends on
+ *  how it is configured. A phylogenetic tile summarised by rank splits (each
+ *  panel is that group's share of every lineage), the full tree does not (a
+ *  tree cut per group loses the topology it is read against). */
+export function groupingModeForComponent(vizKind: string, config?: unknown): GroupingMode {
+  if (vizKind === 'phylogenetic') {
+    return phyloGroupingMode(config as Parameters<typeof phyloGroupingMode>[0]);
+  }
+  return groupingModeForKind(vizKind);
+}
+
 /** What the dashboard's Overlay / Split switch does to a component: whether
  *  the groups show in colour in one panel, and whether it is dealt into a
  *  panel per group. */
@@ -357,8 +412,8 @@ const SPLIT_KINDS_COLOURED_WHOLE: ReadonlySet<string> = new Set<AdvancedVizKind>
  * and is never split, a 'split' kind is split and overlays only when its
  * renderer colours by group, a 'none' kind does neither.
  */
-export function groupDisplaysForKind(vizKind: string): GroupDisplays {
-  const mode = groupingModeForKind(vizKind);
+export function groupDisplaysForKind(vizKind: string, config?: unknown): GroupDisplays {
+  const mode = groupingModeForComponent(vizKind, config);
   if (mode === 'colour') return { overlay: true, split: false };
   if (mode === 'split') return { overlay: SPLIT_KINDS_COLOURED_WHOLE.has(vizKind), split: true };
   return { overlay: false, split: false };
@@ -367,7 +422,11 @@ export function groupDisplaysForKind(vizKind: string): GroupDisplays {
 /** Whether the dashboard is asking for this split, the kind takes it, and it
  *  is small enough to honour. Read by the dispatch before it decides how to
  *  render. */
-export function shouldSplitIntoPanels(panels: PanelSpec[], vizKind: string): boolean {
-  if (groupingModeForKind(vizKind) !== 'split') return false;
+export function shouldSplitIntoPanels(
+  panels: PanelSpec[],
+  vizKind: string,
+  config?: unknown,
+): boolean {
+  if (groupingModeForComponent(vizKind, config) !== 'split') return false;
   return panels.length > 1 && panels.length <= MAX_PANELS;
 }

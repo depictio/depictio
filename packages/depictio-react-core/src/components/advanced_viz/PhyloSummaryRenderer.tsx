@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Group,
   lighten,
@@ -27,6 +27,8 @@ import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import { filtersExcludingOwn } from '../../selection';
 import { useAutofitValue } from '../autofit';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { InSplitPanelContext } from './AdvancedVizExtras';
+import { hasGroupConstraint, PHYLO_PANEL_READS_ONLY_REASON } from './phyloGrouping';
 import PhyloViewSwitch from './PhyloViewSwitch';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import type { PhylogeneticConfig } from './phylo/config';
@@ -135,6 +137,7 @@ function useBoxSize(): [(node: HTMLDivElement | null) => void, { width: number; 
 const NATURAL_ROW_PX = 26;
 
 const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, view }) => {
+  const inSplitPanel = useContext(InSplitPanelContext);
   const config = (metadata.config || {}) as PhylogeneticConfig;
   const theme = useMantineTheme();
   const { colorScheme } = useMantineColorScheme();
@@ -158,7 +161,13 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   const rank = view.rank ?? '';
   const [topN, setTopN] = usePersistedVizControl<number>(metadata, 'top_n', 10);
   const [sizeBy, setSizeBy] = usePersistedVizControl<SizeBy>(metadata, 'size_by', 'tips');
-  const useAbundance = sizeBy === 'abundance' && hasAbundance;
+  // In a Split panel the tile is one group's samples. Sizing by ASVs cannot
+  // see samples (the tip table has no sample column, so the group's constraint
+  // narrows nothing there and every panel would draw the same tree), so a
+  // panel is sized by reads whenever a table is bound: that is the measure the
+  // group changes, and it also prunes the lineages the group has no reads of.
+  const groupScoped = inSplitPanel && hasGroupConstraint(filters);
+  const useAbundance = (sizeBy === 'abundance' || groupScoped) && hasAbundance;
   // The column each lineage's share is broken down by, as a strip of dots
   // (a site, a season): the author's, until the viewer picks another or none.
   const [splitPick, setSplitPick] = usePersistedVizControl<string | null>(
@@ -894,13 +903,18 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
           <SegmentedControl
             size="xs"
             fullWidth
-            value={readsAtRank ? sizeBy : 'tips'}
+            value={readsAtRank ? (groupScoped ? 'abundance' : sizeBy) : 'tips'}
             onChange={(v) => setSizeBy(v as SizeBy)}
             data={[
               { value: 'abundance', label: 'Reads', disabled: !readsAtRank },
-              { value: 'tips', label: 'ASVs' },
+              { value: 'tips', label: 'ASVs', disabled: groupScoped && readsAtRank },
             ]}
           />
+          {groupScoped && readsAtRank ? (
+            <Text size="xs" c="dimmed">
+              {PHYLO_PANEL_READS_ONLY_REASON}
+            </Text>
+          ) : null}
           {!readsAtRank ? (
             <Text size="xs" c="dimmed">
               The abundance table has no {rank} column: sized by ASVs.

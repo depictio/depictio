@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import Plotly from 'plotly.js';
 import {
   ActionIcon,
@@ -48,6 +48,8 @@ import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import type { PhylogeneticConfig } from './phylo/config';
 import PhyloSummaryRenderer from './PhyloSummaryRenderer';
 import PhyloViewSwitch from './PhyloViewSwitch';
+import { InSplitPanelContext } from './AdvancedVizExtras';
+import { PHYLO_PANEL_SUMMARY_ONLY_REASON } from './phyloGrouping';
 import {
   nextSummaryRank,
   rankChoices,
@@ -2234,20 +2236,28 @@ const PhylogeneticRenderer: React.FC<Props> = (props) => {
     },
     [persistRank],
   );
+  // A panel of the dashboard's Split is only ever drawn for the summary (see
+  // phyloGrouping.ts): a full tree cut per group would lose the shared
+  // topology. So it stays the summary there, at the last rank, whatever the
+  // viewer's switch last held, and the switch says why it cannot go back.
+  const inSplit = useContext(InSplitPanelContext);
   const view = useMemo<PhyloView>(() => {
     const choices = rankChoices(config, rank ?? remembered);
     const blocker = summaryBlocker(config, choices);
+    const summaryRank = nextSummaryRank(choices, remembered);
+    const pinnedToSummary = inSplit && !blocker && summaryRank != null;
     return {
       // A rank the config cannot draw a summary for (the tip metadata was
       // cleared in the builder, say) shows the full tree, with the switch
       // saying why, rather than the summary's error in place of the tile.
-      rank: blocker ? null : rank,
+      rank: blocker ? null : (rank ?? (pinnedToSummary ? summaryRank : null)),
       choices,
       blocker,
-      summaryRank: nextSummaryRank(choices, remembered),
+      summaryRank,
       setRank,
+      fullTreeBlocker: pinnedToSummary ? PHYLO_PANEL_SUMMARY_ONLY_REASON : null,
     };
-  }, [config, rank, remembered, setRank]);
+  }, [config, rank, remembered, setRank, inSplit]);
 
   return view.rank ? (
     <PhyloSummaryRenderer

@@ -92,7 +92,7 @@ import type { GroupRenderState } from '../../selectionGroups';
 import SplitPanels from './SplitPanels';
 import {
   groupDisplaysForKind,
-  groupingModeForKind,
+  groupingModeForComponent,
   panelsForGrouping,
   shouldSplitIntoPanels,
 } from '../../splitPanels';
@@ -144,7 +144,7 @@ function writeFolded(index: string, folded: boolean): void {
 }
 
 /** The hover line behind each way an advanced viz ends up "not grouped". */
-const NOT_GROUPED_REASONS: Record<AdvancedVizGroupBadge, () => string[]> = {
+const NOT_GROUPED_REASONS: Record<AdvancedVizGroupBadge, (kind: string) => string[]> = {
   kind: groupKindNotSplitReasons,
   unreachable: groupUnreachableReasons,
   unmatched: groupUnmatchedReasons,
@@ -535,7 +535,7 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   const panelKey = JSON.stringify(panelsForGrouping(groupRender, filters));
   const panels = React.useMemo(() => JSON.parse(panelKey) as PanelSpec[], [panelKey]);
   React.useEffect(() => setSplitIneffective(false), [metadata.dc_id, panelKey]);
-  const split = Boolean(Renderer) && !splitIneffective && shouldSplitIntoPanels(panels, vizKind);
+  const split = Boolean(Renderer) && !splitIneffective && shouldSplitIntoPanels(panels, vizKind, metadata.config);
   const handleIneffective = React.useCallback(() => setSplitIneffective(true), []);
   // Split into panels, each would dock its own copy of the controls: they
   // stay behind the icon instead.
@@ -547,7 +547,8 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   // `groupingModeForKind`). Only a Split display asks the question: in the
   // colour overlay every kind is drawn whole with the groups, as before.
   const kindDeclinesSplit =
-    groupRender?.display === 'facet' && groupingModeForKind(vizKind) === 'none';
+    groupRender?.display === 'facet' &&
+    groupingModeForComponent(vizKind, metadata.config) === 'none';
   // Not handed the groups either, so the tile matches its badge: a renderer
   // that could still colour on its own would otherwise contradict it.
   // A group captured on another collection is translated through the project's
@@ -558,7 +559,7 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   const overlayNewRuns = useOverlayNewRuns(metadata.dc_id);
   const runOverlayOn =
     groupRender?.display !== 'facet' && (groupRender?.groups ?? []).some(isRunGroup);
-  const runOverlayDeclined = runOverlayOn && !groupDisplaysForKind(vizKind).overlay;
+  const runOverlayDeclined = runOverlayOn && !groupDisplaysForKind(vizKind, metadata.config).overlay;
   const { groupRender: linkedGroupRender, runsAmbiguous } = useGroupsForDc(
     groupRender,
     dashboardId,
@@ -626,7 +627,7 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
         <GroupStatusBadge
           label={NOT_GROUPED_LABELS[groupOutcome.badge]}
           colored={false}
-          reasons={NOT_GROUPED_REASONS[groupOutcome.badge]()}
+          reasons={NOT_GROUPED_REASONS[groupOutcome.badge](vizKind)}
         />
       ) : null,
     [groupOutcome.badge],

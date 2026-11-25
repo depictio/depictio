@@ -136,7 +136,12 @@ export function groupUnreachableReasons(): string[] {
 }
 
 /** The single hover line for a component whose chart type is never split. */
-export function groupKindNotSplitReasons(): string[] {
+/** A phylogenetic tile drawn as the full tree; summarised by rank it splits. */
+export const PHYLO_FULL_TREE_NOT_SPLIT_REASON =
+  'a tree cut per group loses the shared topology it is read against; switch it to the summary by rank to compare groups';
+
+export function groupKindNotSplitReasons(kind?: string): string[] {
+  if (kind === 'phylogenetic') return [sentence(PHYLO_FULL_TREE_NOT_SPLIT_REASON)];
   return [sentence(GROUP_KIND_NOT_SPLIT_REASON)];
 }
 

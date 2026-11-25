@@ -25,6 +25,9 @@ export interface PhyloView {
   summaryRank: string | null;
   /** Collapse the tree to a rank, or null for the full tree. */
   setRank: (rank: string | null) => void;
+  /** Why the full tree cannot be chosen here (a Split panel keeps the
+   *  summary), or null/absent when it can. */
+  fullTreeBlocker?: string | null;
 }
 
 /** Taxonomic ranks, root to leaf: SILVA's (Kingdom … Species) with PR2's own

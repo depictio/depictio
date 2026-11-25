@@ -27,7 +27,7 @@ const PhyloViewSwitch: React.FC<{ view: PhyloView }> = ({ view }) => {
         value={summary ? 'summary' : 'tree'}
         onChange={(v) => view.setRank(v === 'summary' ? view.summaryRank : null)}
         data={[
-          { value: 'tree', label: 'Full tree' },
+          { value: 'tree', label: 'Full tree', disabled: view.fullTreeBlocker != null },
           { value: 'summary', label: 'Summary by rank', disabled: blocked },
         ]}
         data-testid="phylo-view-switch"
@@ -35,6 +35,11 @@ const PhyloViewSwitch: React.FC<{ view: PhyloView }> = ({ view }) => {
       {blocked ? (
         <Text size="xs" c="dimmed">
           {view.blocker}
+        </Text>
+      ) : null}
+      {view.fullTreeBlocker ? (
+        <Text size="xs" c="dimmed">
+          {view.fullTreeBlocker}
         </Text>
       ) : null}
     </Stack>

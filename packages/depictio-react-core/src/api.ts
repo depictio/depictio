@@ -2094,6 +2094,9 @@ export interface InteractiveFilter {
      *  (case-insensitive regex); the server reads them with the value. */
     case_sensitive?: boolean;
     match_mode?: string;
+    /** Categorical only: keep the rows the values do NOT name (a split's
+     *  "Other" panel, `splitPanels.ts`); resolved through links like any set. */
+    exclude?: boolean;
   };
 }
 
@@ -2637,12 +2640,18 @@ export interface ComplexHeatmapPayload {
   normalize?: string;
   colorscale?: string | null;
   filter_metadata: InteractiveFilter[];
+  /** Set by a panel of a split: the filters WITHOUT the panel's own
+   *  constraints. The worker clusters the rows and fixes the colour range once
+   *  on that matrix, so the panels share one row order and one colour scale. */
+  shared_from_filters?: InteractiveFilter[];
 }
 
 export interface ComplexHeatmapResult {
   figure: { data: unknown[]; layout: Record<string, unknown> };
   row_count: number;
   col_count: number;
+  /** The value columns the tile drew (a split panel's own samples). */
+  columns?: string[];
   load_ms?: number;
   compute_ms?: number;
   /** Metadata columns the viz-controls picker may offer for the column strips,

@@ -77,7 +77,8 @@ describe('splitPanels', () => {
       colorByGroup: true,
       display: 'facet',
     };
-    expect(panelsForGrouping(groups).map((p) => p.name)).toEqual(['North', 'South']);
+    // Saved groups end with "Other", the rows in none of them (#1476).
+    expect(panelsForGrouping(groups).map((p) => p.name)).toEqual(['North', 'South', 'Other']);
     expect(panelsForGrouping({ ...groups, display: 'color' })).toEqual([]);
 
     const column: GroupRenderState = {
@@ -271,7 +272,13 @@ describe('splitPanels', () => {
 
 describe('the All panel of the what\'s new split', () => {
   it('comes first and narrows nothing', () => {
-    const render: GroupRenderState = { groups: GROUPS, colorByGroup: true, display: 'facet', showOverall: true };
+    const render: GroupRenderState = {
+      groups: GROUPS,
+      colorByGroup: true,
+      display: 'facet',
+      keepColor: true,
+      showOverall: true,
+    };
     const panels = panelsForGrouping(render);
     expect(panels.map((p) => p.name)).toEqual(['All', 'North', 'South']);
     expect(panels[0].constraints).toEqual([]);
@@ -279,7 +286,7 @@ describe('the All panel of the what\'s new split', () => {
 
   it('is not added to a single side, nor without the flag', () => {
     expect(withOverallPanel(panelsFromGroups(GROUPS.slice(0, 1))).map((p) => p.name)).toEqual(['North']);
-    const render: GroupRenderState = { groups: GROUPS, colorByGroup: true, display: 'facet' };
+    const render: GroupRenderState = { groups: GROUPS, colorByGroup: true, display: 'facet', keepColor: true };
     expect(panelsForGrouping(render).map((p) => p.name)).toEqual(['North', 'South']);
   });
 });
