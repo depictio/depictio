@@ -94,6 +94,16 @@ ampliseq 2.18.0 template 1.7.0 to 1.8.0 (pruning: a new DC option and a new orde
 ampliseq 2.14.0, 2.16.0, 3.1.0 and `init/catalog_conformance` take a minor bump: their
 outputs are unchanged without the new DC.
 
+### Tested on a local instance
+
+`depictio local up` on this branch, with the TREC run:
+- **Ingest:** the raw SILVA folder plus `PR2_RESULTS`, with no `TREE_FILE`, took 80 s. A second ingest with `--update-config` kept every ID.
+- **Upgrade path:** a project built the old way on 1.24.0 (overlay folder and `TREE_FILE`) was re-ingested the new way. The two were compared table by table:
+  - 20 tables and the tree are identical;
+  - `ancombc_results` and `ma_canonical` keep the SILVA run's slices only.
+- **The TREC dashboard on the new project:** every tab renders except Differential abundance. That tab shows 0 taxa: its `taxonomy` filter starts on `merged`, and the column is now empty (draft issue 1).
+- **Render checker:** `scripts/check_deployment.py` reports three `DC_NOT_REGISTERED` on `matrix_dc_id`. Those are false positives, already there before this branch: the field is deprecated, the viewer does not read it, and the three heatmaps render in the browser.
+
 ### What is left (draft issues below)
 
 - **ANCOM-BC and the MA plot keep the DATA_ROOT run's results.** The TREC dashboard offers
@@ -159,6 +169,11 @@ Proposal:
 
 Done when: a project ingested with `PR2_RESULTS` shows both databases' ANCOM-BC results,
 with the same taxa and log fold changes as each run's own slices.
+
+Until then, a dashboard that filters `ancombc_results` on `taxonomy` (the TREC one does, starting
+on `merged`) shows an empty differential tab on a project ingested this way. Setting
+`taxonomy = silva` on the DATA_ROOT slices, even before the PR2 slices are read, keeps the
+SILVA option working.
 
 ### 2. [TASK] ampliseq: taxonomy_composition from the merged taxonomy
 
