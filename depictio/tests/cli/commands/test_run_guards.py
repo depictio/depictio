@@ -558,3 +558,91 @@ def test_a_dry_run_counts_a_recursive_bind_in_the_folder_it_names(
     (preview,) = shown
     (row,) = preview.data_collections
     assert (row.tag, row.mode, row.matched, row.status) == ("tables", "recursive", 2, "ok")
+
+
+def test_dry_run_counts_optional_absent_collections_apart(wide_console):
+    """An optional collection whose inputs are absent is what the ingest skips,
+    not a source it could not find: the dry run says so the same way (#1478)."""
+    from depictio.cli.cli.utils.template_preview import DataCollectionPreview
+
+    preview = RunPreview(
+        template_id=TEMPLATE,
+        data_root="/data/run",
+        project_name="megatest",
+        resolved_variables={},
+        detected_runs=[],
+        data_collections=[
+            DataCollectionPreview(
+                tag="multiqc_data",
+                kind="scan",
+                mode="single",
+                location="/data/run/multiqc",
+                matched=1,
+            ),
+            DataCollectionPreview(
+                tag="sidle_reconstructed",
+                kind="scan",
+                mode="single",
+                location="/data/run/sidle/reconstructed/reconstructed_merged.tsv",
+                matched=0,
+                optional=True,
+                status="missing",
+            ),
+            DataCollectionPreview(
+                tag="ancombc_results",
+                kind="recipe",
+                mode=None,
+                location="recipe",
+                matched=0,
+                missing_sources=["qiime2/ancombc/differentials/lfc_slice*.csv"],
+                status="missing",
+            ),
+        ],
+    )
+    with rich_utils.console.capture() as captured:
+        run_module._render_run_preview(preview)
+    flat = _flat(captured.get())
+    assert (
+        _flat("1 data collection(s) will ingest, 0 empty, 1 missing sources, 1 optional absent")
+        in flat
+    )
+    # Only the required collection is listed under the sources not found.
+    not_found = flat.split(_flat("Sources not found under this data root"), 1)[1]
+    assert _flat("ancombc_results: qiime2/ancombc/differentials/lfc_slice*.csv") in not_found
+    assert "sidle_reconstructed:sidle" not in not_found
+    assert _flat("Optional, inputs absent from this run: sidle_reconstructed") in flat
+
+
+def test_dry_run_with_only_optional_absent_collections_reads_clean(wide_console):
+    from depictio.cli.cli.utils.template_preview import DataCollectionPreview
+
+    preview = RunPreview(
+        template_id=TEMPLATE,
+        data_root="/data/run",
+        project_name="megatest",
+        resolved_variables={},
+        detected_runs=[],
+        data_collections=[
+            DataCollectionPreview(
+                tag="multiqc_data",
+                kind="scan",
+                mode="single",
+                location="/data/run/multiqc",
+                matched=1,
+            ),
+            DataCollectionPreview(
+                tag="sidle_reconstruction_qc",
+                kind="scan",
+                mode="single",
+                location="/data/run/sidle/x.tsv",
+                matched=0,
+                optional=True,
+                status="missing",
+            ),
+        ],
+    )
+    with rich_utils.console.capture() as captured:
+        run_module._render_run_preview(preview)
+    flat = _flat(captured.get())
+    assert _flat("Sources not found under this data root") not in flat
+    assert _flat("0 missing sources, 1 optional absent") in flat

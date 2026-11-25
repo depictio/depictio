@@ -158,3 +158,86 @@ def test_declared_group_col_default_beats_generic_sentinel(
     assert variables["GROUP_COL"] == "Condition"
     # Variables without a declared default still get the generic sentinels.
     assert variables["GROUP_COL_DISPLAY"] == "Group"
+
+
+# --- GROUP_COL against the metadata auto-detect (#1478) -----------------------
+
+METADATA_TSV = (
+    "sample\tname\thabitat\tdepth\n"
+    "s1\tRiver A\triver\t1\n"
+    "s2\tRiver B\triver\t2\n"
+    "s3\tSoil A\tsoil\t3\n"
+    "s4\tSoil B\tsoil\t4\n"
+)
+
+
+def _metadata_template(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, group_default: str | None
+) -> tuple[Path, Path]:
+    """A template, optionally declaring a GROUP_COL default, and a run with a metadata file."""
+    tdir = tmp_path / "template"
+    (tdir / "dashboards").mkdir(parents=True)
+    declared = (
+        '    - name: "GROUP_COL"\n'
+        '      description: "Design column"\n'
+        + (f'      default: "{group_default}"\n' if group_default else "")
+        + '    - name: "METADATA_FILE"\n'
+        '      description: "Sample metadata"\n'
+    )
+    text = TEMPLATE_YAML.replace("  dashboards:\n", declared + "  dashboards:\n", 1)
+    (tdir / "template.yaml").write_text(text)
+    (tdir / "dashboards" / "main.yaml").write_text(DASHBOARD_YAML)
+    monkeypatch.setattr(templates_mod, "locate_template", lambda _tid: tdir / "template.yaml")
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    meta = run_dir / "metadata.tsv"
+    meta.write_text(METADATA_TSV)
+    return run_dir, meta
+
+
+def test_declared_group_col_default_beats_the_metadata_header_guess(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The template names its design column: the first header column does not override it."""
+    run_dir, meta = _metadata_template(tmp_path, monkeypatch, group_default="depth")
+    *_rest, variables = resolve_template(
+        "test/genome/1.0.0", str(run_dir), extra_vars={"METADATA_FILE": str(meta)}
+    )
+    assert variables["GROUP_COL"] == "depth"
+    assert variables["GROUP_COL_DISPLAY"] == "Depth"
+    assert variables["ANNOTATION_COLS"] == "name,habitat,depth"
+
+
+def test_group_col_guess_skips_a_column_unique_per_sample(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``name`` holds one value per sample, a group nothing can be compared on: skip it."""
+    run_dir, meta = _metadata_template(tmp_path, monkeypatch, group_default=None)
+    *_rest, variables = resolve_template(
+        "test/genome/1.0.0", str(run_dir), extra_vars={"METADATA_FILE": str(meta)}
+    )
+    assert variables["GROUP_COL"] == "habitat"
+    assert variables["GROUP_COL_DISPLAY"] == "Habitat"
+
+
+def test_declared_default_missing_from_the_metadata_falls_back_to_the_guess(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A default naming a column this run's metadata lacks would group on nothing."""
+    run_dir, meta = _metadata_template(tmp_path, monkeypatch, group_default="Condition")
+    *_rest, variables = resolve_template(
+        "test/genome/1.0.0", str(run_dir), extra_vars={"METADATA_FILE": str(meta)}
+    )
+    assert variables["GROUP_COL"] == "habitat"
+
+
+def test_explicit_group_col_wins_over_default_and_guess(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_dir, meta = _metadata_template(tmp_path, monkeypatch, group_default="depth")
+    *_rest, variables = resolve_template(
+        "test/genome/1.0.0",
+        str(run_dir),
+        extra_vars={"METADATA_FILE": str(meta), "GROUP_COL": "name"},
+    )
+    assert variables["GROUP_COL"] == "name"

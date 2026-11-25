@@ -139,7 +139,7 @@ def test_a_metadata_file_variable_is_never_opened_on_the_server(mock_db, tmp_pat
     """A request's METADATA_FILE names a path on the server's disk: resolving
     the template for a browser must not open it, or the file's first line
     would come back as the project's column variables. Without a local-data
-    policy the header reader answers nothing for it."""
+    policy the metadata reader answers nothing for it."""
     from depictio.cli.cli.utils import templates
 
     # Importing the CLI app elsewhere in the session flips the context to CLI.
@@ -148,16 +148,16 @@ def test_a_metadata_file_variable_is_never_opened_on_the_server(mock_db, tmp_pat
 
     server_file = tmp_path / "server-only.tsv"
     server_file.write_text("private_header\tother\n")
-    read_header = templates._read_header_line
-    headers: list[str | None] = []
+    read_head = templates._read_head_lines
+    headers: list[list[str] | None] = []
 
-    def _spy(location, root):
-        headers.append(read_header(location, root))
+    def _spy(location, root, max_lines):
+        headers.append(read_head(location, root, max_lines))
         return headers[-1]
 
     with (
         _served(),
-        patch.object(templates, "_read_header_line", side_effect=_spy),
+        patch.object(templates, "_read_head_lines", side_effect=_spy),
     ):
         report = from_manifest._create_project_from_manifest(
             manifest_url="https://example.org/manifest.json",

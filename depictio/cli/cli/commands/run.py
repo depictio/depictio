@@ -75,6 +75,7 @@ _PREVIEW_STATUS_STYLES = {
     "empty": "orange1",
     "missing": "red",
     "pruned": "dim",
+    "absent (optional)": "dim",
 }
 
 
@@ -682,7 +683,9 @@ def _render_run_preview(preview) -> None:
                 "Kind": dc.kind,
                 "Mode": dc.mode or "-",
                 "Files": str(dc.matched),
-                "Status": _status_cell(dc.status),
+                "Status": _status_cell(
+                    "absent (optional)" if dc.status == "missing" and dc.optional else dc.status
+                ),
             }
             for dc in preview.data_collections
         ],
@@ -700,7 +703,13 @@ def _render_run_preview(preview) -> None:
     # Named below the table rather than in a column of it: a table cell is
     # cropped to the terminal's width, and a source path cropped in the middle
     # is exactly the half that would have told you the prefix is wrong.
-    missing = [dc for dc in preview.data_collections if dc.status == "missing"]
+    # An optional collection whose inputs are absent is what the ingest skips
+    # ("Skipped N optional data collection(s)..."), not a source it failed to
+    # find: it is named and counted apart, so the dry run and the ingest agree.
+    missing = [dc for dc in preview.data_collections if dc.status == "missing" and not dc.optional]
+    optional_absent = [
+        dc for dc in preview.data_collections if dc.status == "missing" and dc.optional
+    ]
     if missing:
         rich_print_checked_statement("Sources not found under this data root:", "warning")
         for dc in missing:
@@ -714,17 +723,22 @@ def _render_run_preview(preview) -> None:
                     location = location[len(preview.data_root) :].lstrip("/")
                 sources = [location]
             rich_print_checked_statement(f"{dc.tag}: {', '.join(sources)}", "warning")
+    if optional_absent:
+        rich_print_checked_statement(
+            "Optional, inputs absent from this run: " + ", ".join(dc.tag for dc in optional_absent),
+            "info",
+        )
 
     counts = Counter(dc.status for dc in preview.data_collections)
     summary = (
         f"{counts['ok']} data collection(s) will ingest, "
-        f"{counts['empty']} empty, {counts['missing']} missing sources"
+        f"{counts['empty']} empty, {len(missing)} missing sources"
     )
+    if optional_absent:
+        summary += f", {len(optional_absent)} optional absent"
     if counts["pruned"]:
         summary += f", {counts['pruned']} pruned (optional source absent)"
-    rich_print_checked_statement(
-        summary, "warning" if counts["empty"] or counts["missing"] else "success"
-    )
+    rich_print_checked_statement(summary, "warning" if counts["empty"] or missing else "success")
 
 
 def _write_provisioned_cli_config(base_raw_config: dict, provision: dict) -> str:
