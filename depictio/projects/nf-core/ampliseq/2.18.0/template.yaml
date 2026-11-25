@@ -16,7 +16,7 @@
 template:
   template_id: "nf-core/ampliseq/2.18.0"
   description: "nf-core/ampliseq microbial community analysis template for 16S/ITS amplicon sequencing"
-  version: "1.7.0"
+  version: "1.8.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing ampliseq pipeline output (multiqc/, qiime2/)"
@@ -25,7 +25,7 @@ template:
       description: "Path to the ampliseq samplesheet. Auto-detected from {DATA_ROOT}/input/ (CSV or TSV) when omitted."
       required: false
     - name: "TREE_FILE"
-      description: "Path to the Newick tree to serve. Defaults to {DATA_ROOT}/qiime2/phylogenetic_tree/tree.nwk. A run with far more ASVs than a tree renders readably should point this at the output of scripts/prune_newick.py, which cuts the tree to the same taxa the tip-metadata recipe keeps."
+      description: "Path to the Newick tree to serve. Defaults to {DATA_ROOT}/qiime2/phylogenetic_tree/tree.nwk. Not needed for a large run: a tree over 3,000 tips is pruned at ingest to the taxa the tip-metadata recipe keeps."
       required: false
     - name: "PPLACE_TREE_FILE"
       description: "Auto-set from params.json (pplace_tree): the grafted tree pplace/<name>.graft.<name>.epa_result.newick. Serves it as the phylogenetic tree on the phylogenetic-placement route, which writes no qiime2/phylogenetic_tree/tree.nwk. An explicit TREE_FILE takes precedence."
@@ -275,8 +275,8 @@ template:
       override_dcs:
         - data_collection_tag: "phylogenetic_tree_canonical"
           scan_filename: "{PPLACE_TREE_FILE}"
-    # A cohort large enough to need a pruned tree supplies its own Newick; the
-    # DC's default path stays the pipeline's, which is never written to.
+    # An explicit Newick replaces the pipeline's (which is never written to). A
+    # large tree no longer needs one: ingest prunes it (max_tips on the tree DC).
     - if_var_present: "TREE_FILE"
       override_dcs:
         - data_collection_tag: "phylogenetic_tree_canonical"
@@ -757,28 +757,8 @@ workflows:
               "f_stat": "Pseudo-F statistic"
               "p_value": "Permutation p-value"
 
-      # Phase E — QIIME2 phylogenetic tree (tree.nwk) + tip-level taxonomy
-      # metadata derived from the run's taxonomy.tsv.
-      - data_collection_tag: "phylogenetic_tree_canonical"
-        optional: true  # tree.nwk absent for ITS / IonTorrent / multi-region / skip_qiime runs
-        description: "QIIME2 phylogenetic tree (Newick) — tips are ASV identifiers"
-        # Serves the pipeline's tree as-is. Runs whose ASV count outgrows the
-        # renderer prune it with scripts/prune_newick.py and pass --var
-        # TREE_FILE=<pruned>; the tip-metadata recipe caps itself to the same
-        # taxa, so the two never disagree about which tips exist.
-        config:
-          type: "phylogeny"
-          metatype: "Aggregate"
-          scan:
-            mode: "single"
-            scan_parameters:
-              filename: "{DATA_ROOT}/qiime2/phylogenetic_tree/tree.nwk"
-          dc_specific_properties:
-            format: "newick"
-            ladderize: true
-            metadata_dc_tag: "phylogenetic_tree_metadata_canonical"
-            metadata_taxon_column: "taxon"
-
+      # Phase E — tip-level taxonomy metadata derived from the run's taxonomy,
+      # then the QIIME2 phylogenetic tree (tree.nwk) it annotates.
       - data_collection_tag: "phylogenetic_tree_metadata_canonical"
         optional: true  # seed-only: depends on intermediate DCs not produced by plain CLI ingestion
         description: "ASV → taxonomy mapping for the phylogenetic tree tips"
@@ -804,6 +784,30 @@ workflows:
               "confidence": "Classifier confidence (0–1)"
               "label": "Short display label (Phylum if known)"
               "dominant_habitat": "Level of GROUP_COL carrying most of the ASV's abundance (Mixed below a 0.6 share, Rare below 0.01 % of the cohort, No abundance when absent from the ASV table); the column name is historical"
+
+      - data_collection_tag: "phylogenetic_tree_canonical"
+        optional: true  # tree.nwk absent for ITS / IonTorrent / multi-region / skip_qiime runs
+        description: "QIIME2 phylogenetic tree (Newick) — tips are ASV identifiers"
+        # A tree over max_tips is pruned at ingest to the taxa of the tip-metadata
+        # DC, which the recipe caps at its own MAX_TIPS (3000) most abundant ASVs,
+        # so the stored tree and its annotations hold the same tips. A smaller
+        # tree (the reference dataset's 2,683) is stored as written. Keep
+        # max_tips equal to the recipe's MAX_TIPS. The metadata DC is declared
+        # above: collections are ingested in declaration order, and the prune
+        # reads its table.
+        config:
+          type: "phylogeny"
+          metatype: "Aggregate"
+          scan:
+            mode: "single"
+            scan_parameters:
+              filename: "{DATA_ROOT}/qiime2/phylogenetic_tree/tree.nwk"
+          dc_specific_properties:
+            format: "newick"
+            ladderize: true
+            metadata_dc_tag: "phylogenetic_tree_metadata_canonical"
+            metadata_taxon_column: "taxon"
+            max_tips: 3000
 
       # ----------------------------------------------------------------
       # SIDLE / multiregion route DCs. Only the multiregion sub-workflow

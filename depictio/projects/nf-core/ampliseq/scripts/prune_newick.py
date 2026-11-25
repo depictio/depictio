@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Cut an ampliseq tree.nwk down to the ASVs worth drawing.
 
+Ingest does this on its own since template 1.8.0 of nf-core/ampliseq 2.18.0: the
+tree DC sets ``max_tips`` and the CLI prunes a larger tree to the taxa of the
+tip-metadata DC before storing it (``depictio/cli/cli/utils/newick.py``, shared
+with this script). The script stays for a pruned copy outside Depictio.
+
 A full ampliseq run classifies every ASV it sees, and on a large cohort that is
 two orders of magnitude more tips than a tree renders usefully: 127,845 on the
 TREC Advanced Mobile Lab run against 2,683 in the bundled reference dataset. The
@@ -16,8 +21,8 @@ Usage:
         --data-root /path/to/ampliseq/results \
         --out /path/to/ampliseq/results/qiime2/phylogenetic_tree/tree.pruned.nwk
 
-No phylogeny library is needed (or installed): the parser below is the whole of
-Newick that QIIME2 emits — nested clades, labels, branch lengths, comments.
+No phylogeny library is needed (or installed): ``depictio.cli.cli.utils.newick``
+parses the Newick QIIME2 emits — nested clades, labels, branch lengths, comments.
 """
 
 from __future__ import annotations
@@ -26,6 +31,8 @@ import argparse
 import importlib.util
 import sys
 from pathlib import Path
+
+from depictio.cli.cli.utils.newick import count_tips, parse_newick, prune
 
 _HERE = Path(__file__).resolve().parent
 _RECIPE = _HERE.parent / "recipes" / "tree_metadata_canonical.py"
@@ -43,126 +50,6 @@ def _load_recipe():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
-
-
-class Tree:
-    """A Newick forest flattened into parallel arrays.
-
-    Arrays rather than objects, and every traversal below is iterative: a
-    ladderised bacterial tree is deep enough that a recursive walk overflows
-    the interpreter's stack well before it runs out of memory.
-    """
-
-    __slots__ = ("parent", "name", "length", "children")
-
-    def __init__(self) -> None:
-        self.parent: list[int] = []
-        self.name: list[str] = []
-        self.length: list[float] = []
-        self.children: list[list[int]] = []
-
-    def add(self, parent: int) -> int:
-        idx = len(self.parent)
-        self.parent.append(parent)
-        self.name.append("")
-        self.length.append(0.0)
-        self.children.append([])
-        if parent >= 0:
-            self.children[parent].append(idx)
-        return idx
-
-
-def parse_newick(text: str) -> tuple[Tree, int]:
-    """Parse one Newick string; returns the tree and its root index."""
-    tree = Tree()
-    root = tree.add(-1)
-    cur = root
-    i, n = 0, len(text)
-    while i < n:
-        c = text[i]
-        if c == "(":
-            cur = tree.add(cur)
-            i += 1
-        elif c == ",":
-            cur = tree.add(tree.parent[cur])
-            i += 1
-        elif c == ")":
-            cur = tree.parent[cur]
-            i += 1
-        elif c == ";":
-            break
-        elif c == ":":
-            j = i + 1
-            while j < n and text[j] not in ",);":
-                j += 1
-            try:
-                tree.length[cur] = float(text[i + 1 : j].strip())
-            except ValueError:
-                tree.length[cur] = 0.0
-            i = j
-        elif c == "[":  # comment / NHX annotation
-            j = text.find("]", i)
-            i = n if j < 0 else j + 1
-        elif c in " \t\r\n":
-            i += 1
-        else:
-            j = i
-            while j < n and text[j] not in "(),:;[":
-                j += 1
-            tree.name[cur] = text[i:j].strip().strip("'\"")
-            i = j
-    return tree, root
-
-
-def _fmt(x: float) -> str:
-    """Newick branch length, short but lossless enough for QIIME2's precision."""
-    return f"{x:.10g}"
-
-
-def prune(tree: Tree, root: int, wanted: set[str]) -> str:
-    """Render the subtree spanning `wanted`, collapsing what is left over.
-
-    A node with a single surviving child carries no topology, so it is dropped
-    and its branch length folded into that child's. Skipping this leaves long
-    chains of degree-two nodes that every renderer has to walk through.
-    """
-    keep = [False] * len(tree.parent)
-    for idx, children in enumerate(tree.children):
-        if not children and tree.name[idx] in wanted:
-            keep[idx] = True
-    # Walk kept tips up to the root. `keep` doubles as the visited set, so each
-    # edge is climbed once no matter how many tips share the ancestor.
-    for idx in [i for i, k in enumerate(keep) if k]:
-        p = tree.parent[idx]
-        while p >= 0 and not keep[p]:
-            keep[p] = True
-            p = tree.parent[p]
-
-    if not keep[root]:
-        raise SystemExit("no requested tip found in the tree — wrong tree or wrong ids?")
-
-    rendered: dict[int, tuple[str, float]] = {}
-    stack: list[tuple[int, bool]] = [(root, False)]
-    while stack:
-        node, expanded = stack.pop()
-        kids = [c for c in tree.children[node] if keep[c]]
-        if not expanded:
-            stack.append((node, True))
-            stack.extend((c, False) for c in kids)
-            continue
-        if not kids:
-            rendered[node] = (tree.name[node], tree.length[node])
-        elif len(kids) == 1:
-            text, edge = rendered.pop(kids[0])
-            rendered[node] = (text, edge + tree.length[node])
-        else:
-            body = ",".join(f"{t}:{_fmt(e)}" for t, e in (rendered.pop(c) for c in kids))
-            rendered[node] = (f"({body}){tree.name[node]}", tree.length[node])
-    return rendered[root][0] + ";"
-
-
-def count_tips(tree: Tree) -> int:
-    return sum(1 for c in tree.children if not c)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -202,7 +89,10 @@ def main(argv: list[str] | None = None) -> int:
 
     tree, root = parse_newick(tree_path.read_text())
     before = count_tips(tree)
-    newick = prune(tree, root, wanted)
+    try:
+        newick = prune(tree, root, wanted)
+    except ValueError as e:
+        raise SystemExit(f"{e}: wrong tree or wrong ids?") from e
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(newick + "\n")

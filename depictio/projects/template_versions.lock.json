@@ -188,8 +188,8 @@
       }
     },
     "nf-core/ampliseq/2.18.0": {
-      "version": "1.7.0",
-      "content_hash": "a15917504bb1d753941ffcfbf944f0a10993176f795dd0ec634713f797239ddd",
+      "version": "1.8.0",
+      "content_hash": "c8bdb2d7487e4c11ccc12fd2e3a968b77f75a2ecaf2e0636571f6e62bf31fc02",
       "catalog": {
         "multiqc": "1.1.0",
         "qiime2": "2.1.1",

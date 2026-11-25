@@ -1155,7 +1155,9 @@ def client_aggregate_data(
 
     # Phylogeny DCs have no delta table; the tree is copied to S3 for the Newick endpoint.
     if kind == "phylogeny":
-        return process_phylogeny_data_collection(data_collection, CLI_config, overwrite)
+        return process_phylogeny_data_collection(
+            data_collection, CLI_config, overwrite, workflow=workflow
+        )
 
     # indexed_file DCs have no delta table either; the files and their indexes are
     # copied to S3 and read straight from the browser over HTTP range requests.
@@ -1818,10 +1820,100 @@ def _project_level_file(files: list, data_collection: DataCollection) -> File:
     return chosen
 
 
+def _phylogeny_props(data_collection: DataCollection):
+    """The DC's ``DCPhylogenyConfig``, or None."""
+    return getattr(data_collection.config, "dc_specific_properties", None)
+
+
+def _phylogeny_tips_to_keep(
+    data_collection: DataCollection, CLI_config: CLIConfig, workflow
+) -> tuple[set[str] | None, str]:
+    """The taxa a phylogeny DC's metadata DC lists, or ``None`` and why not.
+
+    Read from the metadata DC's Delta table, so that DC must be ingested before
+    the tree: templates declare it first (collections run in declaration order).
+    """
+    props = _phylogeny_props(data_collection)
+    tag = getattr(props, "metadata_dc_tag", None)
+    column = getattr(props, "metadata_taxon_column", None) or "taxon"
+    if not tag:
+        return None, "it names no metadata_dc_tag to take the tips from"
+    meta_dc = next(
+        (dc for dc in getattr(workflow, "data_collections", []) if dc.data_collection_tag == tag),
+        None,
+    )
+    if meta_dc is None:
+        return None, f"its metadata collection '{tag}' is not in the workflow"
+    storage_options = turn_S3_config_into_polars_storage_options(CLI_config.s3_storage)
+    read = read_delta_table(f"s3://{CLI_config.s3_storage.bucket}/{meta_dc.id!s}", storage_options)
+    if read.get("result") != "success":
+        return None, f"its metadata collection '{tag}' could not be read: {read.get('message')}"
+    frame = read["data"]
+    if not isinstance(frame, pl.DataFrame) or column not in frame.columns:
+        return None, f"its metadata collection '{tag}' has no '{column}' column"
+    taxa = {str(t) for t in frame[column].drop_nulls().to_list()}
+    if not taxa:
+        return None, f"its metadata collection '{tag}' lists no taxa"
+    return taxa, ""
+
+
+def _maybe_prune_tree(
+    text: str, data_collection: DataCollection, CLI_config: CLIConfig, workflow
+) -> str | None:
+    """The pruned Newick when the DC sets ``max_tips`` and the tree exceeds it, else None.
+
+    None means "store the tree as it is": no threshold, a tree at or under it, or
+    no metadata to prune to (said in a warning, since the tree may then be too
+    large to draw).
+    """
+    from depictio.cli.cli.utils.newick import count_tips, parse_newick, prune_to_tips
+
+    props = _phylogeny_props(data_collection)
+    max_tips = getattr(props, "max_tips", None)
+    if not max_tips:
+        return None
+    tag = escape(data_collection.data_collection_tag)
+    parsed = parse_newick(text)
+    tips = count_tips(parsed[0])
+    if tips <= max_tips:
+        return None
+    wanted, why_not = _phylogeny_tips_to_keep(data_collection, CLI_config, workflow)
+    if wanted is None:
+        rich_print_checked_statement(
+            f"{tag}: the tree has {tips} tips, over max_tips ({max_tips}), and is stored "
+            f"unpruned: {escape(why_not)}",
+            "warning",
+        )
+        return None
+    key = (
+        (lambda name: name.split("_")[0])
+        if getattr(props, "tip_label_strategy", "taxon") == "first_token"
+        else None
+    )
+    try:
+        result = prune_to_tips(text, wanted, max_tips, key, parsed=parsed)
+    except ValueError as e:
+        rich_print_checked_statement(
+            f"{tag}: the tree is stored unpruned: {escape(str(e))} "
+            f"(metadata and tree tip labels do not match)",
+            "warning",
+        )
+        return None
+    level = "success" if result.tips_after <= max_tips else "warning"
+    rich_print_checked_statement(
+        f"{tag}: tree pruned from {result.tips_before} to {result.tips_after} tips, "
+        f"the taxa its metadata collection lists"
+        + ("" if level == "success" else f" (still over max_tips, {max_tips})"),
+        level,
+    )
+    return result.newick
+
+
 def process_phylogeny_data_collection(
     data_collection: DataCollection,
     CLI_config: CLIConfig,
     overwrite: bool = False,
+    workflow=None,
 ) -> dict[str, str]:
     """Upload a phylogeny DC's Newick file to S3 so any backend can serve it.
 
@@ -1836,6 +1928,9 @@ def process_phylogeny_data_collection(
         overwrite: Accepted for parity with the other processors. The upload
             always replaces the stored tree, since the scan decides which file
             is current.
+        workflow: The DC's workflow, where a ``max_tips`` tree finds its
+            metadata collection. A tree over ``max_tips`` is stored pruned to the
+            taxa that collection lists (``_maybe_prune_tree``).
 
     Returns:
         Result dict with success/error status.
@@ -1864,8 +1959,12 @@ def process_phylogeny_data_collection(
         try:
             source = s3_read_target_in_region("s3://" + file_path[5:], CLI_config)
             obj = source.client().get_object(Bucket=source.bucket, Key=source.key)
+            body = obj["Body"].read()
+            pruned = _maybe_prune_tree(body.decode("utf-8"), data_collection, CLI_config, workflow)
+            if pruned is not None:
+                body = pruned.encode("utf-8")
             logger.info(f"Copying phylogeny tree to S3: {file_path} -> {s3_key}")
-            _s3_client(CLI_config).put_object(Bucket=bucket, Key=s3_key, Body=obj["Body"].read())
+            _s3_client(CLI_config).put_object(Bucket=bucket, Key=s3_key, Body=body)
         except Exception as e:
             return {"result": "error", "message": f"Failed to copy phylogeny tree to S3: {e}"}
     else:
@@ -1878,8 +1977,17 @@ def process_phylogeny_data_collection(
                 "message": "The phylogeny tree's path is outside the folders this server reads.",
             }
         try:
+            pruned = None
+            if getattr(_phylogeny_props(data_collection), "max_tips", None):
+                with open(file_path, encoding="utf-8") as fh:
+                    pruned = _maybe_prune_tree(fh.read(), data_collection, CLI_config, workflow)
             logger.info(f"Uploading phylogeny tree to S3: {file_path} -> {s3_key}")
-            _s3_client(CLI_config).upload_file(file_path, bucket, s3_key)
+            if pruned is None:
+                _s3_client(CLI_config).upload_file(file_path, bucket, s3_key)
+            else:
+                _s3_client(CLI_config).put_object(
+                    Bucket=bucket, Key=s3_key, Body=pruned.encode("utf-8")
+                )
         except Exception as e:
             return {"result": "error", "message": f"Failed to upload phylogeny tree to S3: {e}"}
     s3_location = f"s3://{bucket}/{s3_key}"

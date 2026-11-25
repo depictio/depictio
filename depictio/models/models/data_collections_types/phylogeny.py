@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 def phylogeny_s3_key(dc_id: str) -> str:
@@ -45,6 +45,11 @@ class DCPhylogenyConfig(BaseModel):
     #   - "taxon" → leaf name IS the taxon id (no transform)
     #   - "first_token" → take the first underscore-separated token
     tip_label_strategy: Literal["taxon", "first_token"] = "taxon"
+    # A tree with more tips than this is pruned at ingest to the taxa its
+    # metadata DC lists (``metadata_dc_tag`` / ``metadata_taxon_column``), so the
+    # stored tree holds the tips the dashboard annotates and no more. A tree at or
+    # under it is stored as written. None (the default) never prunes.
+    max_tips: int | None = Field(default=None, ge=1)
 
     model_config = ConfigDict(extra="forbid")
 
