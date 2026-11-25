@@ -12125,6 +12125,8 @@ export interface UsagePoint {
   unique_ips: number;
   pageviews: number;
   dashboard_views: number;
+  /** Offline-bundle downloads of a dashboard (daily total, no visitor attached). */
+  downloads: number;
   temporary_users: number;
   signups: number;
   new_projects: number;

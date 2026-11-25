@@ -15,7 +15,8 @@ Design (see ``docs/usage-stats.md``):
 * **Privacy.** IPs and user agents are never stored: IPs only as an HMAC under
   a per-instance random key (``instance_settings``), user agents reduced to
   browser / OS / device class. Country and city are resolved at reception from
-  a local GeoIP file when one is configured.
+  a local GeoIP file when one is configured. Offline-bundle downloads are
+  counted on the dashboard row as a bare total, with no visitor attached.
 """
 
 from __future__ import annotations
@@ -346,6 +347,26 @@ def record_hit(hit: UsageHit, request: Request, user: Any) -> bool:
         return False
 
 
+def record_download(dashboard_id: str, request: Request) -> bool:
+    """Count one offline-bundle download of a dashboard on its views row. Never
+    raises, and stores no identifier of any kind: no IP, user agent, user or
+    visitor id, only the daily total."""
+    ua = request.headers.get("user-agent", "")
+    if not settings.usage_stats.enabled or is_bot(ua) or refuses_tracking(request):
+        return False
+    try:
+        day = _day(utc_now_naive())
+        _db()[DASHBOARD_VIEWS].update_one(
+            {"day": day, "dashboard_id": dashboard_id},
+            {"$inc": {"downloads": 1}},
+            upsert=True,
+        )
+        return True
+    except Exception as exc:
+        logger.warning(f"usage_stats: failed to record download: {exc}")
+        return False
+
+
 # ── Report ───────────────────────────────────────────────────────────────────
 
 #: Anonymous totals of closed months and years (no identifier of any kind).
@@ -423,6 +444,7 @@ class _Acc:
     logins: Counter = field(default_factory=Counter)
     pageviews: int = 0
     dviews: int = 0
+    downloads: int = 0
     created: Counter = field(default_factory=Counter)
 
 
@@ -439,6 +461,8 @@ class _Dims:
     refs: Counter = field(default_factory=Counter)
     methods: Counter = field(default_factory=Counter)
     dash_views: Counter = field(default_factory=Counter)
+    #: Daily download totals per dashboard, kept beside the views.
+    dash_downloads: Counter = field(default_factory=Counter)
     dash_visitors: dict = field(default_factory=lambda: defaultdict(set))
     ip_visitors: dict = field(default_factory=lambda: defaultdict(set))
     seen: set = field(default_factory=set)
@@ -506,8 +530,10 @@ def _fold_dashboard_views(rows: Iterable[dict], bucket_of, acc: dict, dims: _Dim
     for dv in rows:
         b = bucket_of(dv["day"])
         acc[b].dviews += dv.get("views", 0)
+        acc[b].downloads += dv.get("downloads", 0)
         if b is not _PREV:
             dims.dash_views[dv["dashboard_id"]] += dv.get("views", 0)
+            dims.dash_downloads[dv["dashboard_id"]] += dv.get("downloads", 0)
             dims.dash_visitors[dv["dashboard_id"]].update(dv.get("visitors") or [])
 
 
@@ -549,6 +575,7 @@ def _point(b: datetime, a: _Acc, first_user: dict, first_visitor: dict) -> Usage
         unique_ips=len(a.ips - {None}),
         pageviews=a.pageviews,
         dashboard_views=a.dviews,
+        downloads=a.downloads,
         temporary_users=len(a.temps),
         signups=a.created["signups"],
         new_projects=a.created["new_projects"],
@@ -559,7 +586,8 @@ def _point(b: datetime, a: _Acc, first_user: dict, first_visitor: dict) -> Usage
 
 def _breakdowns(database: Any, dims: _Dims) -> dict[str, list[dict[str, Any]]]:
     cols = settings.mongodb.collections
-    ids = [ObjectId(i) for i in dims.dash_views if ObjectId.is_valid(i)]
+    dash_ids = set(dims.dash_views) | set(dims.dash_downloads)
+    ids = [ObjectId(i) for i in dash_ids if ObjectId.is_valid(i)]
     dash_docs = {
         str(d["_id"]): d
         for d in database[cols.dashboards_collection].find(
@@ -588,10 +616,14 @@ def _breakdowns(database: Any, dims: _Dims) -> dict[str, list[dict[str, Any]]]:
                 "dashboard_id": did,
                 "title": (dash_docs.get(did) or {}).get("title") or "(deleted)",
                 "project": names.get(str((dash_docs.get(did) or {}).get("project_id")), ""),
-                "views": n,
+                "views": dims.dash_views.get(did, 0),
+                "downloads": dims.dash_downloads.get(did, 0),
                 "visitors": len(dims.dash_visitors[did]),
             }
-            for did, n in dims.dash_views.most_common(15)
+            # Views lead the order; a dashboard only downloaded still shows.
+            for did in sorted(
+                dash_ids, key=lambda d: (dims.dash_views[d], dims.dash_downloads[d]), reverse=True
+            )[:15]
         ],
         "top_projects": [
             {"project_id": pid, "name": names.get(pid, "(deleted)"), "views": n}
@@ -715,6 +747,7 @@ def build_report(
         "unique_ips": UsageKpi(current=len(cur_acc.ips - {None}), previous=len(prev.ips - {None})),
         "pageviews": UsageKpi(current=total("pageviews"), previous=prev.pageviews),
         "dashboard_views": UsageKpi(current=total("dashboard_views"), previous=prev.dviews),
+        "downloads": UsageKpi(current=total("downloads"), previous=prev.downloads),
         "countries": UsageKpi(current=len(cur_acc.countries), previous=len(prev.countries)),
     }
 

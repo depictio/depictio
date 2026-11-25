@@ -324,3 +324,65 @@ def test_offset_timestamps_are_converted_not_dropped():
 
     aware = datetime(2026, 3, 1, 0, 0, tzinfo=tz(td(hours=2)))
     assert _naive_utc(aware) == datetime(2026, 2, 28, 22, 0)
+
+
+def _download_on(day: datetime, dashboard_id: str, ip: str, ua: str = CHROME, **headers):
+    req = _request(ip, ua)
+    req.headers.update(headers)
+    with patch.object(us, "utc_now_naive", return_value=day):
+        return us.record_download(dashboard_id, req)
+
+
+def test_download_counts_a_daily_total_with_no_visitor(db):
+    day = datetime(2026, 3, 4, 10)
+    dash = "c" * 24
+    assert _download_on(day, dash, "198.51.100.1")
+    assert _download_on(day, dash, "198.51.100.2", ua=FIREFOX)  # same day, another address
+    assert _download_on(day, "d" * 24, "198.51.100.1")
+    rows = {(r["dashboard_id"]): r for r in db[us.DASHBOARD_VIEWS].find()}
+    assert rows[dash]["downloads"] == 2 and "visitors" not in rows[dash]
+    assert rows["d" * 24]["downloads"] == 1
+    # Nothing identifying a visitor is kept: no address, agent or id anywhere.
+    assert "198.51.100" not in str(rows) and "Firefox" not in str(rows)
+
+    report = us.build_report("month", 1, now=day)
+    (mar,) = report.series
+    assert mar.downloads == 3 and mar.dashboard_views == 0
+    assert report.kpis["downloads"].current == 3
+    by_id = {d["dashboard_id"]: d for d in report.breakdowns["top_dashboards"]}
+    assert by_id[dash]["downloads"] == 2 and by_id[dash]["views"] == 0
+
+    csv = us.report_to_csv(report)
+    header = csv.splitlines()[0]
+    assert "downloads" in header.split(",")
+
+
+def test_bots_dnt_and_disabled_stats_record_no_download(db):
+    day = datetime(2026, 3, 4)
+    dash = "c" * 24
+    assert not _download_on(day, dash, "198.51.100.1", ua="curl/8.0")  # bot
+    assert not _download_on(day, dash, "198.51.100.1", dnt="1")  # Do Not Track
+    assert not _download_on(day, dash, "198.51.100.1", **{"sec-gpc": "1"})  # GPC
+    with patch.object(us.settings.usage_stats, "enabled", False):
+        assert not _download_on(day, dash, "198.51.100.1")
+    assert db[us.DASHBOARD_VIEWS].count_documents({}) == 0
+
+
+def test_downloads_join_views_on_the_same_row_and_archive_keeps_the_total(db):
+    dash = "c" * 24
+    _hit_on(datetime(2025, 1, 10), _vid(1), "198.51.100.1", dashboard_id=dash)
+    _download_on(datetime(2025, 1, 10), dash, "198.51.100.1")
+    row = db[us.DASHBOARD_VIEWS].find_one()
+    assert row["views"] == 1 and row["downloads"] == 1
+
+    us.archive_closed_periods(now=datetime(2025, 3, 5))
+    doc = db[us.ARCHIVE].find_one({"_id": "month:2025-01-01"})
+    assert doc["point"]["downloads"] == 1
+    assert doc["breakdowns"]["top_dashboards"][0]["downloads"] == 1
+    # A stored archive from before the field existed still validates.
+    assert us.UsagePoint(**{k: v for k, v in doc["point"].items() if k != "downloads"})
+    db[us.VISITS].delete_many({})  # the TTL removed the daily rows
+    report = us.build_report(
+        "month", 1, start=datetime(2025, 1, 1), end=datetime(2025, 1, 31), now=datetime(2026, 6, 1)
+    )
+    assert report.series[0].downloads == 1 and report.archived_periods == 1
