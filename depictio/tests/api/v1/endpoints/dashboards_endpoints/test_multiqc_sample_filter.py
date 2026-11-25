@@ -506,3 +506,81 @@ def test_a_null_in_a_link_column_is_not_a_sample_id(patched_db):
         )
     assert result is not None
     assert set(result) == {"S2", "S2_R1", "S3", "S3_R1"}
+
+
+# ── Exclude: the "Other" panel of an analysis-group split ──────────────────────
+#
+# A filter flagged ``metadata.exclude`` keeps the samples its values do NOT
+# resolve to, taken in every sample the MultiQC reports hold.
+
+
+def _exclude(filt: dict) -> dict:
+    return {**filt, "metadata": {**(filt.get("metadata") or {}), "exclude": True}}
+
+
+def _with_report_samples(patched_db) -> None:
+    """Give the report a sample list wider than its mappings (S4 has no mapping)."""
+    from depictio.api.v1 import db as api_db
+
+    api_db.multiqc_collection.update_one(
+        {"data_collection_id": MULTIQC_DC},
+        {"$set": {"metadata.samples": ["S1_R1", "S2_R1", "S3_R1", "S4"]}},
+    )
+
+
+def test_exclude_direct_filter_is_the_complement(patched_db):
+    """Everything the reports hold except S1 (both its spellings)."""
+    _with_report_samples(patched_db)
+    filters = [_exclude(_filter("direct-sample", "sample_name", ["S1"]))]
+    result = _resolve_multiqc_sample_filter(_dashboard_data(), _component(), filters)
+    assert result is not None
+    assert set(result) == {"S2", "S2_R1", "S3", "S3_R1", "S4"}
+
+
+def test_exclude_accepts_a_top_level_flag(patched_db):
+    filters = [{**_filter("direct-sample", "sample_name", ["S1"]), "exclude": True}]
+    result = _resolve_multiqc_sample_filter(_dashboard_data(), _component(), filters)
+    assert result is not None
+    assert set(result) == {"S2", "S2_R1", "S3", "S3_R1"}
+
+
+def test_exclude_linked_metadata_filter_is_the_complement(patched_db):
+    """Metadata DC A resolves to S2+S3: Other is what is left, S1 (and unmapped S4)."""
+    _with_report_samples(patched_db)
+    filters = [_exclude(_filter("habitat-a", "habitat", ["w"]))]
+    result = _resolve_multiqc_sample_filter(_dashboard_data(), _component(), filters)
+    assert result is not None
+    assert set(result) == {"S1", "S1_R1", "S4"}
+
+
+def test_exclude_intersects_with_an_include_on_the_same_dc(patched_db):
+    """Not-in-A (S1) ∩ in-B (S1+S2) = S1: the two filters of one DC stay apart."""
+    filters = [
+        _exclude(_filter("habitat-a", "habitat", ["w"])),
+        _filter("depth-b", "depth_zone", ["d"]),
+    ]
+    result = _resolve_multiqc_sample_filter(_dashboard_data(), _component(), filters)
+    assert result is not None
+    assert set(result) == {"S1", "S1_R1"}
+
+
+def test_include_and_exclude_on_the_same_dc_do_not_merge(patched_db):
+    """Include habitat=w (S2+S3) and exclude habitat=w: nothing can survive both."""
+    filters = [
+        _filter("habitat-a", "habitat", ["w"]),
+        _exclude(_filter("habitat-a", "habitat", ["w"])),
+    ]
+    result = _resolve_multiqc_sample_filter(_dashboard_data(), _component(), filters)
+    assert result == []
+
+
+def test_exclude_without_known_samples_is_ignored(patched_db):
+    """With no sample names at all the complement is unknowable: render unfiltered."""
+    from depictio.api.v1 import db as api_db
+
+    api_db.multiqc_collection.update_one(
+        {"data_collection_id": MULTIQC_DC},
+        {"$set": {"metadata.sample_mappings": {}}},
+    )
+    filters = [_exclude(_filter("direct-sample", "sample_name", ["S1"]))]
+    assert _resolve_multiqc_sample_filter(_dashboard_data(), _component(), filters) is None

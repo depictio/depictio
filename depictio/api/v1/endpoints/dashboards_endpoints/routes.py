@@ -2608,6 +2608,9 @@ def _resolve_link_filters(
                 # collection with the same rules the component filters by.
                 "case_sensitive": meta.get("case_sensitive", f.get("case_sensitive")),
                 "match_mode": meta.get("match_mode", f.get("match_mode")),
+                # A split's "Other" panel: resolved like any value set, then
+                # negated on the target.
+                "exclude": bool(meta.get("exclude", f.get("exclude"))),
             },
         }
         filters_by_dc.setdefault(dc_id, []).append(entry)
@@ -2646,6 +2649,7 @@ def _resolve_link_filters(
                     "column_name": meta.get("column_name"),
                     "interactive_component_type": meta.get("interactive_component_type")
                     or "MultiSelect",
+                    **({"exclude": True} if meta.get("exclude") else {}),
                 },
             }
         )
@@ -2706,6 +2710,7 @@ def _link_filter_key(
                 # TextInput options change what a pattern resolves to.
                 str((f.get("metadata") or {}).get("case_sensitive", f.get("case_sensitive"))),
                 str((f.get("metadata") or {}).get("match_mode", f.get("match_mode"))),
+                str(bool((f.get("metadata") or {}).get("exclude", f.get("exclude")))),
             )
             for f in filters
         ),
@@ -6502,6 +6507,12 @@ def _resolve_multiqc_sample_filter(
         enabled link contributes, not just the first one seen, and a DC linked
         twice (two join columns) contributes both.
 
+    A filter flagged ``metadata.exclude`` (or a top-level ``exclude``) is the
+    complement: the sample set is every sample of the MultiQC DC that its
+    values do NOT resolve to. That is the "Other" panel of an analysis-group
+    split (samples in none of the groups). Each exclude filter is its own
+    constraint, never folded into the include filters of the same DC.
+
     The result is the INTERSECTION of all constraint sets — each active filter
     can only narrow the sample set further. (The previous implementation
     unioned them, so adding a second filter *widened* the result, and dropped
@@ -6528,10 +6539,12 @@ def _resolve_multiqc_sample_filter(
     multiqc_dc_id_str = str(component.get("dc_id") or component.get("data_collection_id") or "")
     stored_meta_index = _filter_metadata_index(dashboard_data, filters)
 
-    # One entry per direct sample filter (each is its own AND constraint).
-    direct_sample_filters: list[list[str]] = []
+    # One entry per direct sample filter (each is its own AND constraint),
+    # with whether it is an exclude (the complement of its values).
+    direct_sample_filters: list[tuple[list[str], bool]] = []
     # Metadata DCs keyed by dc_id: each contributes one constraint computed
-    # from ALL of its own filters applied together.
+    # from ALL of its own filters applied together. An exclude filter gets a
+    # key of its own, since its rows are complemented, not intersected.
     indirect_by_dc: dict[str, dict] = {}
 
     for f in filters:
@@ -6542,6 +6555,7 @@ def _resolve_multiqc_sample_filter(
         comp_meta = stored_meta_index.get(fdx) or _sent_filter_metadata(f)
         comp_dc = str(comp_meta.get("dc_id") or comp_meta.get("data_collection_id") or "")
         column_name = f.get("column_name") or comp_meta.get("column_name")
+        exclude = bool((f.get("metadata") or {}).get("exclude") or f.get("exclude"))
 
         if (
             comp_dc == multiqc_dc_id_str
@@ -6554,13 +6568,15 @@ def _resolve_multiqc_sample_filter(
                 # sample and empty the figure, so it leaves the sample set alone.
                 continue
             values_list = value if isinstance(value, list) else [value]
-            direct_sample_filters.append([str(v) for v in values_list])
+            direct_sample_filters.append(([str(v) for v in values_list], exclude))
             continue
 
         if comp_dc and comp_dc != multiqc_dc_id_str:
             entry = indirect_by_dc.setdefault(
-                comp_dc,
+                f"{comp_dc}\0exclude{len(indirect_by_dc)}" if exclude else comp_dc,
                 {
+                    "dc_id": comp_dc,
+                    "exclude": exclude,
                     "wf_id": comp_meta.get("wf_id") or comp_meta.get("workflow_id") or wf_id,
                     "comp_meta": comp_meta,
                     "filters": [],
@@ -6587,13 +6603,17 @@ def _resolve_multiqc_sample_filter(
     # (e.g. ``NA12878``) get expanded into the variant names that actually
     # appear in plot traces (``NA12878_R1``, ``NA12878_R2``).
     sample_mappings: dict[str, list[str]] = {}
+    # Every sample name the reports hold (plot names and canonical ids): the
+    # universe an exclude filter takes its complement in.
+    all_samples: set[str] = set()
     try:
         from depictio.api.v1.db import multiqc_collection as _mc
 
         for rep in _mc.find(
             {"data_collection_id": multiqc_dc_id_str},
-            {"metadata.sample_mappings": 1},
+            {"metadata.sample_mappings": 1, "metadata.samples": 1},
         ):
+            all_samples.update(str(s) for s in (rep.get("metadata") or {}).get("samples") or [])
             m = (rep.get("metadata") or {}).get("sample_mappings") or {}
             for k, vlist in m.items():
                 bucket = sample_mappings.setdefault(str(k), [])
@@ -6614,12 +6634,28 @@ def _resolve_multiqc_sample_filter(
     # variant names, or a mix.
     constraint_sets: list[set[str]] = []
 
-    for values in direct_sample_filters:
+    def _add_constraint(samples: set[str], exclude: bool) -> None:
+        """Add the samples a filter resolved to, or their complement."""
+        if not exclude:
+            constraint_sets.append(samples)
+            return
+        universe = (
+            all_samples | set(sample_mappings) | {v for vs in sample_mappings.values() for v in vs}
+        )
+        if not universe:
+            logger.info(
+                f"_resolve_multiqc_sample_filter: exclude filter ignored, no sample "
+                f"names known for DC {multiqc_dc_id_str}"
+            )
+            return
+        constraint_sets.append(universe - samples)
+
+    for values, exclude in direct_sample_filters:
         wanted = list(dict.fromkeys(values))
         expanded = expand_canonical_samples_to_variants(
             wanted, remap_mappings_to_hub(sample_mappings, wanted)
         )
-        constraint_sets.append({str(s) for s in expanded})
+        _add_constraint({str(s) for s in expanded}, exclude)
 
     if indirect_by_dc:
         from depictio.api.v1.db import projects_collection
@@ -6654,7 +6690,8 @@ def _resolve_multiqc_sample_filter(
         except Exception as e:
             logger.debug(f"_resolve_multiqc_sample_filter: project link lookup failed: {e}")
 
-        for metadata_dc_id, entry in indirect_by_dc.items():
+        for entry in indirect_by_dc.values():
+            metadata_dc_id = entry["dc_id"]
             link_source_columns = links_by_source.get(str(metadata_dc_id))
             if not link_source_columns:
                 logger.info(
@@ -6724,7 +6761,7 @@ def _resolve_multiqc_sample_filter(
                 )
                 # An empty set here is a real answer: the metadata filters
                 # matched no row, so no sample survives this constraint.
-                constraint_sets.append({str(s) for s in expanded})
+                _add_constraint({str(s) for s in expanded}, bool(entry["exclude"]))
             except Exception as e:
                 logger.warning(
                     f"_resolve_multiqc_sample_filter: filter resolution on DC {metadata_dc_id} "

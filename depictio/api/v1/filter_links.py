@@ -865,6 +865,13 @@ def extend_filters_via_links(
                 # One synthetic filter per (path, source filter). The path id
                 # keeps two routes to the same target from colliding on index.
                 path_id = "_".join(str(link.get("id", "?")) for link in path)
+                # A split's "Other" panel ("in none of these") resolves its values
+                # like any set, then excludes them on the target. Excluding
+                # nothing keeps every row, so a link that matched nothing adds
+                # no filter at all rather than LINK_NO_MATCH.
+                excludes = bool((source_filter.get("metadata") or {}).get("exclude"))
+                if excludes and not resolved_values:
+                    continue
                 link_filters.append(
                     {
                         "index": f"link_{path_id}",
@@ -878,6 +885,7 @@ def extend_filters_via_links(
                             "interactive_component_type": (
                                 "MultiSelect" if resolved_values else LINK_NO_MATCH
                             ),
+                            **({"exclude": True} if excludes else {}),
                         },
                     }
                 )

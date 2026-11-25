@@ -144,6 +144,10 @@ def _generate_filter_hash(metadata: list[dict] | None) -> str:
         # A region pair compares chromosome names loosely (see GENOME_SELECTION_SOURCE).
         if component.get("source") == GENOME_SELECTION_SOURCE:
             filter_dict["src"] = GENOME_SELECTION_SOURCE
+        # "In none of these" holds the same values as "in these": without the flag
+        # in the key, a split's "Other" panel would be served its group's rows.
+        if filter_excludes(component):
+            filter_dict["not"] = True
         filter_repr.append(filter_dict)
 
     # Sort for stability
@@ -160,6 +164,18 @@ def _generate_filter_hash(metadata: list[dict] | None) -> str:
 # Its chromosome half matches names with and without the ``chr`` prefix: the region
 # comes from an assembly or another collection that may spell them differently.
 GENOME_SELECTION_SOURCE = "genome_selection"
+
+
+def filter_excludes(component: dict) -> bool:
+    """Whether a categorical filter keeps the rows its values do NOT name.
+
+    Set by a split's "Other" panel (``splitPanels.ts``): the samples in none of
+    the analysis groups, which an ``is_in`` cannot say. Read from
+    ``metadata.exclude`` or the filter itself, like every other filter option.
+    """
+    meta = component.get("metadata") or {}
+    return bool(meta.get("exclude", component.get("exclude")))
+
 
 # NOTE: ``LINK_NO_MATCH`` and ``_categorical_predicate`` moved to
 # ``depictio.models.components.predicates`` (imported at the top of this
@@ -454,16 +470,37 @@ def process_metadata_and_filter(
 
             value = chrom_name_variants(value)
 
-        add_filter(
-            filter_list,
-            interactive_component_type=interactive_component_type,
-            column_name=column_name,
-            value=value,
-            dtype=schema.get(column_name) if schema else None,
-            slider_mode=slider_mode,
-            case_sensitive=text_source.get("case_sensitive"),
-            match_mode=text_source.get("match_mode"),
-        )
+        if filter_excludes(component) and interactive_component_type in (
+            "Select",
+            "MultiSelect",
+            "SegmentedControl",
+            LINK_NO_MATCH,
+        ):
+            # "In none of these": the negated value test. A row with no value is
+            # in no group either, so it stays (``~is_in`` alone would be null and
+            # drop it). Excluding nothing (no values, or a link that matched
+            # nothing) keeps every row.
+            own: list = []
+            if interactive_component_type != LINK_NO_MATCH:
+                add_filter(
+                    own,
+                    interactive_component_type=interactive_component_type,
+                    column_name=column_name,
+                    value=value,
+                    dtype=schema.get(column_name) if schema else None,
+                )
+            filter_list.extend((~predicate).fill_null(True) for predicate in own)
+        else:
+            add_filter(
+                filter_list,
+                interactive_component_type=interactive_component_type,
+                column_name=column_name,
+                value=value,
+                dtype=schema.get(column_name) if schema else None,
+                slider_mode=slider_mode,
+                case_sensitive=text_source.get("case_sensitive"),
+                match_mode=text_source.get("match_mode"),
+            )
 
         if filter_expr:
             try:
