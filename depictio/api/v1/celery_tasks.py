@@ -15,8 +15,9 @@ Tasks are auto-discovered when this module is imported by the Celery worker
 from __future__ import annotations
 
 import json
+import threading
 import time
-from collections import Counter
+from collections import Counter, OrderedDict
 from typing import Any, Iterable, Sequence
 
 from bson import ObjectId
@@ -1602,13 +1603,22 @@ def compute_complex_heatmap(payload: dict) -> dict:
           "normalize": str,            # none / row_z / col_z / log1p
           "colorscale": str | null,
           "filter_metadata": [...],
+          "shared_from_filters": [...] | absent,  # split panel: the filters
+                                       # WITHOUT the panel's own constraints
         }
+
+    A payload carrying ``shared_from_filters`` is one panel of a split. Its
+    columns are its own (``filter_metadata``), but its rows and colours are the
+    whole view's: the rows come in the order clustered once over every sample
+    in ``shared_from_filters``, the colour range is that matrix's, and the
+    values are normalised against it, so panels read side by side.
 
     Output:
         {
           "figure": <plotly figure dict>,   # straight to react-plotly.js
           "row_count": int,
           "col_count": int,
+          "columns": [str],                 # the value columns drawn
           "load_ms": int,
           "compute_ms": int,
         }
@@ -1701,12 +1711,35 @@ def compute_complex_heatmap(payload: dict) -> dict:
     # filter VALUES against the column names — the previous version only
     # honoured filters literally named `sample`/`sample_id`, which is not what
     # a metadata pick (`ID`) or a map lasso sends.
-    value_columns = (
-        _narrow_wide_matrix_columns(value_columns, filter_metadata, what="heatmap columns")
-        or value_columns
+    narrowed_columns = _narrow_wide_matrix_columns(
+        value_columns, filter_metadata, what="heatmap columns"
     )
+    if narrowed_columns is not None:
+        value_columns = narrowed_columns
     if filter_metadata:
         value_columns = _square_matrix_columns(df, index_column, value_columns)
+    if not value_columns:
+        # The filters name samples, and none of them is in this matrix (a split
+        # panel whose group has no sample in view).
+        import json as _json
+
+        import plotly.io as _pio
+
+        return {
+            # A dict like every other result: the task result travels as JSON.
+            "figure": _json.loads(
+                _pio.to_json(
+                    _empty_heatmap_figure("No samples in scope: the filters leave nothing to draw")
+                )
+            ),
+            "row_count": 0,
+            "col_count": 0,
+            "columns": [],
+            "load_ms": load_ms,
+            "compute_ms": 0,
+            "available_col_annotations": [],
+            "constant_col_annotations": [],
+        }
 
     # Column annotations, in priority order. Both branches produce the same
     # ``{annotation_name: {sample_column: value}}`` shape the aligner below
@@ -1752,6 +1785,33 @@ def compute_complex_heatmap(payload: dict) -> dict:
     # task is actually invoked.
     from plotly_complexheatmap import ComplexHeatmap
 
+    # A split panel reads against the whole view: one row order, one value
+    # scale. Failing to build that reference must not blank the tile, so the
+    # panel then draws as it would unsplit.
+    shared_ref: dict | None = None
+    if payload.get("shared_from_filters") is not None and not pdf.empty:
+        try:
+            shared_ref = _shared_heatmap_reference(
+                payload,
+                init_data=init_data,
+                index_column=index_column,
+                row_annotation_cols=row_annotation_cols,
+                cluster_rows=cluster_rows,
+                cluster_method=cluster_method,
+                cluster_metric=cluster_metric,
+                normalize=normalize,
+            )
+        except Exception as exc:
+            logger.warning(
+                "compute_complex_heatmap: shared split reference failed (%s); "
+                "drawing the panel on its own",
+                exc,
+            )
+    if shared_ref is not None:
+        pdf, normalize_for_lib = _apply_shared_heatmap_reference(
+            pdf, index_column, value_columns, shared_ref, normalize_for_lib
+        )
+
     # A dendrogram needs at least two leaves. Both axes can be narrowed to one
     # by an ordinary filter — pick a single sample and the wide-matrix column
     # subset leaves one column; pick a single Phylum and the row filter leaves
@@ -1760,6 +1820,10 @@ def compute_complex_heatmap(payload: dict) -> dict:
     cluster_rows, cluster_cols = _heatmap_clustering_flags(
         len(pdf), len(value_columns), cluster_rows, cluster_cols, cluster_metric
     )
+    if shared_ref is not None:
+        # The rows are already in the view's clustered order: the library keeps
+        # input order when it is not asked to cluster them.
+        cluster_rows = False
 
     hm_kwargs: dict = {
         "index_column": index_column,
@@ -1904,23 +1968,7 @@ def compute_complex_heatmap(payload: dict) -> dict:
     if pdf.empty:
         # Filters can leave no row at all (a pick on a time point no feature
         # peaks at); the library divides by the row count, so say so instead.
-        import plotly.graph_objects as _go
-
-        fig = _go.Figure()
-        fig.update_layout(
-            xaxis={"visible": False},
-            yaxis={"visible": False},
-            annotations=[
-                {
-                    "text": "No rows in scope: the filters leave nothing to draw",
-                    "showarrow": False,
-                    "xref": "paper",
-                    "yref": "paper",
-                    "x": 0.5,
-                    "y": 0.5,
-                }
-            ],
-        )
+        fig = _empty_heatmap_figure("No rows in scope: the filters leave nothing to draw")
     else:
         try:
             fig = ComplexHeatmap.from_dataframe(pdf, **hm_kwargs).to_plotly()
@@ -1935,6 +1983,8 @@ def compute_complex_heatmap(payload: dict) -> dict:
             hm_kwargs["cluster_rows"] = False
             hm_kwargs["cluster_cols"] = False
             fig = ComplexHeatmap.from_dataframe(pdf, **hm_kwargs).to_plotly()
+    if shared_ref is not None and not pdf.empty:
+        _pin_heatmap_colour_range(fig, shared_ref["zmin"], shared_ref["zmax"])
     # Margin tweak for the React viewer: b=110 so the x-tick labels, which the
     # library sizes from a 6px-per-char approximation, aren't clipped when a
     # rotated sample id runs longer than that estimate (~14 chars @10pt).
@@ -1976,6 +2026,10 @@ def compute_complex_heatmap(payload: dict) -> dict:
         "figure": fig_dict,
         "row_count": len(pdf),
         "col_count": len(value_columns),
+        # The columns this tile drew, so a split can tell its panels apart by
+        # what they hold rather than by the rows (a sample group never narrows
+        # the rows of a feature-by-sample matrix).
+        "columns": list(value_columns),
         "load_ms": load_ms,
         "compute_ms": compute_ms,
         # What the viz-controls picker may offer for the column strips, and the
@@ -2015,6 +2069,235 @@ def _heatmap_clustering_flags(
     return cluster_rows, cluster_cols
 
 
+def _empty_heatmap_figure(message: str) -> Any:
+    """A figure that says why nothing is drawn (the library divides by the row count)."""
+    import plotly.graph_objects as _go
+
+    fig = _go.Figure()
+    fig.update_layout(
+        xaxis={"visible": False},
+        yaxis={"visible": False},
+        annotations=[
+            {
+                "text": message,
+                "showarrow": False,
+                "xref": "paper",
+                "yref": "paper",
+                "x": 0.5,
+                "y": 0.5,
+            }
+        ],
+    )
+    return fig
+
+
+# Split panels of one tile ask for the same reference (the view's row order and
+# value range) at the same moment; a small per-process LRU with a short life
+# lets the panels a worker handles share one load + clustering. Short, because
+# a re-ingest rewrites the table under the same key.
+_SHARED_HEATMAP_CACHE: "OrderedDict[str, tuple[float, dict | None]]" = OrderedDict()
+_SHARED_HEATMAP_CACHE_LOCK = threading.Lock()
+_SHARED_HEATMAP_CACHE_SIZE = 4
+_SHARED_HEATMAP_CACHE_TTL_S = 120.0
+# Above this many cells the normalised matrix is not kept (order and range are).
+_SHARED_HEATMAP_MAX_CELLS = 4_000_000
+
+
+def _build_shared_heatmap_reference(
+    df: Any,
+    *,
+    index_column: str,
+    value_columns: list[str],
+    cluster_rows: bool,
+    cluster_method: str,
+    cluster_metric: str,
+    normalize: str,
+) -> dict | None:
+    """What every panel of a split shares, from the matrix of ALL samples in view.
+
+    ``order``: the row labels clustered once over every sample (the input order
+    when rows do not cluster). ``zmin`` / ``zmax``: the colour range after the
+    same normalisation the panels apply. ``norm``: that normalised matrix by
+    row label, so a panel's cells are the whole view's cells (a row z-score
+    over a panel's few samples would be a different number). None when the
+    matrix is empty or holds no finite value.
+    """
+    import math
+
+    import numpy as np
+    from plotly_complexheatmap.clustering import compute_dendrogram
+    from plotly_complexheatmap.utils import normalize_data
+
+    if df.height == 0 or not value_columns:
+        return None
+    pdf = df.select([index_column] + value_columns).to_pandas()
+    if normalize == "log1p":
+        for col in value_columns:
+            pdf[col] = pdf[col].astype(float).apply(math.log1p)
+    lib_normalize = {"none": "none", "row_z": "row", "col_z": "column"}.get(normalize, "none")
+    normalized = normalize_data(pdf[value_columns].to_numpy(dtype=float), method=lib_normalize)
+    finite = normalized[np.isfinite(normalized)]
+    if finite.size == 0:
+        return None
+
+    order = np.arange(len(pdf))
+    rows_cluster, _ = _heatmap_clustering_flags(
+        len(pdf), len(value_columns), cluster_rows, False, cluster_metric
+    )
+    if rows_cluster:
+        try:
+            order = compute_dendrogram(
+                normalized, method=cluster_method, metric=cluster_metric
+            ).leaf_order
+        except (ValueError, ZeroDivisionError) as exc:
+            logger.warning("shared heatmap row order: clustering failed (%s); input order", exc)
+
+    labels = [str(v) for v in pdf[index_column]]
+    rank: dict[str, int] = {}
+    for position, i in enumerate(order):
+        rank.setdefault(labels[int(i)], position)
+
+    norm = None
+    if len(set(labels)) == len(labels) and normalized.size <= _SHARED_HEATMAP_MAX_CELLS:
+        import pandas as pd
+
+        norm = pd.DataFrame(normalized, index=labels, columns=value_columns)
+    return {
+        "rank": rank,
+        "order": [labels[int(i)] for i in order],
+        "zmin": float(finite.min()),
+        "zmax": float(finite.max()),
+        "norm": norm,
+    }
+
+
+def _shared_heatmap_reference(
+    payload: dict,
+    *,
+    init_data: dict,
+    index_column: str,
+    row_annotation_cols: list[str],
+    cluster_rows: bool,
+    cluster_method: str,
+    cluster_metric: str,
+    normalize: str,
+) -> dict | None:
+    """``_build_shared_heatmap_reference`` over ``payload["shared_from_filters"]``, cached.
+
+    The matrix is loaded and narrowed exactly as a heatmap with those filters
+    would be (same loader, same sample narrowing), so the order and range are
+    those of the unsplit tile.
+    """
+    import hashlib
+
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+
+    shared_filters = list(payload.get("shared_from_filters") or [])
+    key = hashlib.sha256(
+        json.dumps(
+            [
+                str(payload.get("wf_id")),
+                str(payload.get("dc_id")),
+                index_column,
+                payload.get("value_columns"),
+                payload.get("value_columns_pattern"),
+                row_annotation_cols,
+                bool(cluster_rows),
+                cluster_method,
+                cluster_metric,
+                normalize,
+                shared_filters,
+            ],
+            sort_keys=True,
+            default=str,
+        ).encode()
+    ).hexdigest()
+    now = time.monotonic()
+    with _SHARED_HEATMAP_CACHE_LOCK:
+        hit = _SHARED_HEATMAP_CACHE.get(key)
+        if hit and now - hit[0] < _SHARED_HEATMAP_CACHE_TTL_S:
+            _SHARED_HEATMAP_CACHE.move_to_end(key)
+            return hit[1]
+
+    df = load_deltatable_lite(
+        workflow_id=ObjectId(str(payload["wf_id"])),
+        data_collection_id=str(payload["dc_id"]),
+        metadata=shared_filters or None,
+        init_data=init_data,
+    )
+    value_columns = _resolve_heatmap_value_columns(
+        df,
+        payload.get("value_columns"),
+        payload.get("value_columns_pattern") or None,
+        excluded={index_column, *row_annotation_cols},
+    )
+    narrowed = _narrow_wide_matrix_columns(
+        value_columns, shared_filters, what="shared heatmap columns"
+    )
+    if narrowed is not None:
+        value_columns = narrowed
+    if shared_filters:
+        value_columns = _square_matrix_columns(df, index_column, value_columns)
+    ref = _build_shared_heatmap_reference(
+        df,
+        index_column=index_column,
+        value_columns=value_columns,
+        cluster_rows=cluster_rows,
+        cluster_method=cluster_method,
+        cluster_metric=cluster_metric,
+        normalize=normalize,
+    )
+    with _SHARED_HEATMAP_CACHE_LOCK:
+        _SHARED_HEATMAP_CACHE[key] = (time.monotonic(), ref)
+        _SHARED_HEATMAP_CACHE.move_to_end(key)
+        while len(_SHARED_HEATMAP_CACHE) > _SHARED_HEATMAP_CACHE_SIZE:
+            _SHARED_HEATMAP_CACHE.popitem(last=False)
+    return ref
+
+
+def _apply_shared_heatmap_reference(
+    pdf: Any,
+    index_column: str,
+    value_columns: list[str],
+    ref: dict,
+    normalize_for_lib: str,
+) -> tuple[Any, str]:
+    """A panel's frame, rows in the view's order and cells on the view's scale.
+
+    Returns the frame and the normalisation the library should still apply:
+    ``"none"`` once the cells were taken from the view's normalised matrix.
+    A row the view does not know (it cannot happen unless the data moved
+    between the two loads) goes last.
+    """
+    labels = [str(v) for v in pdf[index_column]]
+    rank = ref["rank"]
+    last = len(rank)
+    order = sorted(range(len(labels)), key=lambda i: rank.get(labels[i], last))
+    pdf = pdf.iloc[order].reset_index(drop=True)
+    labels = [labels[i] for i in order]
+    norm = ref.get("norm")
+    if (
+        normalize_for_lib != "none"
+        and norm is not None
+        and set(value_columns) <= set(norm.columns)
+        and all(label in norm.index for label in labels)
+    ):
+        pdf = pdf.copy()
+        pdf[value_columns] = norm.loc[labels, value_columns].to_numpy()
+        normalize_for_lib = "none"
+    return pdf, normalize_for_lib
+
+
+def _pin_heatmap_colour_range(fig: Any, zmin: float, zmax: float) -> None:
+    """Fix the matrix trace's colour range (not the annotation strips', which are heatmaps too)."""
+    for trace in fig.data:
+        if trace.type not in ("heatmap", "heatmapgl"):
+            continue
+        if str(getattr(trace, "hovertemplate", None) or "").startswith("row: "):
+            trace.zmin = zmin
+            trace.zmax = zmax
+
+
 def _square_matrix_columns(df: Any, index_column: str, value_columns: list[str]) -> list[str]:
     """The columns of a matrix whose rows name them, cut to the rows a filter kept.
 
@@ -2035,6 +2318,12 @@ def _square_matrix_columns(df: Any, index_column: str, value_columns: list[str])
     return [c for c in value_columns if str(c) in kept]
 
 
+def _filter_excludes(f: dict) -> bool:
+    """Whether a filter keeps what its values do NOT name (the split's "Other")."""
+    nested = f.get("metadata")
+    return bool(f.get("exclude") or (isinstance(nested, dict) and nested.get("exclude")))
+
+
 def _narrow_wide_matrix_columns(
     candidates: list[str], filter_metadata: list | None, *, what: str = "sets"
 ) -> list[str] | None:
@@ -2049,13 +2338,21 @@ def _narrow_wide_matrix_columns(
     reaches us is the source DC's (`ID`, `sample`, `sample_id`, …) and no list
     of names could be complete.
 
+    Every filter that names columns narrows, so a sample pick and a split
+    panel's group constraint compose (their intersection stays). A filter
+    flagged ``exclude`` keeps the columns its values do NOT name (a split's
+    "Other" panel: the samples in none of the groups).
+
     Returns None when no filter names columns — leave the caller's choice
-    alone — and never an empty list: a filter that selects none of them is a
-    filter about something else.
+    alone. Returns an empty list when filters name columns but their
+    combination leaves none (a group with no sample in view): the caller says
+    so rather than drawing everything.
     """
     if not candidates:
         return None
     column_names = {str(c) for c in candidates}
+    kept = set(column_names)
+    applied = False
     for f in filter_metadata or []:
         if not isinstance(f, dict):
             continue
@@ -2065,23 +2362,26 @@ def _narrow_wide_matrix_columns(
         values = {str(v) for v in val} if isinstance(val, (list, tuple, set)) else {str(val)}
         hit = column_names & values
         # An empty hit is an unrelated filter; a full hit is a no-op that would
-        # only reorder the sets.
-        if not hit or hit == column_names:
+        # only reorder the sets (but it empties an exclusion).
+        if not hit or (hit == column_names and not _filter_excludes(f)):
             continue
         nested = f.get("metadata") or {}
         col = f.get("column_name") or (
             nested.get("column_name") if isinstance(nested, dict) else None
         )
-        narrowed = [c for c in candidates if str(c) in hit]
+        kept = kept - hit if _filter_excludes(f) else kept & hit
+        applied = True
         logger.info(
-            "narrowing %s to %d of %d via the %s filter",
+            "narrowing %s to %d of %d via the %s filter%s",
             what,
-            len(narrowed),
+            len(kept),
             len(candidates),
             col or "unnamed",
+            " (excluding)" if _filter_excludes(f) else "",
         )
-        return narrowed
-    return None
+    if not applied:
+        return None
+    return [c for c in candidates if str(c) in kept]
 
 
 def _resolve_heatmap_value_columns(

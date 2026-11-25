@@ -1366,6 +1366,30 @@ def poll_compute_embedding(
     return {"job_id": job_id, "status": "pending"}
 
 
+def _apply_link_filters_to_shared_filters(
+    payload: dict, access_token: str | None, component_type: str
+) -> None:
+    """Translate ``payload["shared_from_filters"]`` the way ``filter_metadata`` is.
+
+    A split panel sends the filters without its own constraints so the worker
+    can build the row order and colour range of the whole view. Those filters
+    cross the same links as the panel's, or the two matrices would be scoped
+    differently. Runs the shared helper on a stand-in payload and copies the
+    result back, so it reaches the cache key like every other key.
+    """
+    shared = payload.get("shared_from_filters")
+    if not isinstance(shared, list):
+        payload.pop("shared_from_filters", None)
+        return
+    stand_in = {
+        "wf_id": payload.get("wf_id"),
+        "dc_id": payload.get("dc_id"),
+        "filter_metadata": shared,
+    }
+    _apply_link_filters_to_payload(stand_in, access_token, component_type)
+    payload["shared_from_filters"] = stand_in["filter_metadata"]
+
+
 @advanced_viz_endpoint_router.post("/compute_complex_heatmap")
 def dispatch_compute_complex_heatmap(
     payload: dict = Body(...),
@@ -1381,6 +1405,7 @@ def dispatch_compute_complex_heatmap(
     from datetime import datetime, timezone
 
     _apply_link_filters_to_payload(payload, access_token, "complex_heatmap")
+    _apply_link_filters_to_shared_filters(payload, access_token, "complex_heatmap")
     _resolve_annotation_join(payload)
 
     from depictio.api.v1.celery_tasks import compute_complex_heatmap as compute_task

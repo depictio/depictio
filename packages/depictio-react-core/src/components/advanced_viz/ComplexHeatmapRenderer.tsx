@@ -32,6 +32,7 @@ import {
   type Trace,
 } from './heatmapAnnotationColors';
 import { GroupColouringReportContext } from '../../groupReach';
+import { GROUP_FILTER_INDEX_PREFIX } from '../../selectionGroups';
 import type { GroupRenderState } from '../../selectionGroups';
 import { InSplitPanelContext } from './AdvancedVizExtras';
 import { namedColumns } from './namedColumns';
@@ -106,6 +107,16 @@ interface Props {
  *  would cluster each cut on its own, so the groups annotate the columns
  *  instead, in the groups' colours. */
 const GROUP_STRIP = 'Group';
+
+/** Index prefix of the constraints a split panel adds to the dashboard's
+ *  filters (see `valueConstraint` in splitPanels.ts). */
+const PANEL_CONSTRAINT_PREFIX = `${GROUP_FILTER_INDEX_PREFIX}panel:`;
+
+/** The filters a split panel shares with its siblings: everything but the
+ *  panel's own constraints. */
+function withoutPanelConstraints(filters: InteractiveFilter[]): InteractiveFilter[] {
+  return filters.filter((f) => !String(f.index ?? '').startsWith(PANEL_CONSTRAINT_PREFIX));
+}
 
 /** The figure's layout for a split panel: no tick labels, no legend, thin
  *  margins. At panel size the row and column names cannot be read, and they,
@@ -202,6 +213,10 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
 
   // Sample of the underlying matrix powering the Show-data popover.
   const [dataRows, setDataRows] = useState<Record<string, unknown[]> | null>(null);
+  // The value columns the worker drew. A sample group never narrows the rows of
+  // a feature-by-sample matrix, only its columns, so a split panel's sample can
+  // only be told from its siblings' by these.
+  const [drawnColumns, setDrawnColumns] = useState<string[] | null>(null);
 
   useEffect(() => {
     if (!metadata.wf_id || !metadata.dc_id) {
@@ -214,6 +229,7 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     setError(null);
     setComputeStatus('Building heatmap…');
     setComputeMs(null);
+    setDrawnColumns(null);
 
     const payload = {
       wf_id: metadata.wf_id,
@@ -240,6 +256,10 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
       normalize,
       colorscale: config.colorscale ?? null,
       filter_metadata: filters,
+      // A panel of a split reads against the whole view: the worker clusters
+      // the rows and sets the colour range once on the filters the panels have
+      // in common, so the panels share one row order and one scale.
+      ...(inSplit ? { shared_from_filters: withoutPanelConstraints(filters) } : {}),
     };
 
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
@@ -247,6 +267,7 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
       if (cancelled) return;
       setFigure(result.figure);
       setDims({ rows: result.row_count, cols: result.col_count });
+      setDrawnColumns(result.columns ?? []);
       setColAnnotationOptions(result.available_col_annotations ?? []);
       setColAnnotationConstant(result.constant_col_annotations ?? []);
       setComputeMs(result.compute_ms ?? null);
@@ -312,6 +333,7 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     JSON.stringify(colAnnotationCols),
     groupColumns,
     annotationPinsKey,
+    inSplit,
   ]);
 
   // The annotation strips wear the dashboard's colours for their column (a
@@ -422,11 +444,23 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
 
   // Best-effort fetch of a small data sample (max 200 rows) for the
   // Show-data popover — separate from the heatmap dispatch.
+  // In a split panel the sample is of the columns the worker drew, and it waits
+  // for them: the split compares what its panels publish to tell whether the
+  // grouping said anything, and the configured columns are the same on every
+  // panel, so publishing them first would cancel the split.
   const previewCols = useMemo(
-    () => [config.index_column, ...valueColumns.slice(0, 12)],
-    [config.index_column, valueColumns],
+    () => [
+      config.index_column,
+      ...(inSplit && drawnColumns && drawnColumns.length > 0 ? drawnColumns : valueColumns).slice(0, 12),
+    ],
+    [config.index_column, valueColumns, inSplit, drawnColumns],
   );
+  const previewReady = !inSplit || drawnColumns !== null;
   useEffect(() => {
+    if (!previewReady) {
+      setDataRows(null);
+      return;
+    }
     if (!metadata.wf_id || !metadata.dc_id || previewCols.length < 1) return;
     let cancelled = false;
     fetchAdvancedVizData({
@@ -446,7 +480,7 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     return () => {
       cancelled = true;
     };
-  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(previewCols), JSON.stringify(filters), refreshTick]);
+  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(previewCols), JSON.stringify(filters), refreshTick, previewReady]);
 
   // Memo the controls JSX so its reference is stable across renders.
   // AdvancedVizFrame publishes `controls` up to a parent state via useEffect;
