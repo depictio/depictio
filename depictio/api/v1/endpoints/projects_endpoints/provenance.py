@@ -1,10 +1,13 @@
 """Server-written project provenance.
 
 ``provenance``, ``published_lock`` and ``pending_owner_email`` describe where a
-project came from and whether it is frozen. Clients round-trip the whole project
-document through ``/projects/create`` and ``/projects/update``, so all three are
-stripped from those payloads: a caller cannot claim another Depictio version,
-lift a lock or park an owner by editing JSON.
+project came from and whether it is frozen; ``public_offline_download`` lets
+visitors download its offline bundle and has its own owner-gated route. Clients
+round-trip the whole project document through ``/projects/create`` and
+``/projects/update``, so all of them are stripped from those payloads: a caller
+cannot claim another Depictio version, lift a lock, park an owner or open the
+download without the preview by editing JSON. An imported project arrives with
+the download off.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ SERVER_OWNED_PROJECT_FIELDS: tuple[str, ...] = (
     "provenance",
     "published_lock",
     "pending_owner_email",
+    "public_offline_download",
 )
 
 

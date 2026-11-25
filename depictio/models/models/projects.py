@@ -36,6 +36,11 @@ class Project(MongoModel):
     yaml_config_path: str | None = None  # Optional for basic projects
     permissions: Permission
     is_public: bool = False
+    # Visitors may download a pre-built offline bundle of this project's
+    # dashboards (#1480). Server-owned: written only by
+    # `PUT /projects/{id}/public_offline_download`, turned off when the project
+    # is made private. Meaningless (and refused) on a private project.
+    public_offline_download: bool = False
     hash: str | None = None
     # Creation timestamp, UTC, "%Y-%m-%d %H:%M:%S".
     registration_time: str = Field(default_factory=utc_now_str)
