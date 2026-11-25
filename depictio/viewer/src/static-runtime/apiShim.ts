@@ -1555,6 +1555,15 @@ export const downloadStaticExport = refuse(`Exporting is ${READ_ONLY}.`);
 export async function canExportStatic(): Promise<boolean> {
   return false;
 }
+/** A visitor's offline copy (#1480): a bundle is that copy already, and the
+ *  Export section is hidden in it; none to offer. */
+export async function getPublicBundleStatus(): Promise<null> {
+  return null;
+}
+export function publicBundleDownloadUrl(): string {
+  return '';
+}
+export const setPublicOfflineDownload = refuse(`Changing the offline download is ${READ_ONLY}.`);
 // The notebook export (#1034) builds its document from the server's own copy
 // of the dashboard, its data and its funnel: nothing a bundle could answer. The
 // Settings "Export" section is hidden in a bundle; these refuse any other
