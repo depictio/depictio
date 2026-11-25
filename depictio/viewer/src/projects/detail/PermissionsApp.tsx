@@ -905,6 +905,9 @@ const PermissionsApp: React.FC = () => {
         isPublic: Boolean(project.is_public),
         enabled: Boolean(project.public_offline_download),
         canManage,
+        // A locked (published) project meets the same rule as its visibility:
+        // only an administrator may change it.
+        lockedForMe: Boolean(project.published_lock) && !user?.is_admin,
         onChanged: (enabled: boolean) =>
           setProject((prev) => (prev ? { ...prev, public_offline_download: enabled } : prev)),
       }

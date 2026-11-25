@@ -21,6 +21,8 @@ const PublicDownloadRow: React.FC<{
   isPublic: boolean;
   enabled: boolean;
   canManage: boolean;
+  /** Editing is locked (a published project) and the reader is not an admin. */
+  lockedForMe?: boolean;
   variant?: 'glass' | 'classic';
   iconStroke?: number;
   onChanged: (enabled: boolean) => void;
@@ -30,6 +32,7 @@ const PublicDownloadRow: React.FC<{
   isPublic,
   enabled,
   canManage,
+  lockedForMe = false,
   variant = 'classic',
   iconStroke,
   onChanged,
@@ -69,10 +72,12 @@ const PublicDownloadRow: React.FC<{
   const title = 'Offline copy for visitors';
   const text = !isPublic
     ? 'Only a public project can offer it. Make the project public first.'
-    : enabled
+    : lockedForMe
+      ? `${enabled ? 'Visitors can download each dashboard as one HTML file that works offline.' : 'Visitors cannot download an offline copy.'} Editing is locked: only an administrator can change it.`
+      : enabled
       ? 'Visitors can download each dashboard as one HTML file that works offline.'
       : 'Let visitors download each dashboard as one HTML file that works offline. You see what it holds before turning it on.';
-  const disabled = !canManage || !isPublic || busy;
+  const disabled = !canManage || !isPublic || lockedForMe || busy;
   const checked = enabled && isPublic;
 
   const modal = (
