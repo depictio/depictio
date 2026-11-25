@@ -21,7 +21,8 @@ Optional roles:
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
-from depictio.recipes.lib.lineage import parent_rank
+from depictio.recipes.lib.dual_taxonomy import MERGED_PHYLUM_LEVEL, collapse
+from depictio.recipes.lib.lineage import asv_sample_columns, parent_rank
 
 # INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
@@ -67,6 +68,9 @@ SOURCES: list[RecipeSource] = [
         # deeper and this last one simply drops out.
         optional=True,
     ),
+    # The SILVA + PR2 merged ASV table, when the project has one (merged_taxonomy.py):
+    # read in place of the SILVA ASV table.
+    RecipeSource(ref="merged_taxonomy", dc_ref="merged_taxonomy", optional=True),
     # No input_schema: `habitat` and the id column are read behind presence checks.
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
@@ -146,6 +150,20 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         ("family", "Family"),
         ("genus", "Genus"),
     )
+
+    # A SILVA + PR2 merged ASV table (nf-core/ampliseq merged_taxonomy.py), when
+    # the project has one, replaces the five SILVA rel-tables: each level is
+    # collapsed from it, the Phylum at SILVA's level 2.
+    merged = sources.get("merged_taxonomy")
+    if merged is not None:
+        samples = asv_sample_columns(merged)
+        sources = {
+            **sources,
+            **{
+                ref: collapse(merged, samples, MERGED_PHYLUM_LEVEL + i)
+                for i, (ref, _) in enumerate(level_specs)
+            },
+        }
 
     for ref, rank in level_specs:
         wide = sources.get(ref)

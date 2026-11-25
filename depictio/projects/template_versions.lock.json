@@ -7,8 +7,8 @@
       "content_hash": "369ff13f44f44a779cb07e3f46149b97861d9b659b4b1aebde3af1d40c51695c"
     },
     "init/catalog_conformance": {
-      "version": "3.0.5",
-      "content_hash": "8704ff93a094cbfdba2859c6c003fac6d07005345a2298a496ca2c49acb5782e",
+      "version": "3.1.0",
+      "content_hash": "05d0f39d37dd4284c4c35dbf41cd54734b67f518136b4da6e820fab0195e8b89",
       "catalog": {
         "adapterremoval": "1.1.0",
         "agat": "1.1.1",
@@ -104,7 +104,7 @@
         "proteinfold": "1.1.1",
         "purple": "1.1.0",
         "qcatch": "1.1.1",
-        "qiime2": "2.1.1",
+        "qiime2": "2.2.0",
         "qsee": "1.1.0",
         "qualimap": "1.1.0",
         "quast": "1.1.1",
@@ -171,38 +171,38 @@
       }
     },
     "nf-core/ampliseq/2.14.0": {
-      "version": "1.4.0",
-      "content_hash": "d3ddd7bb74104e0aff49015e7b3128bd88c6717138a38038dd8aa1c8aed40ae4",
+      "version": "1.5.0",
+      "content_hash": "76b9673de140f47242d8f8e62a687e16b24417095fa3a8386ecac9d05fea3bad",
       "catalog": {
-        "qiime2": "2.1.1"
+        "qiime2": "2.2.0"
       }
     },
     "nf-core/ampliseq/2.16.0": {
-      "version": "1.5.0",
-      "content_hash": "49387d956b60d4cc0813d2e439a7a7e932eb493feb8143be9336bbb973e01162",
+      "version": "1.6.0",
+      "content_hash": "be0ad2d6c1bc14fadac38175afae11383e53ffae21b0f266b1b53fd9c405f9d4",
       "catalog": {
         "multiqc": "1.1.0",
-        "qiime2": "2.1.1",
+        "qiime2": "2.2.0",
         "sidle": "1.1.0",
         "vsearch": "1.1.0"
       }
     },
     "nf-core/ampliseq/2.18.0": {
-      "version": "1.8.0",
-      "content_hash": "c8bdb2d7487e4c11ccc12fd2e3a968b77f75a2ecaf2e0636571f6e62bf31fc02",
+      "version": "2.0.0",
+      "content_hash": "2dfbad2f41612bf638c1c34f0ecf51e7998786e2e7d4223f60a57217d76b1690",
       "catalog": {
         "multiqc": "1.1.0",
-        "qiime2": "2.1.1",
+        "qiime2": "2.2.0",
         "sidle": "1.1.0",
         "vsearch": "1.1.0"
       }
     },
     "nf-core/ampliseq/3.1.0": {
-      "version": "3.3.0",
-      "content_hash": "fb2c3158e06a5fb14ece5eec0510d89fe2740ad8b57a8c26f5fad2c3eb50a8b8",
+      "version": "3.4.0",
+      "content_hash": "ca683fe1db168cbb2e97698a580e159c0db3bc8064a83af13a8045aeb26bc4fe",
       "catalog": {
         "multiqc": "1.1.0",
-        "qiime2": "2.1.1",
+        "qiime2": "2.2.0",
         "sidle": "1.1.0",
         "vsearch": "1.1.0"
       }

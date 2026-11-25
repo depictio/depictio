@@ -63,6 +63,9 @@ SOURCES: list[RecipeSource] = [
         format="TSV",
         optional=True,
     ),
+    # The SILVA + PR2 merged ASV table, when the project has one (merged_taxonomy.py):
+    # read in place of the SILVA ASV table.
+    RecipeSource(ref="merged_taxonomy", dc_ref="merged_taxonomy", optional=True),
     # No input_schema: the sample id and group columns are found by name or position.
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
@@ -224,7 +227,9 @@ def transform(
     sources: dict[str, pl.DataFrame], params: dict[str, str] | None = None
 ) -> pl.DataFrame:
     """Build tip metadata from whichever taxonomy artefact the run produced."""
-    asv_tax = sources.get("asv_tax")
+    asv_tax = sources.get("merged_taxonomy")
+    if asv_tax is None:
+        asv_tax = sources.get("asv_tax")
     taxonomy = sources.get("taxonomy")
 
     if asv_tax is not None:

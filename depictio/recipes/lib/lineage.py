@@ -47,6 +47,8 @@ ASV_META_COLS: tuple[str, ...] = (
     "Species_exact",
     "confidence",
     "sequence",
+    # Added by the SILVA + PR2 merge (lib/dual_taxonomy.py), never a sample.
+    "taxonomy_source",
 )
 
 # The ranks depictio's taxonomy DCs expose, in hierarchy order. ``Domain`` is

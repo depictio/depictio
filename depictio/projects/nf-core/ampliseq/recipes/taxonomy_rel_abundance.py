@@ -1,5 +1,8 @@
 """Transform QIIME2 relative abundance table to long-format per-sample taxonomy table.
 
+A project with a SILVA + PR2 merged taxonomy (the ``merged_taxonomy`` DC) is
+collapsed from it at the Phylum instead of read from the SILVA rel-table.
+
 When a metadata DC is present (--var METADATA_FILE=... provided to depictio-cli),
 all metadata columns are joined generically. Without metadata, only the core
 abundance + taxonomy columns are returned.
@@ -8,7 +11,8 @@ abundance + taxonomy columns are returned.
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
-from depictio.recipes.lib.lineage import kingdom_phylum
+from depictio.recipes.lib.dual_taxonomy import MERGED_PHYLUM_LEVEL, collapse
+from depictio.recipes.lib.lineage import asv_sample_columns, kingdom_phylum
 
 # INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
@@ -19,6 +23,9 @@ SOURCES: list[RecipeSource] = [
         input_schema={"#OTU ID": pl.Utf8},
         read_kwargs={"skip_rows": 1},
     ),
+    # The SILVA + PR2 merged ASV table, when the project has one (merged_taxonomy.py):
+    # read in place of the SILVA ASV table.
+    RecipeSource(ref="merged_taxonomy", dc_ref="merged_taxonomy", optional=True),
     # No input_schema: the sample id column is found by name or position.
     RecipeSource(
         ref="metadata",
@@ -41,7 +48,12 @@ OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Unpivot wide abundance table and optionally join with all metadata columns."""
-    df = sources["rel_table"]
+    merged = sources.get("merged_taxonomy")
+    if merged is not None:
+        # The merged lineage keeps SILVA's slots: its Phylum is level 2.
+        df = collapse(merged, asv_sample_columns(merged), MERGED_PHYLUM_LEVEL)
+    else:
+        df = sources["rel_table"]
     df = df.rename({"#OTU ID": "taxonomy"})
 
     sample_cols = [c for c in df.columns if c != "taxonomy"]

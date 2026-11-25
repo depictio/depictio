@@ -16,7 +16,7 @@
 template:
   template_id: "nf-core/ampliseq/2.18.0"
   description: "nf-core/ampliseq microbial community analysis template for 16S/ITS amplicon sequencing"
-  version: "1.8.0"
+  version: "2.0.0"
   variables:
     - name: "DATA_ROOT"
       description: "Root directory containing ampliseq pipeline output (multiqc/, qiime2/)"
@@ -26,6 +26,12 @@ template:
       required: false
     - name: "TREE_FILE"
       description: "Path to the Newick tree to serve. Defaults to {DATA_ROOT}/qiime2/phylogenetic_tree/tree.nwk. Not needed for a large run: a tree over 3,000 tips is pruned at ingest to the taxa the tip-metadata recipe keeps."
+      required: false
+    - name: "PR2_RESULTS"
+      description: "Results folder of a second nf-core/ampliseq run of the same reads with the PR2 database (--dada_ref_taxonomy pr2). When set, the merged_taxonomy DC gives each ASV PR2's lineage if PR2 calls it Eukaryota, else SILVA's (DATA_ROOT must be the SILVA run), and the taxonomy views read it: tip metadata, sunburst, sankey, Phylum relative abundance, stacked taxonomy, and the views built on them. ANCOM-BC, the MA plot and taxonomy_composition stay the DATA_ROOT run's."
+      required: false
+    - name: "EUK_PHYLUM_RANK"
+      description: "With PR2_RESULTS: the PR2 rank shown as the Phylum of a eukaryote, Division, Subdivision (default) or Class. Metazoa read one rank deeper (Arthropoda, Mollusca ...)."
       required: false
     - name: "PPLACE_TREE_FILE"
       description: "Auto-set from params.json (pplace_tree): the grafted tree pplace/<name>.graft.<name>.epa_result.newick. Serves it as the phylogenetic tree on the phylogenetic-placement route, which writes no qiime2/phylogenetic_tree/tree.nwk. An explicit TREE_FILE takes precedence."
@@ -224,6 +230,17 @@ template:
     - if_var_present: "SKIP_ANCOM"
       remove_dc_tags: ["ancombc_results", "ma_canonical"]
       dashboards: ["dashboards/base.yaml"]
+    # A second run of the same reads against PR2 (PR2_RESULTS): merged_taxonomy
+    # reads that run's ASV taxonomy next to DATA_ROOT's (SILVA) table. Without
+    # it the DC is dropped and every taxonomy recipe reads the SILVA tables.
+    - if_var_absent: "PR2_RESULTS"
+      remove_dc_tags: ["merged_taxonomy"]
+    - if_var_present: "PR2_RESULTS"
+      override_dcs:
+        - data_collection_tag: "merged_taxonomy"
+          source_overrides:
+            pr2_tax:
+              path: "{PR2_RESULTS}/qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv"
     # QIIME2 names its collapsed taxonomy by depth, and the Phylum's depth follows
     # the reference database's ranks. The DC paths stay pinned at the default
     # database's depths (Phylum 3), which the reference seeds were built from;
@@ -427,6 +444,31 @@ workflows:
               "faith_pd_iqr": "Interquartile spread across the iterations"
               "iterations": "Iterations the median was taken over"
 
+      # SILVA + PR2 merged ASV taxonomy (PR2_RESULTS set, else removed). Declared
+      # before every taxonomy recipe: they read it as a dc_ref when it exists,
+      # and collections are ingested in declaration order.
+      - data_collection_tag: "merged_taxonomy"
+        description: "ASV taxonomy merged from the SILVA run and a PR2 run of the same reads (PR2 for eukaryotes, SILVA otherwise), with the SILVA run's relative abundances"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/ampliseq/merged_taxonomy.py"
+            params:
+              euk_phylum_rank: "{EUK_PHYLUM_RANK}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "ID": "ASV identifier (sequence hash, the tree's tip label)"
+              "taxonomy_source": "Database the lineage comes from: pr2 (PR2 calls it Eukaryota), silva (SILVA calls it Bacteria or Archaea), fallback (neither: SILVA's label kept)"
+              "Kingdom": "SILVA Kingdom, or PR2 Domain for a eukaryote (organelles stay apart: Eukaryota:plas, :mito, :nucl)"
+              "Phylum": "SILVA Phylum, or PR2 EUK_PHYLUM_RANK (Subdivision by default; Metazoa one rank deeper)"
+              "Class": "Next rank down"
+              "Order": "Next rank down"
+              "Family": "Next rank down"
+              "Genus": "Next rank down"
+              "Species": "Next rank down"
+              "confidence": "Classifier confidence of the database the lineage comes from (0-1)"
       - data_collection_tag: "taxonomy_composition"
         description: "Taxonomic composition across samples (from raw QIIME2 barplot)"
         config:

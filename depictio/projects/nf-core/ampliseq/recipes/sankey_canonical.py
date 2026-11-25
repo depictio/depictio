@@ -52,6 +52,9 @@ SOURCES: list[RecipeSource] = [
         # under an 8-rank one (sbdi-gtdb) it is the Family.
         optional=True,
     ),
+    # The SILVA + PR2 merged ASV table, when the project has one (merged_taxonomy.py):
+    # read in place of the SILVA ASV table.
+    RecipeSource(ref="merged_taxonomy", dc_ref="merged_taxonomy", optional=True),
     # No input_schema: habitat and the sample id column are read only when present.
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
@@ -117,7 +120,9 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     database has. A collapsed rel-table is the fallback for runs that ship no
     DADA2 ASV table.
     """
-    asv_tax = sources.get("asv_tax")
+    asv_tax = sources.get("merged_taxonomy")
+    if asv_tax is None:
+        asv_tax = sources.get("asv_tax")
     genus = sources.get("genus")
 
     if asv_tax is not None and not asv_tax.is_empty():

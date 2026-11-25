@@ -312,7 +312,7 @@ class TestOnALocalFolder:
         body = response.json()
         assert body["template_id"] == "nf-core/ampliseq/2.18.0"
         collections = [c for w in body["workflows"] for c in w["collections"]]
-        assert len(collections) == 26
+        assert len(collections) == 27  # merged_taxonomy (PR2_RESULTS) included
         assert body["dashboards"] == ["dashboards/base.yaml"]
 
     def test_template_of_an_edited_shipped_template(self, client):

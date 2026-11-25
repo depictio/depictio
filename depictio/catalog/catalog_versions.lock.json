@@ -383,8 +383,8 @@
       "content_hash": "72a0d4cdb23c8752ec1ca60bfbaca6b60e1f6b8ef3de87be9883630a7808c82e"
     },
     "qiime2": {
-      "version": "2.1.1",
-      "content_hash": "10556ccee96c397bce74a17ada3354c9203a0879b67a9c960a4c10c1a3c7447b"
+      "version": "2.2.0",
+      "content_hash": "1644c73bfe5d1eee5f7168ed8c87502691fe5997f9d76d85a0fe4cf0896bd29b"
     },
     "qsee": {
       "version": "1.1.0",

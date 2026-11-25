@@ -212,8 +212,8 @@ def test_ampliseq_is_described_whole():
     described = overlay.describe_template(AMPLISEQ)
     collections = [c for w in described["workflows"] for c in w["collections"]]
 
-    assert len(collections) == 26
-    assert sum(c["kind"] == "recipe" for c in collections) == 22
+    assert len(collections) == 27  # merged_taxonomy (PR2_RESULTS) included
+    assert sum(c["kind"] == "recipe" for c in collections) == 23
     assert described["dashboards"] == ["dashboards/base.yaml"]
     assert len(described["links"]) == 23
     assert "SAMPLESHEET_FILE" in {v["name"] for v in described["variables"]}
