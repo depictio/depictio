@@ -9,6 +9,7 @@ import {
   groupFromSelectionFilter,
   groupsRenderPayload,
   groupsToFilters,
+  labelGroupKey,
   nextGroupColor,
   readSelectionGroups,
   uniqueGroupName,
@@ -59,8 +60,10 @@ export interface SelectionGroupsApi {
   /** Turn off every group's filter participation (dashboard "Reset all"). */
   deactivateAllGroupFilters: () => void;
   /** Back to defaults for every analysis mode (coloring, display, card
-   *  comparison). Saved groups and their filter toggles are kept — deleting
-   *  data stays an explicit per-group action. */
+   *  comparison), for saved and label groups alike: the panel also unpicks the
+   *  label column, and label groups hidden with their × come back. Saved groups,
+   *  their filter toggles and the labels themselves are kept — deleting data
+   *  stays an explicit per-group action. */
   resetAnalysis: () => void;
   setColorBy: (next: ColorByState) => void;
   setCompareInCards: (on: boolean) => void;
@@ -95,6 +98,7 @@ function hydrate(dashboardId: string | undefined) {
     showOther: stored?.showOther ?? true,
     showOverall: stored?.showOverall ?? true,
     analysisArmed: stored?.analysisArmed ?? false,
+    hiddenLabels: stored?.hiddenLabels ?? [],
   };
 }
 
@@ -109,6 +113,11 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
   const [showOther, setShowOtherState] = useState<boolean>(initial.showOther);
   const [showOverall, setShowOverallState] = useState<boolean>(initial.showOverall);
   const [analysisArmed, setAnalysisArmedState] = useState<boolean>(initial.analysisArmed);
+  const [hiddenLabels, setHiddenLabels] = useState<string[]>(initial.hiddenLabels);
+  // Read by the annotation sync, which must see a × at once: the group it
+  // removed would otherwise be derived back before the state lands.
+  const hiddenRef = useRef(hiddenLabels);
+  hiddenRef.current = hiddenLabels;
 
   // Which dashboard id the current state actually reflects. The write-through
   // below must not run for a dashboardId the state hasn't been re-hydrated for
@@ -132,6 +141,7 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
     setShowOtherState(next.showOther);
     setShowOverallState(next.showOverall);
     setAnalysisArmedState(next.analysisArmed);
+    setHiddenLabels(next.hiddenLabels);
     setHydratedFor(dashboardId);
   }, [dashboardId]);
 
@@ -148,6 +158,7 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
       showOther,
       showOverall,
       analysisArmed,
+      hiddenLabels,
     );
   }, [
     dashboardId,
@@ -159,6 +170,7 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
     showOther,
     showOverall,
     analysisArmed,
+    hiddenLabels,
   ]);
 
   // Mirror of `groups` so `createGroupFromFilter` can build the group outside
@@ -197,6 +209,17 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
   }, []);
 
   const deleteGroup = useCallback((id: string) => {
+    // A label group's × removes it from the analysis like any group's, but
+    // its label lives in the Metadata panel, which this does not edit: the
+    // group is hidden until its label column is picked again.
+    const target = groupsRef.current.find((g) => g.id === id);
+    if (target?.annotationColumnId) {
+      const key = labelGroupKey(target.annotationColumnId, target.annotationLabel ?? target.name);
+      if (!hiddenRef.current.includes(key)) {
+        hiddenRef.current = [...hiddenRef.current, key];
+        setHiddenLabels(hiddenRef.current);
+      }
+    }
     // Deleting the last group while coloring/comparing by groups leaves a
     // dangling mode; degrade rather than keep a stale toggle. The decision
     // reads the ref (updaters must stay pure under StrictMode); the removal
@@ -214,11 +237,24 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
     );
   }, []);
 
+  // The label column the last sync saw: picking a column (again) brings back
+  // the label groups hidden from it. `undefined` until the first sync, so a
+  // reload keeps what was hidden.
+  const syncedColumnRef = useRef<string | null | undefined>(undefined);
   const syncAnnotationGroups = useCallback((annotations: DashboardAnnotations | null) => {
+    const active = annotations?.activeColumnId ?? null;
+    if (syncedColumnRef.current !== undefined && syncedColumnRef.current !== active) {
+      if (hiddenRef.current.length > 0) {
+        hiddenRef.current = [];
+        setHiddenLabels([]);
+      }
+    }
+    syncedColumnRef.current = active;
     // The stamp is taken outside the updater, which must stay pure.
     const now = Date.now();
+    const hidden = new Set(hiddenRef.current);
     setGroups((prev) => {
-      const next = deriveAnnotationGroups(annotations, prev, undefined, now);
+      const next = deriveAnnotationGroups(annotations, prev, undefined, now, hidden);
       return sameGroups(prev, next) ? prev : next;
     });
   }, []);
@@ -230,6 +266,10 @@ export function useSelectionGroups(dashboardId: string | undefined): SelectionGr
   }, []);
 
   const resetAnalysis = useCallback(() => {
+    // The label column is unpicked by the caller (it lives in the annotations),
+    // which brings back what was hidden from it on the next pick.
+    hiddenRef.current = [];
+    setHiddenLabels([]);
     setColorByState(COLOR_BY_NONE);
     setCompareInCardsState(false);
     setDisplayModeState('color');

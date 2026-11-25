@@ -15,7 +15,7 @@ import {
   MAX_SERVER_GROUPS,
 } from './sessionAnnotations';
 import { TAB10_PALETTE } from './colors';
-import { nextGroupColor, type SelectionGroup, uniqueGroupName } from './selectionGroups';
+import { labelGroupKey, nextGroupColor, type SelectionGroup, uniqueGroupName } from './selectionGroups';
 
 /** The server's name for rows in no group (`OTHER_LABEL`); a group may not take it. */
 const OTHER_LABEL = 'Other';
@@ -59,6 +59,7 @@ export function deriveAnnotationGroups(
   groups: SelectionGroup[],
   palette: readonly string[] = TAB10_PALETTE,
   now: number = Date.now(),
+  hiddenLabels: ReadonlySet<string> = new Set(),
 ): SelectionGroup[] {
   const manual = groups.filter((g) => !g.annotationColumnId);
   const column = annotations?.columns.find((c) => c.id === annotations.activeColumnId);
@@ -81,6 +82,9 @@ export function deriveAnnotationGroups(
   // A placeholder so no derived group is named like the server's "Other".
   const reserved = { id: '__other__', name: OTHER_LABEL } as SelectionGroup;
   for (const label of distinctLabels(column)) {
+    // Removed from the analysis with its ×: the label stays in the Metadata
+    // panel, the group comes back when the column is picked again.
+    if (hiddenLabels.has(labelGroupKey(column.id, label))) continue;
     const prev = previous.get(label);
     const values = (keysByLabel.get(label) ?? []).sort(collator.compare);
     out.push({

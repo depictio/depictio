@@ -110,6 +110,7 @@ import {
   readEditorFilters,
   writeEditorFilters,
   useSelectionGroups,
+  useArmAnalysisOnCompare,
   withShared,
   emptyAnnotations,
   annotationColumnBudget,
@@ -950,6 +951,8 @@ const EditorApp: React.FC = () => {
   useEffect(() => {
     if (annotationsState.loaded) syncAnnotationGroups(annotationView);
   }, [annotationsState.loaded, annotationView, syncAnnotationGroups]);
+  // "Compare in the charts" on a label column arms Analysis, coloured by its groups.
+  useArmAnalysisOnCompare(annotationView?.activeColumnId, annotationsState.loaded, groupsApi);
   const annotationPins = useMemo(
     () => (timeTravelling ? dataPinBody({ asOfVersionId, pins: dataPins }) : null),
     [timeTravelling, asOfVersionId, dataPins],

@@ -7,7 +7,7 @@ import {
   sameGroups,
 } from './annotationGroups';
 import type { DashboardAnnotations } from './sessionAnnotations';
-import type { SelectionGroup } from './selectionGroups';
+import { labelGroupKey, type SelectionGroup } from './selectionGroups';
 
 const PALETTE = ['#a', '#b', '#c', '#d'];
 
@@ -125,5 +125,25 @@ describe('helpers', () => {
     expect(sameGroups(a, b)).toBe(true);
     const c = deriveAnnotationGroups(annotations({ S1: 'yes', S2: 'yes' }), a, PALETTE, 2);
     expect(sameGroups(a, c)).toBe(false);
+  });
+});
+
+describe('a label group removed with its × (#1476)', () => {
+  it('is not derived back while hidden, and the other labels stay', () => {
+    const hidden = new Set([labelGroupKey('c1', 'responder')]);
+    const out = deriveAnnotationGroups(
+      annotations({ S1: 'responder', S2: 'non', S3: 'responder' }),
+      [],
+      PALETTE,
+      1,
+      hidden,
+    );
+    expect(out.map((g) => g.name)).toEqual(['non']);
+  });
+
+  it('only hides that column\'s label', () => {
+    const hidden = new Set([labelGroupKey('c2', 'responder')]);
+    const out = deriveAnnotationGroups(annotations({ S1: 'responder', S2: 'non' }), [], PALETTE, 1, hidden);
+    expect(out.map((g) => g.name).sort()).toEqual(['non', 'responder']);
   });
 });

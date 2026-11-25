@@ -1007,6 +1007,7 @@ export {
 export type { GroupStatusEntry, GroupStatusSummary } from './groupStatus';
 export { useSelectionGroups } from './hooks/useSelectionGroups';
 export type { SelectionGroupsApi } from './hooks/useSelectionGroups';
+export { useArmAnalysisOnCompare } from './hooks/useArmAnalysisOnCompare';
 export {
   annotationsProblem,
   emptyAnnotations,

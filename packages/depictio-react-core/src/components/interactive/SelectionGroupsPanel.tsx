@@ -346,7 +346,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
           style={{ flex: 1 }}
         />
         <Tooltip
-          label="Back to defaults: no coloring, overlay display, no card comparison. Saved groups are kept."
+          label="Back to defaults: no coloring, overlay display, no card comparison, no label column. Saved groups and labels are kept."
           withArrow
           openDelay={400}
         >
@@ -360,9 +360,15 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
               !compareInCards &&
               displayMode === 'color' &&
               showOther &&
-              showOverall
+              showOverall &&
+              !labelColumns.some((l) => l.active)
             }
-            onClick={onResetAnalysis}
+            onClick={() => {
+              // Saved and label groups reset alike: the label column is part
+              // of what "Color by groups" was showing.
+              onResetAnalysis();
+              if (labelColumns.some((l) => l.active)) onPickLabelColumn?.(null);
+            }}
             leftSection={<Icon icon="mdi:restore" width={14} height={14} />}
             styles={CONTROL_LABEL_STYLES}
           >
@@ -768,20 +774,35 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                   <Icon icon="mdi:filter-variant" width={14} height={14} />
                 </ActionIcon>
               </Tooltip>
-              {!g.annotationColumnId && (
+              {/* Every group has its ×. A saved group is deleted; a label group
+                  leaves the analysis and its label stays in Metadata, back
+                  when the label column is picked again. */}
+              <Tooltip
+                label={
+                  g.annotationColumnId
+                    ? 'Remove from the analysis. The label stays in Metadata; pick the label column again to bring it back.'
+                    : 'Delete this group'
+                }
+                withArrow
+                openDelay={400}
+              >
                 <ActionIcon
                   className="dc-ap-act dc-ap-act--danger"
                   variant="subtle"
                   color="gray"
                   size="sm"
                   ml={2}
-                  aria-label={`Delete group ${g.name}`}
+                  aria-label={
+                    g.annotationColumnId
+                      ? `Remove group ${g.name} from the analysis`
+                      : `Delete group ${g.name}`
+                  }
                   onClick={() => onDeleteGroup(g.id)}
                   style={{ flexShrink: 0 }}
                 >
                   <Icon icon="mdi:close" width={14} height={14} />
                 </ActionIcon>
-              )}
+              </Tooltip>
             </Group>
             {showDetail && (
             <>

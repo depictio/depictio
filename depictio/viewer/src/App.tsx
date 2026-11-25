@@ -69,6 +69,7 @@ import {
   FILTER_PANEL_RAIL_WIDTH,
   countActiveFilters,
   useSelectionGroups,
+  useArmAnalysisOnCompare,
   useCategoricalColumns,
   useColorByColumnRender,
   resolveGroupRender,
@@ -1589,6 +1590,8 @@ const App: React.FC = () => {
   useEffect(() => {
     if (annotationsState.loaded) syncAnnotationGroups(annotationView);
   }, [annotationsState.loaded, annotationView, syncAnnotationGroups]);
+  // "Compare in the charts" on a label column arms Analysis, coloured by its groups.
+  useArmAnalysisOnCompare(annotationView?.activeColumnId, annotationsState.loaded, groupsApi);
   const annotationPins = useMemo(
     () => (previewRequest ? dataPinBody(previewRequest) : null),
     [previewRequest],

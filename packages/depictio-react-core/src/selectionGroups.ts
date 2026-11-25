@@ -190,6 +190,15 @@ export interface SelectionGroupsPayload {
    *  page navigation — the mode would otherwise die on every tab the groups
    *  survive into. Additive to v2: absent in older payloads, read as false. */
   analysisArmed: boolean;
+  /** Label groups the reader removed from the analysis with their ×
+   *  (`labelGroupKey`), until the label column is picked again. The labels
+   *  themselves stay in the Metadata panel. Additive to v2: absent means none. */
+  hiddenLabels?: string[];
+}
+
+/** The key a label group is hidden under: its label column and its label. */
+export function labelGroupKey(columnId: string, label: string): string {
+  return `${columnId}\u0000${label}`;
 }
 
 function parseColorBy(raw: unknown): ColorByState {
@@ -400,6 +409,9 @@ export function readSelectionGroups(dashboardId: string): SelectionGroupsPayload
       showOther: parsed.showOther !== false,
       showOverall: parsed.showOverall !== false,
       analysisArmed: parsed.analysisArmed === true,
+      hiddenLabels: Array.isArray(parsed.hiddenLabels)
+        ? (parsed.hiddenLabels as unknown[]).filter((k): k is string => typeof k === 'string')
+        : [],
     };
   } catch {
     return null;
@@ -415,6 +427,7 @@ export function writeSelectionGroups(
   showOther = true,
   showOverall = true,
   analysisArmed = false,
+  hiddenLabels: string[] = [],
 ): void {
   try {
     const key = STORAGE_PREFIX + dashboardId;
@@ -435,6 +448,7 @@ export function writeSelectionGroups(
         showOther,
         showOverall,
         analysisArmed,
+        ...(hiddenLabels.length > 0 ? { hiddenLabels } : {}),
       }),
     );
   } catch {
