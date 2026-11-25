@@ -447,6 +447,7 @@ def test_preflight_happy_path(client, owner, monkeypatch: pytest.MonkeyPatch):
             "verdict": "over_soft_limit",
         },
         "python_runtime": None,
+        "collections": [],
     }
 
 

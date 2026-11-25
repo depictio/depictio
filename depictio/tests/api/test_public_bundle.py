@@ -195,7 +195,9 @@ def built(monkeypatch: pytest.MonkeyPatch, mongo, s3, dispatched) -> list[dict[s
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch: pytest.MonkeyPatch):
+    # The usage counter writes to the real Mongo; its own test covers it.
+    monkeypatch.setattr(routes_mod, "_record_download", lambda dashboard_id, request: None)
     app = FastAPI()
     app.include_router(routes_mod.public_bundle_router, prefix="/serverless")
     with TestClient(app) as test_client:
