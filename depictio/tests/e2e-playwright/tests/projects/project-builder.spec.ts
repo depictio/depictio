@@ -1384,7 +1384,7 @@ test.describe("Project Builder, capabilities", () => {
 
     const links = byTestId(page, "builder-links");
     await expect(links).toContainText("Links filter one collection from another on a dashboard");
-    await expect(links).toContainText("Joins and recipes are not available here");
+    await expect(links).toContainText("Joins are added on the project page once it is created");
     await byTestId(page, "builder-link-add").click();
     await expect(byTestId(page, "builder-link")).toHaveCount(1);
 

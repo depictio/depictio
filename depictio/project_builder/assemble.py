@@ -644,3 +644,29 @@ YAML_HEADER = """\
 
 def template_yaml(template: dict[str, Any]) -> str:
     return YAML_HEADER + yaml.safe_dump(template, sort_keys=False, allow_unicode=True, width=100)
+
+
+PROJECT_YAML_HEADER = """\
+# Defined with the Depictio Project Builder.
+# This project, on the folder it was built from. Edit it, then:
+#   depictio ingest --project-config-path <this file>
+"""
+
+
+def build_project(template: dict[str, Any], data_root: str) -> dict[str, Any]:
+    """The project ``template`` stands for on ``data_root``: a project file.
+
+    The ``template`` block is left out and every ``{DATA_ROOT}`` is the root
+    itself, so the file reads as the project it is, with real locations.
+    """
+    from depictio.cli.cli.utils.templates import substitute_template_variables
+
+    root = data_root.rstrip("/") or data_root
+    body = {key: value for key, value in template.items() if key != "template"}
+    return substitute_template_variables(body, {"DATA_ROOT": root})
+
+
+def project_yaml(project: dict[str, Any]) -> str:
+    return PROJECT_YAML_HEADER + yaml.safe_dump(
+        project, sort_keys=False, allow_unicode=True, width=100
+    )

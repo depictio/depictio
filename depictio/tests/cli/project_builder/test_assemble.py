@@ -597,3 +597,28 @@ class TestTemplateYaml:
         loaded = yaml.safe_load(text)
         scan = loaded["workflows"][0]["data_collections"][0]["config"]["scan"]
         assert scan["scan_parameters"]["filename"] == "{DATA_ROOT}/samplesheet.csv"
+
+
+class TestProjectFile:
+    """The project file: the template's project at the top level, on its root."""
+
+    def test_the_template_block_goes_and_every_location_is_on_the_root(self):
+        draft = project(table_dc(), scan_dc())
+        template = build_template(draft)
+        built = assemble.build_project(template, "/data/run42/")
+
+        assert "template" not in built
+        assert built["name"] == template["name"]
+        text = yaml.safe_dump(built)
+        assert "{DATA_ROOT}" not in text
+        assert built["workflows"][0]["data_location"]["locations"] == ["/data/run42"]
+        assert "/data/run42/samplesheet.csv" in text
+        # The template itself is left as it was.
+        assert template["workflows"][0]["data_location"]["locations"] == ["{DATA_ROOT}"]
+
+    def test_the_file_says_how_to_ingest_it(self):
+        draft = project(table_dc())
+        text = assemble.project_yaml(assemble.build_project(build_template(draft), "s3://b/p"))
+        assert text.startswith("# Defined with the Depictio Project Builder.")
+        assert "depictio ingest --project-config-path" in text
+        assert yaml.safe_load(text)["workflows"][0]["data_location"]["locations"] == ["s3://b/p"]

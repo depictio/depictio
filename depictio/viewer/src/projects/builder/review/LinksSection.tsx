@@ -388,7 +388,8 @@ export const LinksSection: React.FC<{
           />
         ))}
         <Text size="xs" c="dimmed">
-          Joins and recipes are not available here: add them later via the project YAML and{' '}
+          Joins are added on the project page once it is created (Add join); recipes, in the
+          project YAML with{' '}
           <Text span ff="monospace" size="xs">
             depictio ingest
           </Text>
