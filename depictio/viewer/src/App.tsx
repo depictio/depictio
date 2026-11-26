@@ -93,6 +93,8 @@ import {
   AdvancedVizPlacementDefaultProvider,
   HighlightProvider,
   GenomeDebugPanel,
+  bundleOpeningFilters,
+  useIsStaticBundle,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -234,12 +236,14 @@ const App: React.FC = () => {
   // hydration reads storage and decodes the URL fragment.
   const hydrationRef = useRef<InitialFilterHydration | null>(null);
   // The dashboard view of a combined report + dashboard file opens on the
-  // filters its report is showing (null everywhere else). That state is the
+  // filters its report is showing, a bundle on the view it was exported at
+  // (null everywhere else). That state is the
   // exported one, authoritative: no declared default is added on top of it.
   const sharedOpeningRef = useRef(false);
   if (hydrationRef.current === null) {
     hydrationRef.current = hydrateInitialFilters(extractDashboardId(), extractPreviewVersionId());
-    const shared = combinedInitialFilters();
+    // A plain bundle exported at a filtered view opens on it the same way.
+    const shared = combinedInitialFilters() ?? bundleOpeningFilters();
     if (shared) {
       hydrationRef.current = { ...hydrationRef.current, filters: shared };
       sharedOpeningRef.current = true;
@@ -1522,6 +1526,9 @@ const App: React.FC = () => {
   // that slide is over, so the grid sees one width change at a time.
   const [metadataOpen, setMetadataOpen] = useState(false);
   const [metadataWidth, setMetadataWidth] = useMetadataPanelWidth();
+  // In an offline file the Analysis panel does not work yet (lasso and table
+  // selections make no group): its button is disabled until it does.
+  const isStaticBundle = useIsStaticBundle();
   const swapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (swapTimer.current) clearTimeout(swapTimer.current);
@@ -1829,6 +1836,11 @@ const App: React.FC = () => {
           armed={analysisArmed}
           onToggle={handleAnalysisToggle}
           pushesContent={!isNarrow}
+          unavailable={
+            isStaticBundle
+              ? 'Not available in an offline file yet: groups cannot be made here.'
+              : null
+          }
         >
           {groupsSection}
         </GroupingHeaderControl>

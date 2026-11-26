@@ -766,11 +766,25 @@ def capture_dashboard_version(
             record.seq = int(latest.get("seq", 1))
             record.created_at = latest.get("created_at", now)
             record.save_count = int(latest.get("save_count", 1)) + 1
+            _content_changed(family_key, project_id)
             return record
 
     record.seq = version_store.insert_with_next_seq(family_key, payload)
     version_store.maybe_prune_family(family_key, now=now)
+    _content_changed(family_key, project_id)
     return record
+
+
+def _content_changed(family_key: str, project_id: str) -> None:
+    """A family's content changed: what derives from it follows (#1480).
+
+    Every content-mutating route captures, so this is the one place a public
+    offline bundle learns that it is stale. It only queues a rebuild, and only
+    for a project whose visitors may download it; it never raises.
+    """
+    from depictio.serverless import public_bundle
+
+    public_bundle.notify_dashboard_changed(family_key, project_id)
 
 
 def capture_quietly(dashboard_id: ObjectId | str, **kwargs: Any) -> Optional[DashboardVersion]:

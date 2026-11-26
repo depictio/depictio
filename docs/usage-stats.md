@@ -15,6 +15,10 @@ return 404 and stops all recording.
 | `usage_logins` | day × user × method | every token issue: `password`, `oidc:<provider>`, `magic_link`, `temporary` (public-mode guest), `single_user` |
 | `usage_visits` | day × browser (`visitor_id`) | `POST /analytics/hit`, sent by the viewer once per page load |
 | `usage_dashboard_views` | day × dashboard | the same beacon, when a dashboard is opened |
+| `usage_dashboard_views` (same row) | day × dashboard | `record_download()`, when a dashboard's offline bundle is downloaded |
+
+A download is counted as a bare daily total on the dashboard's row. No IP, user agent,
+user id or visitor id is read or stored for it, so the count identifies no one.
 
 Rows are upserts. Their number grows with visitors × days, not with requests, and a TTL
 index on `day` removes them after `DEPICTIO_USAGE_STATS_RETENTION_DAYS` (default 395, i.e.

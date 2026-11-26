@@ -91,10 +91,12 @@ def build_report_manifest(
     state: AnalysisState,
     *,
     python_runtime: str = "off",
+    public: bool = False,
 ) -> BundleManifest:
     """Producer A's manifest for ``dashboard_id``'s family, opening on ``state``.
 
-    Raises :class:`ReportRuntimeRefused` for a state the runtime cannot
+    ``public`` builds it as a visitor's file is built (no figure source, the
+    user given without an email). Raises :class:`ReportRuntimeRefused` for a state the runtime cannot
     reproduce, and lets producer A's own errors through (permission —
     ``ProducerAError`` — and size — ``BundleTooLargeError``).
     """
@@ -108,7 +110,12 @@ def build_report_manifest(
     from depictio.serverless import producer_a
 
     result = producer_a.export_manifest(
-        str(dashboard_id), producer_a.resolve_user(user), python_runtime=python_runtime, state=state
+        str(dashboard_id),
+        producer_a.resolve_user(user),
+        python_runtime=python_runtime,
+        state=state,
+        # A visitor's report embeds the public build (#1480).
+        **({"public": True} if public else {}),
     )
     assert result.manifest is not None
     return result.manifest.model_copy(update={"initial_filters": initial_filters(state)})

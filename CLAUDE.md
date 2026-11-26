@@ -239,7 +239,8 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   `published_lock.dashboard_ids`, so a viewer's copy of a published dashboard stays editable
 - Import records the state it replaces, then an `import` version; a re-push from the same
   source lineage is a new version. Provenance (`project.provenance`) is server-owned:
-  create/update strip it from payloads
+  create/update strip it from payloads, as they strip `public_offline_download` (an imported
+  project follows the instance default until its owner decides)
 - `published_lock` is returned by `/dashboards/get` but is runtime-only on `DashboardData`
   (popped in `/save`, in `SNAPSHOT_DERIVED_FIELDS`)
 - **Invite codes** (`migration_invites`, `services/migration_invites.py`): a target admin
@@ -365,9 +366,12 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   extraction via the viewer's `/embed/{dashboard}/{component}` route (`services/embed/`)
 - The rendered HTML report is that same `.qmd` run by `quarto render` on a worker, behind
   `DEPICTIO_NOTEBOOK_EXPORT_RENDER_ENABLED` (on, once the export is). The server render never runs an author's Python:
-  code-mode figures come from the API's sandbox (`ExportPlan.author_code=False`), and a dashboard
-  carrying them renders for project owners and editors only (project role, not ownership of a
-  duplicated document); anonymous visitors cannot render
+  code-mode figures come from the API's sandbox (`ExportPlan.author_code=False`). A dashboard
+  carrying them renders for project editors, and for any signed-in reader when its code is the
+  project's own: every owner of each code tab's document is a project editor
+  (`_code_written_by_project`). A viewer's duplicated copy stays theirs to download as `.qmd` only.
+  Readers who are not editors are also limited per address (`render_per_ip_max`, fail closed);
+  anonymous visitors cannot render
 - **Nothing dynamic reaches the `.qmd` raw**: Quarto runs inline `` `{python}` ``, chunk fences and
   `{{< shortcodes >}}` (in prose, raw HTML/typst, code-cell strings and cell *output*). Every site
   writes through `depictio/notebook/qmd_safe.py` (`esc`, `defuse`, `comment`, `typst_str`,
@@ -409,7 +413,8 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   `combined-runtime.mjs` its JS twin (byte parity: `test_runtime_compose_parity.py`). The
   generator wraps each tile in `data-depictio-tile="<tab>:<index>"` with its own output as
   `.depictio-fallback`; `depictio/serverless/report.py` builds the block (owner-only, like a static
-  export); `POST /serverless/report-manifest/{id}` is a Celery job
+  export; a visitor of an offering project gets the public build, `runtime.public`);
+  `POST /serverless/report-manifest/{id}` is a Celery job
   (202, then `GET .../job/{job_id}`)
 - Which tile mounts: `static-core/src/reportMount.ts` (live always, frozen only at the exported state)
 - Exported state: `/export-static` takes the `AnalysisState` shown at click time; every freeze is
@@ -423,6 +428,41 @@ Six types (`table`, `jbrowse2`, `multiqc`, `image`, `geojson`, `phylogeny`) with
   vitest). Change the Python side, regenerate the fixture
 - `BundleManifest.initial_filters` is the report's exported state; a contract change means
   regenerating `serverless.schema.json` and `manifest-basic.json`
+- **Public offline download** (#1480): the data of a public project are public, so its visitors get
+  pre-built files. Off by default on the instance: needs `DEPICTIO_STATIC_EXPORT_ENABLED` and
+  `DEPICTIO_STATIC_EXPORT_PUBLIC_DOWNLOAD_ENABLED` (`features.static_export_public_download`). Then
+  on for every public project (`..._PUBLIC_DOWNLOAD_DEFAULT`, true) unless its owner says otherwise:
+  the server-owned `Project.public_offline_download` (`None` = the default; `public_bundle.offered`),
+  written only by `PUT /projects/{id}/public_offline_download` (owner, `acknowledged` to enable, 409
+  on a private project, GUARDED). Startup queues the missing copies (`schedule_missing`), as does
+  making a project public. `depictio/serverless/public_bundle.py`: one `public_bundles` doc per family
+  (`_id` = main tab, no index), `serverless-public/<main>/<key>.html`, current + previous kept. The
+  key hashes the family snapshot (not the version id: an autosave folds into it), each collection's
+  newest aggregation, the MultiQC report set and the runtime build
+- A public build runs as the owner with `email=""` and `public=True` (`export_static` refuses an
+  email). Code-mode figures keep their transpiled prologue (a closed JSON op list, never code) and
+  lose `code_content`. A signed-in viewer of an offering project (a guest too, never an anonymous
+  caller) may `POST /export-static` their view: the same public build at their state (pins: 400),
+  per-IP limit on top of the per-user one, the job row theirs; `can-export` answers `public: true`.
+  Their preflight is the public build's binding one, counted in the same per-IP window. They may
+  ask for the Python runtime (the modal checks it when some tile needs it): the figures it serves
+  carry their code in their job, code any visitor already reads from `/dashboards/get`. The ready
+  copies are built with `python_runtime="off"`.
+  Rebuilds are queued, coalesced (`public_rebuild_delay_s`), from `capture_dashboard_version`,
+  `invalidate_data_collection_cache` and MultiQC report writes; the previous file is served with
+  `rebuilding` meanwhile. A new content or data path that skips those funnels serves a stale copy
+- Where reports render (`DEPICTIO_NOTEBOOK_EXPORT_ENABLED` + its render), each built bundle queues
+  its report under the same key (`build_public_report`, one report slot): the combined report +
+  dashboard file and its PDF (`public_report.py`: owner token minted and revoked, `exported_by`
+  None, default state, `author_code=False` and `code_content` stripped, public manifest), served
+  by `/download?file=report|pdf`. A failed PDF keeps the report; the previous report is served
+  while the next renders, and a report never runs ahead of its bundle. A render on request stays
+  owners' and editors' when code-mode figures are present: `NotebookPreflight.render_reason`
+  says so before the click
+- `GET /serverless/public-bundle/{id}[/download]` (own router, 404 alike for every refusal) reads only:
+  per-IP Redis limit, fail closed (503), presigned 5-min 302 else streamed, counted in
+  `usage_dashboard_views.downloads`. Private, deleted project or dashboard drop the copies.
+  `POST /export-static` has its own per-user limit and a queue cap (owner jobs + public rebuilds)
 - Design: `docs/design/rfc-serverless-deployment.md` §14, `rfc-notebook-export.md` §3.9
 
 ### Auth & Storage

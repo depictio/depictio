@@ -55,6 +55,9 @@ class UsagePoint(BaseModel):
     unique_ips: int = 0
     pageviews: int = 0
     dashboard_views: int = 0
+    #: Offline-bundle downloads of a dashboard, counted per day like views but
+    #: with no visitor attached. Default 0 so stored archives still validate.
+    downloads: int = 0
     temporary_users: int = 0
     signups: int = 0
     new_projects: int = 0

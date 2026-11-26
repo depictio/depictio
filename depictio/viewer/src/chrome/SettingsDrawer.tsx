@@ -19,7 +19,7 @@ import { Icon } from '@iconify/react';
 import {
   BrandThemeForm,
   BrandThemePreview,
-  canExportStatic,
+  getStaticExportAccess,
   isEmptyBrandTheme,
   startReportPreview,
   useBrandScopeAttributes,
@@ -34,6 +34,7 @@ import {
   type DashboardData,
   type InteractiveFilter,
   type LogoMode,
+  type StaticExportAccess,
 } from 'depictio-react-core';
 import DashboardInfoBody from './DashboardInfoBody';
 import ShareFiltersField from './ShareFiltersField';
@@ -52,6 +53,13 @@ import { CONTENT_WIDTHS, type ContentWidth, useContentWidthPref } from '../hooks
 import { useReportEditorEnabled } from '../hooks/useReportEditorEnabled';
 import { useNotebookExportEnabled } from '../hooks/useNotebookExportEnabled';
 import { useStaticExportEnabled } from '../hooks/useStaticExportEnabled';
+import { usePublicDownloadEnabled } from '../hooks/usePublicDownloadEnabled';
+import {
+  ExportNote,
+  usePublicCopy,
+} from '../components/publicDownload/PublicCopy';
+import type { PublicBundleStatus } from 'depictio-react-core';
+import { useCurrentUser } from '../hooks/useCurrentUser';
 
 /** Client-side mirror of the server's upload cap (routes.py). */
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
@@ -676,7 +684,18 @@ const ExportBlock: React.FC<{
   } | null;
   /** The reader may edit this dashboard's report. */
   canEditReport?: boolean;
-}> = ({ dashboard, getAnalysisState, staticExport, canEditReport }) => {
+  /** The ready copies the project's owner offers visitors (#1480), or null. */
+  publicCopy?: PublicBundleStatus | null;
+  /** A signed-in reader (or single-user mode): only they may render a report. */
+  signedIn?: boolean;
+}> = ({
+  dashboard,
+  getAnalysisState,
+  staticExport,
+  canEditReport,
+  publicCopy = null,
+  signedIn = true,
+}) => {
   const [opened, setOpened] = useState<ExportChoice | null>(null);
   const reportEditorEnabled = useReportEditorEnabled();
   const dashboardId = String(dashboard?.dashboard_id ?? dashboard?._id ?? '');
@@ -707,16 +726,27 @@ const ExportBlock: React.FC<{
       combinedOffered={combinedOffered}
       canEditReport={showCustomise}
       onExportDashboardOnly={
-        staticExport?.allowed && !staticExport.previewing ? staticExport.onExportStatic : undefined
+        staticExport && !staticExport.previewing && (staticExport.allowed || publicCopy)
+          ? staticExport.onExportStatic
+          : undefined
       }
+      viewRefusal={signedIn ? null : SIGN_IN_HINT}
     />
   );
+  // One button per format, opening its modal; a ready copy (#1480) is offered
+  // there first, so a card is open whenever the copy holds its file.
+  const readyReport = Boolean(publicCopy?.report?.available);
+  const renderRefusal = signedIn || readyReport ? null : SIGN_IN_HINT;
+  const combinedRefusal =
+    renderRefusal ??
+    (staticExport?.allowed === false && !readyReport ? OWNER_GATE_HINT : null);
   const reportCard = (
     <ExportFormatCard
       icon="mdi:file-document-outline"
       title="Report (HTML / PDF)"
       description="The dashboard written up as a document, with a cover, text around the figures and an optional PDF."
       testId="export-report-card"
+      footer={renderRefusal && <ExportNote testId="export-report-reason">{renderRefusal}</ExportNote>}
     >
       {showCustomise && (
         <Button
@@ -724,6 +754,7 @@ const ExportBlock: React.FC<{
           href={`/dashboard-report/${dashboardId}`}
           onMouseEnter={prewarm}
           onFocus={prewarm}
+          variant="light"
           size="sm"
           leftSection={<Icon icon="mdi:file-document-edit-outline" width={16} />}
           data-testid="export-customise-report"
@@ -732,14 +763,14 @@ const ExportBlock: React.FC<{
         </Button>
       )}
       <Button
-        variant={showCustomise ? 'light' : 'filled'}
+        variant="light"
         size="sm"
         leftSection={<Icon icon="mdi:notebook-outline" width={16} />}
         onClick={() => setOpened('report')}
-        disabled={!dashboardId}
+        disabled={!dashboardId || Boolean(renderRefusal)}
         data-testid="export-report"
       >
-        Export report
+        Export report…
       </Button>
     </ExportFormatCard>
   );
@@ -775,7 +806,9 @@ const ExportBlock: React.FC<{
   return (
     <Stack gap="sm" data-testid="export-section">
       <Text size="sm" c="dimmed">
-        Every format uses the filters you have right now.
+        {publicCopy
+          ? 'Each format has a ready copy to download at once, or your own view to build.'
+          : 'Every format uses the filters you have right now.'}
       </Text>
       {reportCard}
       <ExportFormatCard
@@ -783,15 +816,19 @@ const ExportBlock: React.FC<{
         title="Report + dashboard"
         description="One HTML file to send: the rendered report and the whole interactive dashboard one click away. It opens without a server."
         testId="export-combined-card"
+        footer={
+          combinedRefusal && <ExportNote testId="export-combined-reason">{combinedRefusal}</ExportNote>
+        }
       >
         <Button
+          variant="light"
           size="sm"
           leftSection={<Icon icon="mdi:export-variant" width={16} />}
           onClick={() => setOpened('combined')}
-          disabled={!dashboardId}
+          disabled={!dashboardId || Boolean(combinedRefusal)}
           data-testid="export-combined"
         >
-          Export report + dashboard
+          Export report + dashboard…
         </Button>
       </ExportFormatCard>
       {staticExport && (
@@ -800,6 +837,7 @@ const ExportBlock: React.FC<{
           previewing={staticExport.previewing}
           allowed={staticExport.allowed}
           onExportStatic={staticExport.onExportStatic}
+          publicCopy={publicCopy}
         />
       )}
       {notebookCard}
@@ -819,32 +857,35 @@ const ExportBlock: React.FC<{
 const OWNER_GATE_HINT =
   "Exporting needs owner rights on this dashboard's project: a bundle carries the " +
   "project's data. Ask a project owner to export it.";
+const SIGN_IN_HINT =
+  'Rendering a report needs a signed-in account: sign in to export the view you have now.';
 const PREVIEW_HINT =
   'A static export draws the live dashboard and its current data, not this past ' +
   'version. Leave the version preview to export.';
 
 /**
- * Whether the dashboard-only export is offered: the server's answer
- * (`canExportStatic`, the very rule the dispatch applies). null while it is
- * asked; false without a dashboard.
+ * Whether the dashboard-only export is offered, and whether it is a visitor's
+ * public build (#1480): the server's answer (`getStaticExportAccess`, the very
+ * rule the dispatch applies). null while it is asked; refused without a
+ * dashboard.
  */
-function useCanExportStatic(dashboardId: string | null): boolean | null {
-  const [allowed, setAllowed] = React.useState<boolean | null>(null);
+function useStaticExportAccess(dashboardId: string | null): StaticExportAccess | null {
+  const [access, setAccess] = React.useState<StaticExportAccess | null>(null);
   React.useEffect(() => {
     if (!dashboardId) {
-      setAllowed(false);
+      setAccess({ allowed: false, public: false });
       return;
     }
     let alive = true;
-    setAllowed(null);
-    void canExportStatic(dashboardId).then((ok) => {
-      if (alive) setAllowed(ok);
+    setAccess(null);
+    void getStaticExportAccess(dashboardId).then((answer) => {
+      if (alive) setAccess(answer);
     });
     return () => {
       alive = false;
     };
   }, [dashboardId]);
-  return allowed;
+  return access;
 }
 
 /**
@@ -864,17 +905,21 @@ const ExportStaticBlock: React.FC<{
   /** The server's answer (`useCanExportStatic`); null while it is asked. */
   allowed: boolean | null;
   onExportStatic: () => void;
-}> = ({ dashboardId, previewing, allowed, onExportStatic }) => {
-  const reason = previewing ? PREVIEW_HINT : allowed === false ? OWNER_GATE_HINT : null;
+  /** The ready copies the project's owner offers visitors (#1480), or null. */
+  publicCopy?: PublicBundleStatus | null;
+}> = ({ dashboardId, previewing, allowed, onExportStatic, publicCopy = null }) => {
+  const reason = previewing
+    ? PREVIEW_HINT
+    : allowed === false && !publicCopy
+      ? OWNER_GATE_HINT
+      : null;
   return (
     <ExportFormatCard
       icon="mdi:monitor-dashboard"
       title="Dashboard only (serverless)"
-      description={
-        reason ??
-        'The interactive dashboard alone, as one self-contained HTML file that opens without a server.'
-      }
+      description="The interactive dashboard alone, as one self-contained HTML file that opens without a server."
       testId="export-static-section"
+      footer={reason && <ExportNote testId="export-static-reason">{reason}</ExportNote>}
     >
       <Tooltip label={reason} disabled={!reason} withArrow>
         <Button
@@ -882,10 +927,10 @@ const ExportStaticBlock: React.FC<{
           variant="light"
           size="sm"
           onClick={onExportStatic}
-          disabled={!dashboardId || previewing || allowed !== true}
+          disabled={!dashboardId || previewing || (allowed !== true && !publicCopy)}
           data-testid="export-static-btn"
         >
-          Dashboard only
+          Export dashboard…
         </Button>
       </Tooltip>
     </ExportFormatCard>
@@ -1172,9 +1217,24 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   // until it answers: a switched-off export is absent, not disabled.
   const staticExportEnabled = useStaticExportEnabled();
   const notebookExportEnabled = useNotebookExportEnabled();
-  const staticExportAllowed = useCanExportStatic(
+  const publicDownloadEnabled = usePublicDownloadEnabled();
+  const staticExportAccess = useStaticExportAccess(
     onExportStatic && !isStaticBundle && staticExportEnabled ? (dashboardId ?? null) : null,
   );
+  const staticExportAllowed = staticExportAccess ? staticExportAccess.allowed : null;
+  // A reader who is not an owner gets the copies the project offers (#1480);
+  // a signed-in visitor may also export their own view as a public build.
+  const publicCopy = usePublicCopy(
+    publicDownloadEnabled &&
+      staticExportAccess &&
+      (staticExportAccess.public || !staticExportAccess.allowed) &&
+      dashboardId
+      ? dashboardId
+      : null,
+  );
+  // Unknown while the auth status loads: nothing is disabled on a guess.
+  const { user: currentUser, isSingleUserMode, loading: userLoading } = useCurrentUser();
+  const signedIn = userLoading || isSingleUserMode || currentUser != null;
   const surface: Surface =
     onChangeBrandTheme ||
     onToggleFunnelFiltering ||
@@ -1334,6 +1394,8 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
               dashboard={dashboard}
               getAnalysisState={getAnalysisState}
               canEditReport={canEditReport}
+              publicCopy={publicCopy}
+              signedIn={signedIn}
               staticExport={
                 showStaticExport && onExportStatic
                   ? { previewing, allowed: staticExportAllowed, onExportStatic }
@@ -1343,12 +1405,15 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
           ) : (
             showStaticExport &&
             onExportStatic && (
-              <ExportStaticBlock
-                dashboardId={dashboardId}
-                previewing={previewing}
-                allowed={staticExportAllowed}
-                onExportStatic={onExportStatic}
-              />
+              <>
+                <ExportStaticBlock
+                  dashboardId={dashboardId}
+                  previewing={previewing}
+                  allowed={staticExportAllowed}
+                  onExportStatic={onExportStatic}
+                  publicCopy={publicCopy}
+                />
+              </>
             )
           )}
         </Stack>

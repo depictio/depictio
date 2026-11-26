@@ -288,6 +288,66 @@ def test_without_the_static_export_no_report_embeds_the_runtime(built):
         assert ep._runtime_refusal("d1", _state(), user) == reason  # type: ignore[arg-type]
 
 
+def test_a_visitor_of_an_offering_project_may_have_the_dashboard_embedded():
+    """A visitor who may export the dashboard (#1480) may have it embedded in
+    their report too: the same public build, at the live data only."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import notebook_export as ep
+    from depictio.api.v1.endpoints.serverless_endpoints import routes as sroutes
+    from depictio.serverless import producer_a
+
+    user = type("U", (), {"id": ObjectId(), "email": "guest@b.c"})()
+    owner = ObjectId()
+    with (
+        patch.object(producer_a, "export_denial", lambda *a, **k: "not the owner"),
+        patch.object(sroutes, "_visitor_export_owner", lambda *a: owner),
+    ):
+        assert ep._owner_refusal("d1", _state(), user) is None  # type: ignore[arg-type]
+        identity, public = ep._embed_identity("d1", user)  # type: ignore[arg-type]
+        assert public is True
+        assert identity == {
+            "id": str(owner),
+            "email": "",
+            "is_admin": False,
+            "is_anonymous": False,
+        }
+        pinned = AnalysisState.model_validate(
+            {**_state().model_dump(mode="json"), "pins": {"as_of_version": "v1"}}
+        )
+        assert "live data" in (ep._owner_refusal("d1", pinned, user) or "")  # type: ignore[arg-type]
+    with (
+        patch.object(producer_a, "export_denial", lambda *a, **k: "not the owner"),
+        patch.object(sroutes, "_visitor_export_owner", lambda *a: None),
+    ):
+        assert "limited to its owners" in (ep._owner_refusal("d1", _state(), user) or "")  # type: ignore[arg-type]
+    with patch.object(producer_a, "export_denial", lambda *a, **k: None):
+        identity, public = ep._embed_identity("d1", user)  # type: ignore[arg-type]
+        assert public is False and identity["email"] == "guest@b.c"
+
+
+def test_a_public_report_manifest_is_the_public_build(monkeypatch):
+    from depictio.serverless import producer_a, report
+
+    seen: dict[str, Any] = {}
+
+    class _Result:
+        class manifest:  # noqa: N801 - a stand-in for the pydantic model
+            @staticmethod
+            def model_copy(update: dict) -> dict:
+                return update
+
+    def fake(dashboard_id: str, user: Any, **kwargs: Any) -> Any:
+        seen.update(kwargs)
+        return _Result()
+
+    monkeypatch.setattr(producer_a, "export_manifest", fake)
+    user = producer_a.ExportUser(id=ObjectId(), email="")
+    report.build_report_manifest("d1", user, _state(), public=True)
+    assert seen.get("public") is True
+    seen.clear()
+    report.build_report_manifest("d1", user, _state())
+    assert "public" not in seen
+
+
 def test_a_refused_combined_render_is_an_error_not_a_downgrade():
     from depictio.api.v1.endpoints.dashboards_endpoints import notebook_export as ep
 

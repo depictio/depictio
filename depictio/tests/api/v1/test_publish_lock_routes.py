@@ -202,6 +202,8 @@ GUARDED: set[tuple[str, str]] = {
     (_PROJ, "update_project"),
     (_PROJ, "delete_project"),
     (_PROJ, "toggle_public_private"),
+    # who may download the project's data offline, like its visibility (#1480)
+    (_PROJ, "set_public_offline_download"),
     # data collections and their data
     (_DC, "delete_datacollection"),
     (_DC, "update_data_collection_name"),

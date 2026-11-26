@@ -360,6 +360,9 @@ class MongoDBConfig(ServiceConfig):
         # a pre-shared pairing key. Only the sha256 of each code is stored.
         migration_invites_collection: str = Field(default="migration_invites")
         static_exports_collection: str = Field(default="static_exports")
+        # One document per dashboard family whose project lets visitors download
+        # the offline bundle (#1480): `_id` is the main tab's id, so no index.
+        public_bundles_collection: str = Field(default="public_bundles")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -3073,6 +3076,18 @@ class NotebookExportConfig(BaseSettings):
     render_max_per_hour: int = Field(
         default=20, description="Report renders one user may start in an hour (429 past it)."
     )
+    render_per_ip_max: int = Field(
+        default=6,
+        ge=1,
+        description=(
+            "Report renders a reader who is not a project editor may start from one address "
+            "per `render_window_s`, on top of the per-user limits: guest accounts are made at "
+            "will. Fail closed (503 when the limiter cannot count)."
+        ),
+    )
+    render_window_s: int = Field(
+        default=3600, ge=1, description="Window of the per-address render limit, in seconds."
+    )
     report_concurrency: int = Field(
         default=1,
         description=(
@@ -3144,6 +3159,70 @@ class StaticExportConfig(BaseSettings):
             "404 and the viewer hides the export (`features.static_export` in "
             "`/utils/server-info`). The offline CLI commands (`depictio dashboard "
             "export-static`, `combine-report`) do not read it."
+        ),
+    )
+
+    public_download_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let visitors of a public project download a pre-built offline bundle, once "
+            "the project owner turns it on for the project (#1480). Needs `enabled` too. "
+            "Visitors never build: the bundle is rebuilt after a save or an ingestion, at "
+            "the dashboard's default state, without the Python runtime and without the "
+            "exporter's email. Off by default (`features.static_export_public_download`)."
+        ),
+    )
+    public_download_default: bool = Field(
+        default=True,
+        description=(
+            "Whether a public project offers visitors its offline copies until its owner "
+            "decides (#1480). A public project's data are public, and every figure carries "
+            "its data anyway, so the offer is on by default; an owner can still turn it off "
+            "(`Project.public_offline_download`). Only acts with `public_download_enabled`."
+        ),
+    )
+    public_download_per_ip_per_minute: int = Field(
+        default=10,
+        ge=1,
+        description=(
+            "Public bundle downloads one address may start per minute. Counted in Redis; "
+            "with Redis unreachable every download is refused (503), never let through."
+        ),
+    )
+    public_rebuild_delay_s: int = Field(
+        default=120,
+        ge=0,
+        description=(
+            "Seconds between the change that makes a public bundle stale and its rebuild, "
+            "so a burst of autosaves or a multi-collection ingestion costs one build."
+        ),
+    )
+    public_export_per_ip_max: int = Field(
+        default=10,
+        ge=1,
+        description=(
+            "Exports of their own view a visitor (not an owner) may start from one address "
+            "per `public_export_window_s`, on top of the per-user limit: guest accounts "
+            "are made at will. Fail closed, as the other export limits."
+        ),
+    )
+    public_export_window_s: int = Field(
+        default=600, ge=1, description="Window of the per-address visitor export limit, in seconds."
+    )
+    build_per_user_max: int = Field(
+        default=5,
+        ge=1,
+        description="Static export builds one user may start per `build_per_user_window_s`.",
+    )
+    build_per_user_window_s: int = Field(
+        default=600, ge=1, description="Window of the per-user build limit, in seconds."
+    )
+    queue_max_pending: int = Field(
+        default=20,
+        ge=1,
+        description=(
+            "Static export builds waiting or running on the whole instance (owner exports "
+            "and public bundle rebuilds); one past it is refused with 429."
         ),
     )
 

@@ -52,6 +52,9 @@ from depictio.api.v1.endpoints.multiqc_endpoints.routes import router as multiqc
 from depictio.api.v1.endpoints.projects_endpoints.builder import builder_endpoint_router
 from depictio.api.v1.endpoints.projects_endpoints.routes import projects_endpoint_router
 from depictio.api.v1.endpoints.runs_endpoints.routes import runs_endpoint_router
+from depictio.api.v1.endpoints.serverless_endpoints.public_bundle_routes import (
+    public_bundle_router,
+)
 from depictio.api.v1.endpoints.serverless_endpoints.routes import serverless_endpoint_router
 from depictio.api.v1.endpoints.user_endpoints.routes import auth_endpoint_router
 from depictio.api.v1.endpoints.utils_endpoints.routes import utils_endpoint_router
@@ -240,6 +243,14 @@ router.include_router(
 
 router.include_router(
     serverless_endpoint_router,
+    prefix="/serverless",
+    tags=["Serverless"],
+)
+
+# The visitors' pre-built offline bundle (#1480): its own router, gated by both
+# static export switches.
+router.include_router(
+    public_bundle_router,
     prefix="/serverless",
     tags=["Serverless"],
 )

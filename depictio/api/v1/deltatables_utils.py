@@ -2482,6 +2482,15 @@ def invalidate_data_collection_cache(data_collection_id: str) -> int:
     except Exception as e:
         logger.warning(f"Redis cache invalidation failed for dc_id={data_collection_id}: {e}")
 
+    # Every path that changes a collection's data ends here (an upsert's
+    # finalize, a table edit, a join rebuild, a MultiQC replace or append, a
+    # migration import, a realtime event), so this is where a public project's
+    # pre-built offline bundle learns it is stale (#1480). Queues a rebuild only
+    # for a project whose visitors may download it; never raises.
+    from depictio.serverless import public_bundle
+
+    public_bundle.notify_data_changed(data_collection_id)
+
     return len(affected) + redis_dropped
 
 

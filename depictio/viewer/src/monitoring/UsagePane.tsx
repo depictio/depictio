@@ -60,6 +60,7 @@ const KPIS: Record<UsageReport['mode'], KpiDef[]> = {
     { key: 'signups', label: 'New accounts', icon: 'mdi:account-plus', color: 'grape' },
     { key: 'returning_users_pct', label: 'Returning users', suffix: '%', icon: 'mdi:account-convert', color: 'orange' },
     { key: 'dashboard_views', label: 'Dashboard views', icon: 'mdi:view-dashboard', color: 'indigo' },
+    { key: 'downloads', label: 'Bundle downloads', icon: 'mdi:download', color: 'lime' },
     { key: 'visitors', label: 'Browsers', icon: 'mdi:web', color: 'cyan' },
   ],
   public: [
@@ -67,12 +68,14 @@ const KPIS: Record<UsageReport['mode'], KpiDef[]> = {
     { key: 'unique_ips', label: 'Unique IPs', icon: 'mdi:ip-network', color: 'violet' },
     { key: 'pageviews', label: 'Page views', icon: 'mdi:eye', color: 'green' },
     { key: 'dashboard_views', label: 'Dashboard views', icon: 'mdi:view-dashboard', color: 'indigo' },
+    { key: 'downloads', label: 'Bundle downloads', icon: 'mdi:download', color: 'lime' },
     { key: 'countries', label: 'Countries', icon: 'mdi:earth', color: 'pink' },
     { key: 'logins', label: 'Sign-ins', icon: 'mdi:login', color: 'teal' },
   ],
   single_user: [
     { key: 'pageviews', label: 'Page views', icon: 'mdi:eye', color: 'green' },
     { key: 'dashboard_views', label: 'Dashboard views', icon: 'mdi:view-dashboard', color: 'indigo' },
+    { key: 'downloads', label: 'Bundle downloads', icon: 'mdi:download', color: 'lime' },
     { key: 'visitors', label: 'Browsers', icon: 'mdi:web', color: 'cyan' },
     { key: 'logins', label: 'Sessions opened', icon: 'mdi:login', color: 'teal' },
   ],
@@ -450,7 +453,7 @@ export const UsagePane: React.FC = () => {
 
       {report && (
         <>
-          <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }} spacing="sm">
+          <SimpleGrid cols={{ base: 2, sm: 3, lg: 7 }} spacing="sm">
             {KPIS[report.mode].map((k) => (
               <Kpi
                 key={k.key}
@@ -625,6 +628,7 @@ export const UsagePane: React.FC = () => {
                 { key: 'title', label: 'Dashboard' },
                 { key: 'project', label: 'Project' },
                 { key: 'views', label: 'Views' },
+                { key: 'downloads', label: 'Downloads' },
                 { key: 'visitors', label: 'Visitors' },
               ]}
             />

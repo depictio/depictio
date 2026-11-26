@@ -1,15 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Accordion,
   Alert,
   Badge,
   Button,
   Group,
   Loader,
   Modal,
+  Paper,
+  ScrollArea,
   Stack,
   Switch,
   Table,
   Text,
+  ThemeIcon,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
@@ -17,6 +21,7 @@ import { notifications } from '@mantine/notifications';
 import {
   preflightStaticExport,
   dispatchStaticExport,
+  getStaticExportAccess,
   pollStaticExport,
   downloadStaticExport,
   staticTierExplanation,
@@ -30,6 +35,17 @@ import type {
   StaticExportSizeEstimate,
   StaticExportTierRow,
 } from 'depictio-react-core';
+import CollectionInventory from '../components/export/CollectionInventory';
+import TileSummary, { type TileGroup, type TileStatus } from '../components/export/TileSummary';
+import { usePublicCopyState } from '../components/publicDownload/PublicCopy';
+import {
+  CopyModeControl,
+  ReadyCopyPanel,
+  ViewPills,
+  readyFiles,
+  statePills,
+  type CopyMode,
+} from '../components/export/ReadyCopy';
 
 /** 'live' is deliberately absent from the shared maps — the in-bundle badge
  *  only renders non-live tiers. The preflight table shows every component, so
@@ -41,6 +57,16 @@ const TIER_COLOR: Record<string, string> = { live: 'green', ...STATIC_TIER_BADGE
  *  One word, because it shares the narrow Tier column with 'Live'/'Frozen';
  *  the note spells out that the verdict comes with the build. */
 const UNDECIDED_LABEL = 'Undecided';
+
+/** The tile list's statuses: the shared tier vocabulary, plus undecided. */
+const TILE_STATUSES: Record<string, TileStatus> = {
+  live: { label: TIER_LABEL.live, color: TIER_COLOR.live },
+  partial: { label: TIER_LABEL.partial ?? 'Partial', color: TIER_COLOR.partial ?? 'yellow' },
+  frozen: { label: TIER_LABEL.frozen ?? 'Frozen', color: TIER_COLOR.frozen ?? 'blue' },
+  omitted: { label: TIER_LABEL.omitted ?? 'Omitted', color: TIER_COLOR.omitted ?? 'gray' },
+  undecided: { label: 'Undecided', color: 'gray' },
+};
+const TILE_ORDER = ['live', 'partial', 'frozen', 'omitted', 'undecided'];
 const UNDECIDED_COLOR = 'gray';
 const UNDECIDED_NOTE =
   'Depictio tries to redraw this chart in your browser while it builds the bundle. ' +
@@ -102,10 +128,17 @@ const SIZE_UPPER_BOUND_NOTE =
  * squeeze under. Disabling Export here would refuse builds the server would
  * have accepted; the reader is told what is likely and left to decide.
  */
-const SizeEstimate: React.FC<{ size: StaticExportSizeEstimate }> = ({ size }) => {
-  const total = size.estimated_total_bytes;
-  if (typeof total !== 'number') return null;
-  const upTo = `up to about ${approxMB(total)}`;
+const SizeEstimate: React.FC<{
+  size: StaticExportSizeEstimate;
+  /** The Python runtime, when embedded: the data estimate leaves it out. */
+  extraBytes?: number;
+}> = ({ size, extraBytes = 0 }) => {
+  const data = size.estimated_total_bytes;
+  if (typeof data !== 'number') return null;
+  const total = data + extraBytes;
+  const upTo =
+    `up to about ${approxMB(total)}` +
+    (extraBytes > 0 ? ', the Python runtime included' : '');
 
   if (size.verdict === 'would_be_refused') {
     return (
@@ -196,6 +229,18 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
   // The optional Python runtime, off unless the reader turns it on: it adds
   // ~50 MB to the file and ~10 s before the first tab settles offline.
   const [pythonChoice, setPythonChoice] = useState(false);
+  // A visitor of a project that offers its copies (#1480): their export is a
+  // public build, which never carries the Python runtime.
+  const [visitor, setVisitor] = useState(false);
+  // Whether this reader may build their own file; null while it is asked.
+  const [canBuild, setCanBuild] = useState<boolean | null>(null);
+  // The ready copy a public project keeps (#1480): where there is one the
+  // modal opens on it, and "My view" builds the reader's own.
+  const copyState = usePublicCopyState(opened ? (dashboardId ?? null) : null);
+  const publicCopy = copyState.copy;
+  const [mode, setMode] = useState<CopyMode>('view');
+  const inCopy = mode === 'copy' && Boolean(publicCopy);
+  const [viewState, setViewState] = useState<AnalysisState | null>(null);
   // Set on close/unmount so in-flight promises and the poll loop go quiet
   // instead of setting state on a closed modal. The server-side build keeps
   // running — reopening and re-exporting is cheap (idempotent job dispatch).
@@ -210,10 +255,42 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
     setErrorMessage(null);
     setExporting(false);
     setPythonChoice(false);
+    setVisitor(false);
+    setCanBuild(null);
+    setViewState(getAnalysisState ? getAnalysisState() : null);
+    void getStaticExportAccess(dashboardId).then((access) => {
+      if (cancelledRef.current) return;
+      setVisitor(access.public);
+      setCanBuild(access.allowed);
+    });
+    return () => {
+      cancelledRef.current = true;
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    };
+    // The view is read once per open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opened, dashboardId]);
+
+  useEffect(() => {
+    if (opened && copyState.loaded) setMode(publicCopy ? 'copy' : 'view');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opened, copyState.loaded]);
+
+  // The preflight is for "My view" only (a visitor's counts against their
+  // address): the ready copy needs none.
+  const wantPreflight =
+    opened && Boolean(dashboardId) && copyState.loaded && mode === 'view' && canBuild === true;
+  useEffect(() => {
+    if (!wantPreflight || !dashboardId || preflight) return;
     setPreflightLoading(true);
     preflightStaticExport(dashboardId)
       .then((pf) => {
-        if (!cancelledRef.current) setPreflight(pf);
+        if (cancelledRef.current) return;
+        setPreflight(pf);
+        // On when some tile needs it: the reader sees what it adds and can
+        // turn it off (#1480).
+        setPythonChoice((pf.python_runtime?.candidates.length ?? 0) > 0);
       })
       .catch((err: unknown) => {
         if (!cancelledRef.current) {
@@ -223,12 +300,8 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
       .finally(() => {
         if (!cancelledRef.current) setPreflightLoading(false);
       });
-    return () => {
-      cancelledRef.current = true;
-      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-      pollTimerRef.current = null;
-    };
-  }, [opened, dashboardId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantPreflight]);
 
   const handleExport = async () => {
     if (!dashboardId) return;
@@ -262,7 +335,7 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
       const job = await dispatchStaticExport(
         dashboardId,
         pythonChoice ? 'on' : 'off',
-        getAnalysisState ? getAnalysisState() : null,
+        viewState,
       );
       if (cancelledRef.current) return;
       if (job.status === 'failed') {
@@ -319,26 +392,90 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
     if (!isProvisional(row) && row.tier in decidedCounts) decidedCounts[row.tier] += 1;
   }
 
+  // The tiles that lose something first: a reader opens this list to see
+  // what will not follow the filters, not to scroll past forty "Live" rows.
+  const TIER_ORDER: Record<string, number> = { omitted: 0, frozen: 1, partial: 2, live: 3 };
+  const tableRows = [...rows].sort(
+    (a, b) =>
+      (isProvisional(a) ? -1 : (TIER_ORDER[a.tier] ?? 4)) -
+      (isProvisional(b) ? -1 : (TIER_ORDER[b.tier] ?? 4)),
+  );
+  const pythonInfo = preflight?.python_runtime;
+  const pythonOffered = Boolean(pythonInfo && pythonInfo.candidates.length > 0);
+  // The tiles by tab, those that lose something first within each (the
+  // preflight's order, `tableRows`).
+  const tabTitles = new Map((preflight?.tabs ?? []).map((t) => [t.id, t.title || 'Tab']));
+  const tileGroups: TileGroup[] = [];
+  for (const row of tableRows) {
+    const groupId = row.tab_id ?? '';
+    let group = tileGroups.find((g) => g.id === groupId);
+    if (!group) {
+      group = { id: groupId, title: tabTitles.get(groupId) ?? 'Tiles', items: [] };
+      tileGroups.push(group);
+    }
+    const undecided = isProvisional(row);
+    group.items.push({
+      id: row.component_id,
+      title: row.title || row.component_id,
+      kind: row.component_type,
+      status: undecided ? 'undecided' : row.tier,
+      // Never the producer's `detail` nor the raw `reason` token: what the
+      // reader will lose, in the words the bundle's own badge uses.
+      note: undecided ? UNDECIDED_NOTE : staticTierExplanation(row.tier, row.reason),
+    });
+  }
+  const tabOrder = new Map((preflight?.tabs ?? []).map((t, i) => [t.id, t.tab_order ?? i]));
+  tileGroups.sort((a, b) => (tabOrder.get(a.id) ?? 0) - (tabOrder.get(b.id) ?? 0));
+  const collections = preflight?.collections ?? [];
+  const interactive = decidedCounts.live + decidedCounts.partial;
+  const fixed = decidedCounts.frozen + decidedCounts.omitted;
+
   return (
     <Modal
       opened={opened}
       onClose={onClose}
-      title="Export static dashboard"
-      // The tier table is the body of this modal: component title, tier chip
-      // and a per-row note, times one row per component (74 of them on the
-      // ampliseq family). At `lg` the note column wrapped to three lines and
-      // the table dominated the viewport; `xl` gives the note room to breathe.
+      title={
+        <Group gap="sm" wrap="nowrap">
+          <ThemeIcon variant="light" size="lg" radius="md">
+            <Icon icon="mdi:monitor-dashboard" width={20} />
+          </ThemeIcon>
+          <div style={{ minWidth: 0 }}>
+            <Text fw={600}>Export as an offline file</Text>
+            <Text size="xs" c="dimmed" truncate>
+              {dashboardTitle || 'This dashboard'} · one HTML file that opens without a server
+            </Text>
+          </div>
+        </Group>
+      }
       size="xl"
       centered
       closeOnClickOutside={false}
     >
-      <Stack gap="sm">
-        <Text size="sm" c="dimmed">
-          Builds a self-contained HTML snapshot of this dashboard that works without a
-          Depictio server. Components that need the backend degrade as shown below.
-        </Text>
-
-        {preflightLoading && (
+      <Stack gap="md">
+        {publicCopy && (
+          <CopyModeControl
+            value={mode}
+            onChange={setMode}
+            viewDisabled={canBuild === false}
+          />
+        )}
+        {getAnalysisState && (
+          <ViewPills pills={statePills(viewState)} applied={!inCopy} />
+        )}
+        {inCopy && publicCopy && dashboardId && (
+          <ReadyCopyPanel
+            dashboardId={dashboardId}
+            status={publicCopy}
+            files={readyFiles(publicCopy, 'dashboard')}
+          />
+        )}
+        {!inCopy && canBuild === false && copyState.loaded && (
+          <Text size="sm" c="dimmed" data-testid="export-static-refused">
+            Building a file needs owner rights on this dashboard's project, or a signed-in
+            account on a project that offers its copies.
+          </Text>
+        )}
+        {!inCopy && preflightLoading && (
           <Group justify="center" gap="xs" py="md">
             <Loader size="sm" />
             {/* Seconds, not milliseconds: the preflight loads each data
@@ -365,181 +502,229 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
           </Alert>
         )}
 
-        {preflight && (
+        {!inCopy && preflight && (
           <>
-            <Group gap="xs">
-              {(['live', 'partial', 'frozen', 'omitted'] as const).map((tier) => (
-                <Badge
-                  key={tier}
-                  color={TIER_COLOR[tier]}
-                  variant="light"
-                  style={{ textTransform: 'none' }}
-                >
-                  {TIER_LABEL[tier]}: {decidedCounts[tier]}
-                </Badge>
-              ))}
-              {undecidedCount > 0 && (
-                <Badge
-                  color={UNDECIDED_COLOR}
-                  variant="outline"
-                  style={{ textTransform: 'none' }}
-                  data-testid="undecided-count-badge"
-                >
-                  {UNDECIDED_LABEL}: {undecidedCount}
-                </Badge>
-              )}
-            </Group>
+            {/* The verdict first, in the reader's words: how much of the
+                dashboard stays interactive, and what the file weighs. */}
+            <Paper withBorder radius="md" p="md" data-testid="export-static-summary">
+              <Stack gap="xs">
+                <Group gap="xs" wrap="wrap">
+                  <Text size="sm" fw={600}>
+                    {interactive} of {rows.length} tile{rows.length === 1 ? '' : 's'} stay
+                    interactive
+                  </Text>
+                  {fixed > 0 && (
+                    <Text size="sm" c="dimmed">
+                      · {fixed} ship{fixed === 1 ? 's' : ''} as a picture of the current view
+                    </Text>
+                  )}
+                </Group>
+                {/* Badges only when they split the tiles: "Live: 44" under "44 of
+                    44 tiles stay interactive" says it twice. */}
+                {(['live', 'partial', 'frozen', 'omitted'] as const).filter(
+                  (tier) => decidedCounts[tier] > 0,
+                ).length +
+                  (undecidedCount > 0 ? 1 : 0) >
+                  1 && (
+                <Group gap={6}>
+                  {(['live', 'partial', 'frozen', 'omitted'] as const)
+                    .filter((tier) => decidedCounts[tier] > 0)
+                    .map((tier) => (
+                      <Badge
+                        key={tier}
+                        color={TIER_COLOR[tier]}
+                        variant="light"
+                        style={{ textTransform: 'none' }}
+                      >
+                        {TIER_LABEL[tier]}: {decidedCounts[tier]}
+                      </Badge>
+                    ))}
+                  {undecidedCount > 0 && (
+                    <Badge
+                      color={UNDECIDED_COLOR}
+                      variant="outline"
+                      style={{ textTransform: 'none' }}
+                      data-testid="undecided-count-badge"
+                    >
+                      {UNDECIDED_LABEL}: {undecidedCount}
+                    </Badge>
+                  )}
+                </Group>
+                )}
+                {undecidedCount > 0 && (
+                  // The counts above are only the settled rows, so say what the
+                  // rest are: promising "24 frozen" and shipping 9 is the failure
+                  // mode this replaces.
+                  <Text size="xs" c="dimmed">
+                    {undecidedCount} chart{undecidedCount > 1 ? 's are' : ' is'} not decided yet:
+                    the build redraws each one in your browser where it can and falls back to a
+                    snapshot where it cannot.
+                  </Text>
+                )}
+                {/* Last of the summary rather than at the bottom: the tables
+                    below are folded, so the size is read before Export. */}
+                {preflight.size_estimate && (
+                  <SizeEstimate
+                    size={preflight.size_estimate}
+                    extraBytes={
+                      pythonChoice && pythonInfo?.embedded ? pythonInfo.bytes || 0 : 0
+                    }
+                  />
+                )}
+              </Stack>
+            </Paper>
 
-            {undecidedCount > 0 && (
-              // The counts above are only the settled rows, so say what the
-              // rest are: promising "24 frozen" and shipping 9 is the failure
-              // mode this replaces.
-              <Text size="xs" c="dimmed">
-                {undecidedCount} chart{undecidedCount > 1 ? 's are' : ' is'} not decided yet: the
-                build redraws each one in your browser where it can and falls back to a snapshot
-                where it cannot. The counts above cover the {rows.length - undecidedCount}{' '}
-                component{rows.length - undecidedCount === 1 ? '' : 's'} already decided.
+            <Stack gap={6}>
+              <Text size="sm" fw={600}>
+                What the file carries
               </Text>
-            )}
-
-            <Table.ScrollContainer minWidth={480}>
-              <Table verticalSpacing="xs" striped highlightOnHover>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Component</Table.Th>
-                    <Table.Th>Type</Table.Th>
-                    {/* Fixed: auto layout hands the Note column everything and
-                        ellipsises the tier badge down to "Und…". */}
-                    <Table.Th w={104}>Tier</Table.Th>
-                    <Table.Th>Note</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {rows.map((row) => {
-                    const undecided = isProvisional(row);
-                    return (
-                      <Table.Tr key={row.component_id}>
-                        <Table.Td>{row.title || row.component_id}</Table.Td>
-                        <Table.Td>{row.component_type || '—'}</Table.Td>
-                        {/* nowrap: the Note column otherwise squeezes this one
-                            until Mantine ellipsises the badge label ("Dec…"). */}
-                        <Table.Td style={{ whiteSpace: 'nowrap' }}>
-                          <Badge
-                            size="xs"
-                            variant={undecided ? 'outline' : 'light'}
-                            color={undecided ? UNDECIDED_COLOR : (TIER_COLOR[row.tier] ?? 'gray')}
-                            style={{ textTransform: 'none' }}
-                            data-static-tier={undecided ? 'provisional' : row.tier}
-                          >
-                            {undecided ? UNDECIDED_LABEL : (TIER_LABEL[row.tier] ?? row.tier)}
-                          </Badge>
-                        </Table.Td>
-                        <Table.Td>
-                          {/* Never the producer's `detail` and never the raw
-                              `reason` token: the note says what the reader will
-                              lose, in the words the bundle's own badge uses. */}
-                          <Text size="xs" c="dimmed">
-                            {undecided
-                              ? UNDECIDED_NOTE
-                              : (staticTierExplanation(row.tier, row.reason) ?? '')}
-                          </Text>
-                        </Table.Td>
-                      </Table.Tr>
-                    );
-                  })}
-                </Table.Tbody>
-              </Table>
-            </Table.ScrollContainer>
-
-            {preflight.links.length > 0 && (
-              <>
-                <Text size="sm" fw={500}>
-                  Cross-DC links
+              <Text size="xs" c="dimmed">
+                Anyone you send it to can read this data, with no sign-in.
+              </Text>
+              {visitor && (
+                <Text size="xs" c="dimmed" data-testid="export-static-visitor-note">
+                  It is drawn from this project's public data at the filters you have set,
+                  without the figures' source code.
                 </Text>
-                <Table.ScrollContainer minWidth={480}>
-                  <Table verticalSpacing="xs" striped>
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th>Link</Table.Th>
-                        <Table.Th>Resolver</Table.Th>
-                        <Table.Th>Tier</Table.Th>
-                        <Table.Th>Entries</Table.Th>
-                        <Table.Th>Note</Table.Th>
-                      </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {preflight.links.map((link) => (
-                        <Table.Tr key={link.link_id}>
-                          <Table.Td>
-                            {link.source} → {link.target}
-                          </Table.Td>
-                          <Table.Td>{link.resolver}</Table.Td>
-                          <Table.Td>
-                            <Badge
-                              size="xs"
-                              variant="light"
-                              color={LINK_TIER_COLOR[link.tier] ?? 'gray'}
-                              style={{ textTransform: 'none' }}
-                            >
-                              {link.enabled ? link.tier : `${link.tier} (disabled)`}
-                            </Badge>
-                          </Table.Td>
-                          <Table.Td>{link.entries}</Table.Td>
-                          <Table.Td>
-                            <Text size="xs" c="dimmed">
-                              {link.note || ''}
-                            </Text>
-                          </Table.Td>
-                        </Table.Tr>
-                      ))}
-                    </Table.Tbody>
-                  </Table>
-                </Table.ScrollContainer>
-              </>
-            )}
+              )}
+              {preflight.bound === false ? (
+                <Text size="xs" c="dimmed" data-testid="collection-inventory-unbound">
+                  The data the tiles show, read when the file is built.
+                </Text>
+              ) : (
+                <CollectionInventory collections={collections} />
+              )}
+            </Stack>
+
+            <Accordion
+              variant="separated"
+              radius="md"
+              multiple
+              chevronPosition="right"
+              data-testid="export-static-details"
+            >
+              <Accordion.Item value="components">
+                <Accordion.Control icon={<Icon icon="mdi:view-grid-outline" width={18} />}>
+                  <Text size="sm" fw={500}>
+                    Tile by tile ({rows.length})
+                  </Text>
+                </Accordion.Control>
+                <Accordion.Panel>
+                  <ScrollArea.Autosize mah="45vh" type="auto">
+                    <TileSummary
+                      groups={tileGroups}
+                      statuses={TILE_STATUSES}
+                      order={TILE_ORDER}
+                      testId="export-static-tiles"
+                    />
+                  </ScrollArea.Autosize>
+                </Accordion.Panel>
+              </Accordion.Item>
+
+              {preflight.links.length > 0 && (
+                <Accordion.Item value="links">
+                  <Accordion.Control icon={<Icon icon="mdi:link-variant" width={18} />}>
+                    <Text size="sm" fw={500}>
+                      Links between collections ({preflight.links.length})
+                    </Text>
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    <Table.ScrollContainer minWidth={480}>
+                      <Table verticalSpacing="xs" striped>
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th>Link</Table.Th>
+                            <Table.Th>Resolver</Table.Th>
+                            <Table.Th>Tier</Table.Th>
+                            <Table.Th>Entries</Table.Th>
+                            <Table.Th>Note</Table.Th>
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {preflight.links.map((link) => (
+                            <Table.Tr key={link.link_id}>
+                              <Table.Td>
+                                {link.source} → {link.target}
+                              </Table.Td>
+                              <Table.Td>{link.resolver}</Table.Td>
+                              <Table.Td>
+                                <Badge
+                                  size="xs"
+                                  variant="light"
+                                  color={LINK_TIER_COLOR[link.tier] ?? 'gray'}
+                                  style={{ textTransform: 'none' }}
+                                >
+                                  {link.enabled ? link.tier : `${link.tier} (disabled)`}
+                                </Badge>
+                              </Table.Td>
+                              <Table.Td>{link.entries}</Table.Td>
+                              <Table.Td>
+                                <Text size="xs" c="dimmed">
+                                  {link.note || ''}
+                                </Text>
+                              </Table.Td>
+                            </Table.Tr>
+                          ))}
+                        </Table.Tbody>
+                      </Table>
+                    </Table.ScrollContainer>
+                  </Accordion.Panel>
+                </Accordion.Item>
+              )}
+
+              {pythonOffered && pythonInfo && (
+                <Accordion.Item value="advanced">
+                  <Accordion.Control icon={<Icon icon="mdi:tune-variant" width={18} />}>
+                    <Group gap="xs">
+                      <Text size="sm" fw={500}>
+                        Advanced options
+                      </Text>
+                      {pythonChoice && (
+                        <Badge size="xs" variant="light" style={{ textTransform: 'none' }}>
+                          Python on
+                        </Badge>
+                      )}
+                    </Group>
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    <PythonRuntimeOption
+                      info={pythonInfo}
+                      checked={pythonChoice}
+                      onChange={setPythonChoice}
+                      disabled={exporting}
+                    />
+                  </Accordion.Panel>
+                </Accordion.Item>
+              )}
+            </Accordion>
           </>
+        )}
+
+        {!inCopy && getAnalysisState && preflight && (
+          <Text size="xs" c="dimmed" data-testid="export-static-state-note">
+            The file opens on the filters shown now. Tiles shipped as pictures keep that view
+            when a reader changes the filters.
+          </Text>
         )}
 
         {exporting && (
           <Group gap="xs">
             <Loader size="sm" />
             <Text size="sm" c="dimmed">
-              Building bundle… this can take a few minutes for large dashboards.
+              Building the file… this can take a few minutes for large dashboards.
             </Text>
           </Group>
         )}
 
-        {/* Last thing above the Export button rather than up with the counts:
-            the tier table is long enough that a reader reaches the button by
-            scrolling past everything else, and a size warning they scrolled
-            over is a size warning they did not read. */}
-        {preflight?.size_estimate && <SizeEstimate size={preflight.size_estimate} />}
-
-        {preflight?.python_runtime && preflight.python_runtime.candidates.length > 0 && (
-          <PythonRuntimeOption
-            info={preflight.python_runtime}
-            checked={pythonChoice}
-            onChange={setPythonChoice}
-            disabled={exporting}
-          />
-        )}
-
-        {getAnalysisState && (
-          <Text size="xs" c="dimmed" data-testid="export-static-state-note">
-            The bundle opens on the filters shown now. Tiles that cannot be redrawn in the
-            browser are computed at those filters, and keep that view if a reader changes them.
-          </Text>
-        )}
-
-        <Group justify="flex-end" gap="xs" mt="sm">
+        <Group justify="flex-end" gap="xs">
           {/* Cancel stays enabled during the build: closing only stops the
               client-side polling, the server keeps building. */}
-          <Button variant="subtle" onClick={onClose}>
-            Cancel
+          <Button variant="default" onClick={onClose}>
+            {inCopy ? 'Close' : 'Cancel'}
           </Button>
+          {!inCopy && (
           <Button
-            color="violet"
-            leftSection={<Icon icon="mdi:export-variant" width={14} />}
+            leftSection={<Icon icon="mdi:download" width={16} />}
             onClick={handleExport}
             loading={exporting}
             disabled={!dashboardId || !preflight || exporting}
@@ -547,14 +732,21 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
           >
             Export
           </Button>
+          )}
         </Group>
       </Stack>
     </Modal>
   );
 };
 
-/** The optional Python runtime (Pyodide): what it makes live, what it costs.
- *  Off by default: it is the largest thing a bundle can carry. */
+/**
+ * The optional Python runtime (Pyodide), said in the reader's terms: which
+ * tiles it keeps interactive and what that costs. Some tiles redraw with the
+ * server's Python (code figures the transpiler cannot follow, group
+ * comparisons, PCA / PCoA / t-SNE); without the runtime they ship as a picture
+ * of the exported view. Off by default: it is the largest thing a file can
+ * carry, and most readers never filter those tiles.
+ */
 function PythonRuntimeOption({
   info,
   checked,
@@ -566,7 +758,7 @@ function PythonRuntimeOption({
   onChange: (value: boolean) => void;
   disabled: boolean;
 }) {
-  const mb = ((info.bytes || info.bytes_if_embedded) / 1e6).toFixed(1);
+  const mb = Math.max(1, Math.round((info.bytes || info.bytes_if_embedded) / 1e6));
   const n = info.candidates.length;
   return (
     <Switch
@@ -574,11 +766,13 @@ function PythonRuntimeOption({
       onChange={(e) => onChange(e.currentTarget.checked)}
       disabled={disabled}
       data-testid="export-static-python-runtime"
-      label={`Embed the Python runtime (Pyodide ${info.version}, +${mb} MB)`}
+      label={`Keep ${n} analysis tile${n === 1 ? '' : 's'} interactive (+${mb} MB)`}
       description={
-        `${n} tile${n === 1 ? '' : 's'} run the server's Python in the browser and stay live ` +
-        '(code figures the transpiler cannot follow, group comparisons, PCA / PCoA / t-SNE); ' +
-        'without it they keep their export-time snapshot. Booted on first use, ~8 s, no network.'
+        `${n === 1 ? 'This tile needs' : 'These tiles need'} Python to redraw when a reader ` +
+        'changes a filter (code figures, group comparisons, PCA / PCoA / t-SNE). Without it ' +
+        `${n === 1 ? 'it ships' : 'they ship'} as a picture of the view you export. With it, ` +
+        'the file embeds Python and takes about 8 s more to open; ' +
+        'it still needs no network.'
       }
     />
   );

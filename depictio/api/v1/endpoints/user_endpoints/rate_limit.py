@@ -63,19 +63,20 @@ def _is_proxy_peer(host: str) -> bool:
     return addr.is_private or addr.is_loopback
 
 
-def _window_key(endpoint: str, scope: str) -> str:
-    window_id = int(time.time()) // _RATE_WINDOW_SECS
+def _window_key(endpoint: str, scope: str, window_s: int = _RATE_WINDOW_SECS) -> str:
+    window_id = int(time.time()) // window_s
     return f"depictio:ratelimit:{endpoint}:{scope}:{window_id}"
 
 
 _LIMITER_UNAVAILABLE = "Sign-in is temporarily unavailable; please retry in a moment."
+_RATE_LIMITED = "Too many authentication requests; please wait before retrying."
 
 
-def _limiter_down(error: Exception | None, *, fail_closed: bool) -> None:
+def _limiter_down(error: Exception | None, *, fail_closed: bool, detail: str | None = None) -> None:
     """Redis is unreachable: let the request through, or refuse it (503)."""
     if fail_closed:
         logger.error(f"Auth rate limiter unavailable ({error}); refusing request (fail-closed).")
-        raise HTTPException(status_code=503, detail=_LIMITER_UNAVAILABLE)
+        raise HTTPException(status_code=503, detail=detail or _LIMITER_UNAVAILABLE)
     logger.warning(f"Auth rate limiter Redis error ({error}); allowing request (fail-open).")
 
 
@@ -85,11 +86,20 @@ def enforce_rate_limit(
     *,
     max_calls: int = _RATE_MAX_CALLS,
     fail_closed: bool = False,
+    window_s: int = _RATE_WINDOW_SECS,
+    scope: str | None = None,
+    detail: str | None = None,
+    unavailable_detail: str | None = None,
 ) -> None:
-    """Rate-limit ``endpoint`` per client IP using a Redis fixed window.
+    """Rate-limit ``endpoint`` using a Redis fixed window.
 
-    Allows up to ``max_calls`` calls per ``_RATE_WINDOW_SECS`` window per
-    ``(client_ip, endpoint)``. Raises HTTP 429 when exceeded.
+    Allows up to ``max_calls`` calls per ``window_s`` window per
+    ``(scope, endpoint)`` and raises HTTP 429 when exceeded. The scope defaults
+    to the client IP, which suits the auth endpoints this was written for; a
+    caller can pass its own key instead, such as ``"user:<id>"`` to limit a
+    signed-in user whatever address they come from. ``detail`` and
+    ``unavailable_detail`` override the 429 and 503 messages for callers whose
+    users are not trying to authenticate.
 
     FAIL-OPEN by default: any Redis error (unreachable, timeout) allows the
     request through so an outage cannot lock everyone out of auth. With
@@ -97,35 +107,32 @@ def enforce_rate_limit(
     reach (password sign-in on a public instance), unlimited guessing during an
     outage is worse than a sign-in that waits for Redis.
     """
-    client_ip = _client_ip(request)
+    scope_key = _client_ip(request) if scope is None else scope
     client = _get_redis_client()
     if client is None:
-        _limiter_down(None, fail_closed=fail_closed)
+        _limiter_down(None, fail_closed=fail_closed, detail=unavailable_detail)
         return
 
     # Bucket the window so the key naturally rolls over; INCR then EXPIRE makes
     # the first hit in a window set the TTL.
-    key = _window_key(endpoint, client_ip)
+    key = _window_key(endpoint, scope_key, window_s)
 
     try:
         count = client.incr(key)
         if count == 1:
             # First hit in this window — set expiry so the counter self-cleans.
-            client.expire(key, _RATE_WINDOW_SECS)
+            client.expire(key, window_s)
     except Exception as e:
         # Redis error during the check itself: open, unless asked to close.
-        _limiter_down(e, fail_closed=fail_closed)
+        _limiter_down(e, fail_closed=fail_closed, detail=unavailable_detail)
         return
 
     if int(count) > max_calls:
         logger.warning(
-            f"Rate limit exceeded for {endpoint} from {client_ip} "
-            f"({count} calls in {_RATE_WINDOW_SECS}s window)."
+            f"Rate limit exceeded for {endpoint} from {scope_key} "
+            f"({count} calls in {window_s}s window)."
         )
-        raise HTTPException(
-            status_code=429,
-            detail="Too many authentication requests; please wait before retrying.",
-        )
+        raise HTTPException(status_code=429, detail=detail or _RATE_LIMITED)
 
 
 # ---------------------------------------------------------------------------

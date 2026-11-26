@@ -77,6 +77,10 @@ const GroupingHeaderControl: React.FC<{
   pushesContent: boolean;
   /** The SelectionGroupsPanel node, owned by the app (state is the app's). */
   children: React.ReactNode;
+  /** Why the panel cannot be used here (an offline file, where making groups
+   *  does not work yet): the button is then disabled with this as its
+   *  tooltip, and the panel never opens. */
+  unavailable?: string | null;
 }> = ({
   groupCount,
   colorBy,
@@ -86,6 +90,7 @@ const GroupingHeaderControl: React.FC<{
   onToggle,
   pushesContent,
   children,
+  unavailable = null,
 }) => {
   // Tell the dashboard grid the content column is about to lose (or regain)
   // this much width, so it re-lays out and pumps resize events for the length
@@ -134,7 +139,10 @@ const GroupingHeaderControl: React.FC<{
         active={Boolean(modeLabel) || armed}
         icon="analysis"
         label={modeLabel ? `Analysis: ${modeLabel}` : 'Analysis'}
-        tooltip="Save selections as groups, color or split every figure, compare groups"
+        tooltip={
+          unavailable ?? 'Save selections as groups, color or split every figure, compare groups'
+        }
+        disabled={Boolean(unavailable)}
         badge={groupCount}
         aria-pressed={Boolean(modeLabel) || armed}
         className="dc-dock--analysis"
@@ -142,7 +150,7 @@ const GroupingHeaderControl: React.FC<{
         onClick={onToggle}
       />
       <Drawer
-        opened={opened}
+        opened={opened && !unavailable}
         // The × closes the panel only; the mode (and with it every capability
         // marker) is the header button's business — see the note above.
         onClose={() => onOpenedChange(false)}

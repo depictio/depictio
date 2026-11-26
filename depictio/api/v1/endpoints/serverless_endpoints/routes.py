@@ -38,14 +38,14 @@ from __future__ import annotations
 import functools
 import json
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
 import anyio.to_thread
 import boto3
 from celery.result import AsyncResult
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 
 from depictio.api.celery_app import celery_app
@@ -53,6 +53,7 @@ from depictio.api.v1.celery_tasks import export_static_bundle as export_static_b
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import static_exports_collection
+from depictio.api.v1.endpoints.user_endpoints.rate_limit import enforce_rate_limit
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.api.v1.s3 import s3_client
 from depictio.models.models.analysis_state import ExportStaticRequest, NotebookExportRequest
@@ -61,6 +62,7 @@ from depictio.serverless.producer_a import (
     BYTES_PER_MB,
     BundleSize,
     BundleTooLargeError,
+    ExportUser,
     ProducerAError,
     export_denial,
     export_static,
@@ -146,12 +148,18 @@ def _external_s3_endpoint() -> str | None:
     return None
 
 
-def _presigned_download_url(bucket: str | None, key: str | None) -> str | None:
-    """Best-effort 24h presigned GET for the exported bundle, else ``None``.
+def _presigned_download_url(
+    bucket: str | None,
+    key: str | None,
+    expires_in: int = _PRESIGN_EXPIRY_SECONDS,
+    filename: str | None = None,
+) -> str | None:
+    """Best-effort presigned GET for an exported bundle (24h by default), else ``None``.
 
-    Callers fall back to the proxied ``/export-static/download/{job_id}`` route,
-    which always works — the presigned URL is only an optimisation that lets the
-    browser pull the artifact straight from object storage.
+    Callers fall back to proxying the object through the API, which always
+    works: the presigned URL is only an optimisation that lets the browser pull
+    the artifact straight from object storage. ``filename`` makes the storage
+    answer with an attachment of that name.
     """
     endpoint = _external_s3_endpoint()
     if not endpoint or not bucket or not key:
@@ -164,11 +172,10 @@ def _presigned_download_url(bucket: str | None, key: str | None) -> str | None:
             endpoint_url=endpoint,
             verify=settings.minio.verify_tls,
         )
-        return client.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": bucket, "Key": key},
-            ExpiresIn=_PRESIGN_EXPIRY_SECONDS,
-        )
+        params: dict[str, Any] = {"Bucket": bucket, "Key": key}
+        if filename:
+            params["ResponseContentDisposition"] = f'attachment; filename="{filename}"'
+        return client.generate_presigned_url("get_object", Params=params, ExpiresIn=expires_in)
     except Exception as exc:
         logger.warning(f"Could not presign static export {bucket}/{key}: {exc}")
         return None
@@ -296,32 +303,61 @@ class _PreflightBusy(Exception):
     """Every data-reading preflight slot of this process is taken."""
 
 
-def _run_preflight(dashboard_id: str, user: Any, python_runtime: str) -> tuple[Any, bool]:
+def _run_preflight(
+    dashboard_id: str, user: Any, python_runtime: str, request: Any = None
+) -> tuple[Any, bool]:
     """``(ExportResult, bound)``: the binding preflight for whoever may export,
     the data-free plan for everyone else.
 
     The binding preflight reads data (see :func:`preflight_export_static`), and
-    its only reader is the export modal, which only a project owner can open.
-    A viewer (anonymous in public mode) gets the instant plan instead: the same
-    rows, figures still ``provisional``, no size and no data read.
+    its only reader is the export modal, opened by whoever may export: a
+    project owner, or a visitor of a project that offers its copies (#1480),
+    who reads the preflight of the public build they would get (the owner's
+    rights, no email), counted against their address like their exports.
+    Anyone else (anonymous in public mode) gets the instant plan instead: the
+    same rows, figures still ``provisional``, no size and no data read.
     """
+    extra: dict[str, Any] = {}
     if export_denial(dashboard_id, user, "owner") is not None:
-        result = export_static(
-            dashboard_id, check=True, bind=False, user=user, python_runtime=python_runtime
-        )
-        return result, False
+        visitor_owner = _visitor_export_owner(dashboard_id, user)
+        if visitor_owner is None:
+            result = export_static(
+                dashboard_id, check=True, bind=False, user=user, python_runtime=python_runtime
+            )
+            return result, False
+        if request is not None:
+            _limit_visitor_exports(request)
+        user = ExportUser(id=visitor_owner, email="", is_admin=False, is_anonymous=False)
+        extra["public"] = True
     if not _preflight_slots.acquire(blocking=False):
         raise _PreflightBusy()
     try:
-        result = export_static(dashboard_id, check=True, user=user, python_runtime=python_runtime)
+        result = export_static(
+            dashboard_id, check=True, user=user, python_runtime=python_runtime, **extra
+        )
     finally:
         _preflight_slots.release()
     return result, True
 
 
+def _limit_visitor_exports(request: Any) -> None:
+    """A visitor's exports and their previews, per address (guest accounts are
+    made at will). Fail closed."""
+    enforce_rate_limit(
+        request,
+        "public_static_export",
+        max_calls=settings.static_export.public_export_per_ip_max,
+        window_s=settings.static_export.public_export_window_s,
+        fail_closed=True,
+        detail="Too many exports from this address; try again in a few minutes.",
+        unavailable_detail="Exports are temporarily unavailable; please retry in a moment.",
+    )
+
+
 @serverless_endpoint_router.get("/export-static/{dashboard_id}/preflight")
 async def preflight_export_static(
     dashboard_id: str,
+    request: Request,
     python_runtime: Literal["auto", "on", "off"] = DEFAULT_PYTHON_RUNTIME,
     current_user=Depends(get_user_or_anonymous),
 ) -> dict[str, Any]:
@@ -372,7 +408,7 @@ async def preflight_export_static(
     """
     try:
         result, bound = await anyio.to_thread.run_sync(
-            functools.partial(_run_preflight, dashboard_id, current_user, python_runtime)
+            functools.partial(_run_preflight, dashboard_id, current_user, python_runtime, request)
         )
     except _PreflightBusy:
         raise HTTPException(
@@ -450,6 +486,9 @@ async def preflight_export_static(
         # The optional Python runtime (Pyodide): which tiles it would make live
         # and what it adds to the file, so the modal can offer it with its size.
         "python_runtime": result.python,
+        # Which collections, columns and rows the file would hold (#1480): what an
+        # owner reviews before letting visitors download it. Empty when unbound.
+        "collections": result.collections,
     }
 
 
@@ -464,20 +503,90 @@ def can_export_static(
     the button is enabled exactly when the export would be accepted (project
     owner), whoever owns the dashboard document. Reads two documents, no data.
     """
-    return {"can_export": export_denial(dashboard_id, current_user, "owner") is None}
+    if export_denial(dashboard_id, current_user, "owner") is None:
+        return {"can_export": True}
+    if _visitor_export_owner(dashboard_id, current_user) is not None:
+        # A visitor of a project that offers its copies exports their view as
+        # a public build.
+        return {"can_export": True, "public": True}
+    return {"can_export": False}
+
+
+def _visitor_export_owner(dashboard_id: str, user: Any) -> Any:
+    """The project owner a visitor's export is built as, or ``None`` when this
+    caller may not export (#1480).
+
+    A visitor of a public project whose copies are offered (the owner's choice,
+    else the instance default) may export the view they have: the data are the
+    project's public data, and the build is the public one (no email, no
+    figure source beyond the Python runtime's, when they ask for it). An anonymous caller is everyone at once and keeps the
+    ready copies; a guest account is a caller like any other.
+    """
+    if user is None or getattr(user, "is_anonymous", False):
+        return None
+    from depictio.serverless import public_bundle
+
+    if not public_bundle.enabled():
+        return None
+    if export_denial(dashboard_id, user, "viewer") is not None:
+        return None
+    main_id = public_bundle.main_tab_id(dashboard_id)
+    project = public_bundle.project_of(main_id) if main_id else None
+    if not public_bundle.eligible(project):
+        return None
+    assert project is not None
+    return public_bundle._owner_id(project)
+
+
+#: Only recent pending jobs count towards the queue cap. A build stuck long
+#: past this is a worker problem, not queue pressure, and a TTL index (or a
+#: retention prune) is expected to have settled the document by then.
+_PENDING_GRACE = timedelta(minutes=15)
+
+
+def _pending_builds() -> int:
+    """Builds waiting or running on the whole instance, owner jobs and public
+    bundle rebuilds alike.
+
+    Both compete for the same Celery workers, so one cap covers both. Pending
+    job documents older than the grace window are ignored: a document that old
+    describes a lost or wedged build, not a queue the caller is competing with.
+    The public-bundle counter lives behind a lazy import because that module is
+    younger than this route; without it there are simply no rebuilds to count.
+    """
+    cutoff = datetime.now(timezone.utc) - _PENDING_GRACE
+    pending = static_exports_collection.count_documents(
+        {"status": "pending", "created_at": {"$gte": cutoff}}
+    )
+    try:
+        from depictio.serverless.public_bundle import pending_count
+    except ImportError:
+        return pending
+    return pending + pending_count()
 
 
 @serverless_endpoint_router.post("/export-static/{dashboard_id}")
 def dispatch_export_static(
     dashboard_id: str,
+    request: Request,
     python_runtime: Literal["auto", "on", "off"] = DEFAULT_PYTHON_RUNTIME,
-    request: ExportStaticRequest | None = None,
+    body: ExportStaticRequest | None = None,
     current_user=Depends(get_user_or_anonymous),
 ) -> dict[str, Any]:
     """Enqueue a static-bundle build; poll ``/export-static/status/{job_id}``.
 
-    Owner-gated (RFC §8 — a bundle is bulk data exfiltration). Denials return 404
-    rather than 403 so the endpoint cannot be used to enumerate dashboards.
+    Owner-gated (RFC §8 — a bundle is bulk data exfiltration), with one door for
+    visitors: on a public project that offers its copies (#1480), a signed-in
+    viewer (a guest account too) exports their view as a public build, limited
+    per address as well, and never of pinned data. Denials return 404 rather
+    than 403 so the endpoint cannot be used to enumerate dashboards.
+
+    Two guards run before anything is enqueued. A per-user limit
+    (``static_export.build_per_user_max`` per ``build_per_user_window_s``)
+    bounds how many builds one owner can start in a burst; it is fail-closed,
+    because a Redis outage is no reason to let builds through uncounted. An
+    instance-wide cap (``static_export.queue_max_pending``) keeps the queue from
+    growing past what its workers drain.
 
     An optional ``{"state": AnalysisState}`` body freezes the bundle's tiles on
     the exported view and makes it open on it; a state the runtime cannot
@@ -485,11 +594,19 @@ def dispatch_export_static(
     (or a ``null`` state) keeps the dashboard's own interactive defaults.
     """
     denial = export_denial(dashboard_id, current_user, "owner")
+    visitor_owner = None
     if denial is not None:
-        logger.info(f"Static export refused for {dashboard_id}: {denial}")
-        raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
+        visitor_owner = _visitor_export_owner(dashboard_id, current_user)
+        if visitor_owner is None:
+            logger.info(f"Static export refused for {dashboard_id}: {denial}")
+            raise HTTPException(status_code=404, detail="Dashboard not found or access denied")
 
-    state = request.state if request is not None else None
+    state = body.state if body is not None else None
+    if visitor_owner is not None and state is not None and state.pins.body():
+        raise HTTPException(
+            status_code=400,
+            detail="A visitor's export is drawn from the live data: leave the version first.",
+        )
     if state is not None:
         from depictio.serverless import report
 
@@ -497,6 +614,31 @@ def dispatch_export_static(
         if reason:
             logger.info(f"Static export refused for {dashboard_id}: {reason}")
             raise HTTPException(status_code=409, detail=reason)
+
+    enforce_rate_limit(
+        request,
+        "static_export_build",
+        max_calls=settings.static_export.build_per_user_max,
+        window_s=settings.static_export.build_per_user_window_s,
+        scope=f"user:{current_user.id}",
+        fail_closed=True,
+        detail="Too many exports started; try again in a few minutes.",
+        unavailable_detail="Exports are temporarily unavailable; please retry in a moment.",
+    )
+    if visitor_owner is not None:
+        # Guest accounts are made at will: an address gets its own limit too.
+        _limit_visitor_exports(request)
+    pending_builds = _pending_builds()
+    if pending_builds >= settings.static_export.queue_max_pending:
+        logger.warning(
+            "Static export refused: queue full "
+            f"({pending_builds} pending, cap {settings.static_export.queue_max_pending})."
+        )
+        raise HTTPException(
+            status_code=429,
+            detail="The export queue is full; try again in a few minutes.",
+            headers={"Retry-After": "60"},
+        )
 
     job_id = uuid4().hex
     static_exports_collection.insert_one(
@@ -510,7 +652,7 @@ def dispatch_export_static(
         }
     )
 
-    payload = {
+    payload: dict[str, Any] = {
         "job_id": job_id,
         "dashboard_id": str(dashboard_id),
         "user": {
@@ -521,6 +663,16 @@ def dispatch_export_static(
         },
         "python_runtime": python_runtime,
     }
+    if visitor_owner is not None:
+        # The public build: the owner's identity without their email, and no
+        # figure source beyond what the Python runtime, if asked for, serves.
+        payload["user"] = {
+            "id": str(visitor_owner),
+            "email": "",
+            "is_admin": False,
+            "is_anonymous": False,
+        }
+        payload["public"] = True
     if state is not None:
         payload["state"] = state.model_dump(mode="json")
     async_result = export_static_bundle_task.apply_async(args=[payload])

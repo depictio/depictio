@@ -1355,6 +1355,9 @@ export interface NotebookPreflight {
   combined_available?: boolean;
   /** Why not, when it cannot (the export then defaults to the dashboard alone). */
   combined_reason?: string | null;
+  /** Why this reader cannot have the report rendered (HTML / PDF), when the
+   *  server renders reports; the .qmd stays theirs. */
+  render_reason?: string | null;
 }
 
 /** What a render produces: the report alone, or the report and the dashboard
@@ -3880,6 +3883,11 @@ export interface ServerInfo {
     migration?: boolean;
     changes_since?: boolean;
     static_export?: boolean;
+    /** Visitors of a public project may download a pre-built offline copy
+     *  (#1480): both `DEPICTIO_STATIC_EXPORT_*` switches. */
+    static_export_public_download?: boolean;
+    /** What a public project offers its visitors until its owner decides. */
+    static_export_public_download_default?: boolean;
     notebook_export?: boolean;
     report_editor?: boolean;
   };
@@ -5542,6 +5550,11 @@ export interface ProjectListEntry {
   /** User override of the detected layout; null/absent = detect. */
   layout?: 'runs' | 'pipeline' | 'tables' | null;
   is_public?: boolean;
+  /** Visitors may download its dashboards' offline copy (#1480). Written only
+   *  by `setPublicOfflineDownload`. */
+  /** The owner's choice; null/absent: the instance default
+   *  (`features.static_export_public_download_default`). */
+  public_offline_download?: boolean | null;
   /** Creation time, UTC "YYYY-MM-DD HH:MM:SS". */
   registration_time?: string;
   /** Last modification time, UTC. Empty when never edited since creation. */
@@ -9104,6 +9117,15 @@ export async function exportDashboardJson(
 /** One row of the preflight per-component liveness verdict. `tier` mirrors
  *  `StaticTierEntry` in StaticBadgeContext (the badge the bundle itself
  *  renders); `reason`/`detail` explain non-live verdicts. */
+/** One tab of a static export's family, as its preflight lists it. */
+export interface StaticExportTab {
+  id: string;
+  title?: string | null;
+  tab_order?: number | null;
+  is_main_tab?: boolean;
+  counts?: Record<string, number>;
+}
+
 export interface StaticExportTierRow {
   component_id: string;
   title?: string | null;
@@ -9189,6 +9211,93 @@ export interface StaticExportPreflight {
   counts: { live: number; partial: number; frozen: number; omitted: number };
   size_estimate?: StaticExportSizeEstimate | null;
   python_runtime?: StaticExportPythonRuntime | null;
+  /** What the file would hold, per collection (empty when not bound). */
+  collections?: StaticExportCollection[];
+  /** The tabs of the family the bundle carries; tier rows name theirs by id. */
+  tabs?: StaticExportTab[];
+}
+
+/** One collection a bundle carries, as the binding preflight reads it. */
+export interface StaticExportCollection {
+  dc_id: string;
+  name: string;
+  type?: string | null;
+  /** The columns its Parquet holds (runtime-derived companions left out). */
+  columns: string[];
+  rows: number;
+  /** Read by a live table: ships every column, not just the ones named. */
+  whole: boolean;
+}
+
+/** The visitor's offline copy of a public dashboard (#1480), or null when none
+ *  can be downloaded (either switch off, private project, download off, or not
+ *  built yet: the server answers all of them alike). */
+export interface PublicBundleStatus {
+  dashboard_id: string;
+  available: boolean;
+  built_at?: string | null;
+  size_bytes?: number | null;
+  /** A newer copy is being built; the one offered is the previous. */
+  rebuilding: boolean;
+  /** Owners only: built from the dashboard and data as they are now. */
+  fresh?: boolean;
+  status?: string | null;
+  error?: string | null;
+  /** Present where the instance renders reports: the report + dashboard file
+   *  and its PDF, rendered after the bundle. */
+  report?: PublicReportStatus;
+}
+
+export interface PublicReportStatus {
+  available: boolean;
+  built_at?: string | null;
+  size_bytes?: number | null;
+  pdf_available: boolean;
+  pdf_size_bytes?: number | null;
+  /** A newer report is on its way (the bundle or the report is being made). */
+  rebuilding: boolean;
+  status?: string | null;
+  error?: string | null;
+}
+
+/** Which pre-built file a visitor downloads. */
+export type PublicCopyFile = 'dashboard' | 'report' | 'pdf';
+
+export async function getPublicBundleStatus(
+  dashboardId: string,
+): Promise<PublicBundleStatus | null> {
+  try {
+    const res = await authFetch(`${API_BASE}/serverless/public-bundle/${dashboardId}`);
+    if (!res.ok) return null;
+    return (await res.json()) as PublicBundleStatus;
+  } catch {
+    return null;
+  }
+}
+
+/** Where a visitor's browser downloads the offline copy: a plain link, since the
+ *  route needs no credentials and answers with a redirect or an attachment. */
+export function publicBundleDownloadUrl(
+  dashboardId: string,
+  file: PublicCopyFile = 'dashboard',
+): string {
+  const query = file === 'dashboard' ? '' : `?file=${file}`;
+  return `${API_BASE}/serverless/public-bundle/${dashboardId}/download${query}`;
+}
+
+/** Let visitors of a public project download its offline copies, or stop. */
+export async function setPublicOfflineDownload(
+  projectId: string,
+  enabled: boolean,
+  acknowledged = false,
+): Promise<{ public_offline_download: boolean; queued: number }> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/public_offline_download`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled, acknowledged }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to change the offline download');
+  return res.json();
 }
 
 export interface StaticExportResult {
@@ -9267,6 +9376,33 @@ export async function downloadStaticExport(
  *  current user: the very rule `dispatchStaticExport` is held to (project
  *  owner), so the button is enabled exactly when the export would go through.
  *  Any failure reads as "no". */
+/** The filters an offline bundle opens on (its manifest's `initial_filters`,
+ *  the view it was exported at). Always null on a server: the static runtime's
+ *  shim answers it in a bundle. */
+export function bundleOpeningFilters(): InteractiveFilter[] | null {
+  return null;
+}
+
+/** Who may export this dashboard: an owner, or (`public`) a visitor of a
+ *  public project that offers its copies, whose export is a public build. */
+export interface StaticExportAccess {
+  allowed: boolean;
+  public: boolean;
+}
+
+export async function getStaticExportAccess(dashboardId: string): Promise<StaticExportAccess> {
+  try {
+    const res = await authFetch(
+      `${API_BASE}/serverless/export-static/${dashboardId}/can-export`,
+    );
+    if (!res.ok) return { allowed: false, public: false };
+    const body = (await res.json()) as { can_export?: unknown; public?: unknown };
+    return { allowed: body.can_export === true, public: body.public === true };
+  } catch {
+    return { allowed: false, public: false };
+  }
+}
+
 export async function canExportStatic(dashboardId: string): Promise<boolean> {
   try {
     const res = await authFetch(
@@ -12125,6 +12261,8 @@ export interface UsagePoint {
   unique_ips: number;
   pageviews: number;
   dashboard_views: number;
+  /** Offline-bundle downloads of a dashboard (daily total, no visitor attached). */
+  downloads: number;
   temporary_users: number;
   signups: number;
   new_projects: number;

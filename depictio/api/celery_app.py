@@ -1044,7 +1044,9 @@ def _report_manifest(runtime: dict) -> Any:
     from depictio.serverless import report
 
     dashboard_id, user, state = _runtime_args(runtime)
-    return report.build_report_manifest(dashboard_id, user, state)
+    return report.build_report_manifest(
+        dashboard_id, user, state, public=bool(runtime.get("public"))
+    )
 
 
 def _runtime_manifest(job_id: str, runtime: dict, *, required: bool) -> Any:

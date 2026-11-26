@@ -183,3 +183,15 @@ def test_a_failed_tiles_caption_drops_its_data_badge():
     rule = re.search(r"([^}]*\.dpx-unavailable[^{]*)\{\s*display: none;", CHROME_CSS)
     assert rule and ":not(:has([data-depictio-mounted]))" in rule.group(1)
     assert ".dpx-asof" in rule.group(1)
+
+
+def test_a_card_fills_its_slot_in_a_card_row():
+    """A card row wraps each card in its own slot (the report editor reads one
+    thumbnail per slot), so the rule that makes a card give up its standalone
+    width has to reach the card inside the slot, or each card stays a small
+    inline box in a wide column."""
+    from depictio.api.v1.services.notebook_export.generator import NOTEBOOK_CHROME
+
+    rule = re.search(r"([^{}]*)\{[^}]*width:\s*100%\s*!important", NOTEBOOK_CHROME)
+    assert rule is not None
+    assert ".dpx-card-slot > .dpx-card" in rule.group(1)

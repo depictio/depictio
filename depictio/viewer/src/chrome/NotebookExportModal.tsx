@@ -3,19 +3,21 @@ import {
   Accordion,
   Alert,
   Anchor,
-  Badge,
   Button,
   Center,
-  Checkbox,
   Group,
   Loader,
   Modal,
+  Paper,
   ScrollArea,
   SegmentedControl,
+  SimpleGrid,
   Stack,
-  Table,
+  Switch,
   Text,
+  ThemeIcon,
   Tooltip,
+  UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
@@ -24,6 +26,7 @@ import {
   exportNotebook,
   fetchNotebookPreflight,
   fetchNotebookRenderStatus,
+  humanizeKind,
   startNotebookRender,
   type AnalysisState,
   type CombinedDefaultView,
@@ -35,20 +38,30 @@ import {
   Z_LAYERS,
 } from 'depictio-react-core';
 import { useReportEditorEnabled } from '../hooks/useReportEditorEnabled';
+import TileSummary, { type TileGroup, type TileStatus } from '../components/export/TileSummary';
+import { usePublicCopyState } from '../components/publicDownload/PublicCopy';
+import {
+  CopyModeControl,
+  ReadyCopyPanel,
+  ViewPills,
+  readyFiles,
+  statePills,
+  type CopyMode,
+} from '../components/export/ReadyCopy';
 
 /**
  * Export the dashboard: preflight first (what each tile becomes, with a reason
  * written for the reader), then the file.
  *
- * The default is the combined file: the rendered report AND the interactive
- * dashboard in one HTML, behind a "Report | Dashboard" switch. The separate
- * outputs sit under "Advanced": the dashboard alone (the static bundle, its
- * own modal), the report alone, and the `.qmd` source. The `.qmd` is generated
- * text the reader renders themselves; the two rendered outputs are that same
- * document executed here — on a worker, over minutes, so they are started,
- * polled, then downloaded. Where this server cannot produce the combined file
- * (no Quarto, or the caller may not embed the data), the default falls back to
- * the dashboard alone and says why.
+ * Three outputs, as three cards (#1480): the combined file (the rendered
+ * report AND the interactive dashboard in one HTML, behind a "Report |
+ * Dashboard" switch), the report alone, and the `.qmd` source. The `.qmd` is
+ * generated text the reader renders themselves; the two rendered outputs are
+ * that same document executed here — on a worker, over minutes, so they are
+ * started, polled, then downloaded. A card this reader cannot have is dimmed
+ * with the reason (no Quarto here, a copy whose code is not the project's...)
+ * and the modal opens on the notebook instead. The dashboard alone is a link
+ * under the cards, to its own modal.
  */
 interface NotebookExportModalProps {
   opened: boolean;
@@ -66,24 +79,107 @@ interface NotebookExportModalProps {
   /** The reader may edit this dashboard's report: the link to the editor
    *  shows only then (the editor answers 404 to anyone else). */
   canEditReport?: boolean;
+  /** Why this reader cannot have their own view rendered (an anonymous
+   *  visitor): "My view" is then off and the ready copy is what they get. */
+  viewRefusal?: string | null;
 }
 
-const STATUS_META: Record<NotebookInclusion, { label: string; color: string }> = {
-  code: { label: 'as code', color: 'teal' },
-  api: { label: 'via Depictio', color: 'blue' },
-  omitted: { label: 'omitted', color: 'gray' },
+/** What the notebook makes of a tile, for the tile list. */
+const TILE_STATUSES: Record<NotebookInclusion, TileStatus> = {
+  code: { label: 'recomputed as code', color: 'teal' },
+  api: { label: 'drawn by Depictio', color: 'blue' },
+  omitted: { label: 'left out', color: 'gray' },
 };
+const TILE_ORDER: NotebookInclusion[] = ['code', 'api', 'omitted'];
 
 /** The combined file, the report alone, or the document. */
 export type ExportChoice = 'combined' | 'report' | 'qmd';
 
-const FORMAT_HINT: Record<ExportChoice, string> = {
-  combined:
-    'One HTML file: the rendered report and the interactive dashboard, with a Report | ' +
-    'Dashboard switch. Opens without a server.',
-  qmd: 'The document to render yourself: quarto render <file>.qmd',
-  report: 'That same document, rendered here: one HTML file, nothing to install.',
+const FORMATS: { value: ExportChoice; title: string; icon: string; hint: string }[] = [
+  {
+    value: 'combined',
+    title: 'Report + dashboard',
+    icon: 'mdi:file-document-multiple-outline',
+    hint: 'One HTML file: the report, and the interactive dashboard one click away.',
+  },
+  {
+    value: 'report',
+    title: 'Report',
+    icon: 'mdi:file-document-outline',
+    hint: 'Rendered here as HTML, with a PDF if you want one.',
+  },
+  {
+    value: 'qmd',
+    title: 'Notebook',
+    icon: 'mdi:notebook-outline',
+    hint: 'The Quarto document (.qmd) to run and edit yourself.',
+  },
+];
+
+const PRIMARY_LABEL: Record<ExportChoice, string> = {
+  combined: 'Build report + dashboard',
+  report: 'Render report',
+  qmd: 'Download notebook',
 };
+
+/** A format to choose: selected, or dimmed with why it is not available (the
+ *  footnote is short, the whole reason is on hover). */
+const FormatCard: React.FC<{
+  title: string;
+  icon: string;
+  hint: string;
+  selected: boolean;
+  unavailable?: string | null;
+  onSelect: () => void;
+  testId: string;
+}> = ({ title, icon, hint, selected, unavailable, onSelect, testId }) => (
+  <Tooltip
+    label={unavailable ?? ''}
+    disabled={!unavailable}
+    multiline
+    w={300}
+    zIndex={Z_LAYERS.tooltip}
+  >
+    <UnstyledButton
+      onClick={onSelect}
+      disabled={Boolean(unavailable)}
+      aria-pressed={selected}
+      data-testid={testId}
+      data-selected={selected || undefined}
+      data-unavailable={unavailable ? true : undefined}
+      style={{ cursor: unavailable ? 'not-allowed' : 'pointer', display: 'block', height: '100%' }}
+    >
+      <Paper
+        withBorder
+        radius="md"
+        p="sm"
+        h="100%"
+        style={{
+          opacity: unavailable ? 0.55 : 1,
+          borderColor: selected ? 'var(--mantine-primary-color-filled)' : undefined,
+          background: selected ? 'var(--mantine-primary-color-light)' : undefined,
+        }}
+      >
+        <Stack gap={8}>
+          <Group justify="space-between" wrap="nowrap" align="flex-start">
+            <ThemeIcon variant={selected ? 'filled' : 'light'} size={32} radius="md">
+              <Icon icon={icon} width={18} />
+            </ThemeIcon>
+            {selected && <Icon icon="mdi:check-circle" width={18} color="var(--mantine-primary-color-filled)" />}
+          </Group>
+          <Stack gap={2}>
+            <Text size="sm" fw={600}>
+              {title}
+            </Text>
+            <Text size="xs" c="dimmed" lh={1.35}>
+              {unavailable ? 'Not available to you here' : hint}
+            </Text>
+          </Stack>
+        </Stack>
+      </Paper>
+    </UnstyledButton>
+  </Tooltip>
+);
 
 const THEME_HINT: Record<NotebookTheme, string> = {
   paper: "Depictio's Paper look, in this instance's brand colour, with Inter embedded.",
@@ -120,8 +216,16 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
   combinedOffered = true,
   onExportDashboardOnly,
   canEditReport = false,
+  viewRefusal = null,
 }) => {
   const reportEditorEnabled = useReportEditorEnabled() && canEditReport;
+  // The visitors' ready copy (#1480): the report + dashboard file and its PDF,
+  // already rendered at the default view. Where there is one, the modal opens
+  // on it; "My view" renders the reader's own.
+  const copyState = usePublicCopyState(opened ? dashboardId : null);
+  const publicCopy = copyState.copy?.report?.available ? copyState.copy : null;
+  const [mode, setMode] = useState<CopyMode>('view');
+  const inCopy = mode === 'copy' && Boolean(publicCopy);
   const [state, setState] = useState<AnalysisState | null>(null);
   const [preflight, setPreflight] = useState<NotebookPreflight | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -139,26 +243,49 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
 
   useEffect(() => {
     if (!opened) return;
-    const snapshot = getAnalysisState();
-    setState(snapshot);
+    setState(getAnalysisState());
     setPreflight(null);
     setError(null);
     setDownloaded(null);
     setJob(null);
     setStartedAt(null);
     setFormat(initialOutput);
+    // The snapshot is taken once per open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opened, dashboardId]);
+
+  // The ready copy first when there is one; the notebook is always the view.
+  useEffect(() => {
+    if (opened && copyState.loaded) {
+      setMode(publicCopy && initialOutput !== 'qmd' ? 'copy' : 'view');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opened, copyState.loaded]);
+
+  // The preflight is for "My view" only: the ready copy needs none.
+  const wantPreflight = opened && copyState.loaded && mode === 'view' && Boolean(state);
+  useEffect(() => {
+    if (!wantPreflight || !state || preflight) return;
     const controller = new AbortController();
-    fetchNotebookPreflight(dashboardId, snapshot, controller.signal)
-      .then((res) => setPreflight(res))
+    fetchNotebookPreflight(dashboardId, state, controller.signal)
+      .then((res) => {
+        setPreflight(res);
+        // An output this reader may not have: the notebook is what they can take.
+        const refused = !res.render_available || Boolean(res.render_reason);
+        setFormat((f) =>
+          (f === 'report' && refused) || (f === 'combined' && (refused || !res.combined_available))
+            ? 'qmd'
+            : f,
+        );
+      })
       .catch((err) => {
         if (!controller.signal.aborted) {
           setError(err instanceof Error ? err.message : String(err));
         }
       });
     return () => controller.abort();
-    // The snapshot is taken once per open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opened, dashboardId]);
+  }, [wantPreflight, state]);
 
   // A render is a job on a worker: ask it where it is until it stops moving.
   useEffect(() => {
@@ -239,19 +366,74 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     }
   };
 
-  const renderAvailable = preflight?.render_available ?? false;
-  const combinedAvailable = preflight?.combined_available ?? false;
+  // The server renders reports, but not for this reader (a guest on a copy
+  // whose code is not the project's): said on the card, before the click.
+  const renderReason = preflight?.render_available ? (preflight?.render_reason ?? null) : null;
+  const renderAvailable = (preflight?.render_available ?? false) && !renderReason;
   const counts = preflight?.counts ?? {};
   const isCombined = format === 'combined';
   // Both rendered outputs run the same job; only what it produces differs.
   const isReport = format === 'report' || isCombined;
-  // The default cannot be made here: it falls back to the dashboard alone.
-  const combinedFallback = isCombined && Boolean(preflight) && !combinedAvailable;
   const handleDashboardOnly = () => {
     onClose();
     onExportDashboardOnly?.();
   };
   const rendering = Boolean(job && job.status !== 'ready' && job.status !== 'error');
+
+  // Why a card cannot be chosen; nothing while the preflight is out.
+  const unavailable: Record<ExportChoice, string | null> = {
+    report: !preflight
+      ? null
+      : (renderReason ?? (renderAvailable ? null : 'Rendered reports are off on this server.')),
+    combined: !preflight
+      ? null
+      : (renderReason ??
+        (preflight.combined_available
+          ? null
+          : preflight.combined_reason
+            ? `Not here: ${preflight.combined_reason}.`
+            : 'This server cannot produce it.')),
+    qmd: null,
+  };
+  const formats = FORMATS.filter((f) => f.value !== 'combined' || combinedOffered);
+
+  // The tiles, by tab in the dashboard's order.
+  const tileGroups: TileGroup[] = [];
+  for (const c of preflight?.components ?? []) {
+    const tab = c.tab || 'Tiles';
+    let group = tileGroups.find((g) => g.id === tab);
+    if (!group) {
+      group = { id: tab, title: tab, items: [] };
+      tileGroups.push(group);
+    }
+    const note = [
+      c.reason,
+      c.output === 'snapshot' ? 'Shipped as a snapshot.' : null,
+      c.name ? `Function: ${c.name}` : null,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    group.items.push({
+      id: c.index,
+      title: c.title || c.index,
+      kind: humanizeKind(c.kind || c.component_type),
+      status: c.status,
+      note: note || null,
+    });
+  }
+  const total = preflight?.components.length ?? 0;
+  const stages = counts.stages ?? 0;
+  const summary = [
+    `${total} tile${total === 1 ? '' : 's'}`,
+    (counts.native ?? 0) > 0 ? `${counts.native} drawn in the document` : null,
+    (counts.snapshot ?? 0) > 0 ? `${counts.snapshot} as snapshots` : null,
+    stages > 0 ? `${stages} filter stage${stages === 1 ? '' : 's'}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const pills = statePills(state);
+  const primaryDisabled =
+    !state || !preflight || Boolean(unavailable[format]) || (isReport && !renderAvailable);
 
   return (
     <Modal
@@ -262,55 +444,120 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
       zIndex={Z_LAYERS.nestedOverlay}
       size="lg"
       title={
-        <Group gap="xs">
-          <Icon icon="mdi:export-variant" width={20} />
-          <Text fw={600}>Export</Text>
+        <Group gap="sm" wrap="nowrap">
+          <ThemeIcon variant="light" size={36} radius="md">
+            <Icon icon="mdi:export-variant" width={20} />
+          </ThemeIcon>
+          <Stack gap={0}>
+            <Text fw={600} lh={1.2}>
+              Export as a report
+            </Text>
+            <Text size="xs" c="dimmed" lh={1.3}>
+              {dashboardTitle || 'This dashboard'}
+            </Text>
+          </Stack>
         </Group>
       }
+      styles={{ header: { alignItems: 'flex-start' } }}
     >
       <Stack gap="md" data-testid="notebook-export-modal">
-        <Text size="sm" c="dimmed">
-          {dashboardTitle ? `"${dashboardTitle}"` : 'This dashboard'}, every tab, with the
-          filters, funnel order and groups you have right now.{' '}
-          {isCombined
-            ? 'One file to send: the rendered report, and the whole interactive dashboard one ' +
-              'click away. Filters set in either view follow in the other.'
-            : 'As a Quarto document you can keep working in: each tile is reproduced as code ' +
-              'where it can be, and rendered through Depictio otherwise.'}
-        </Text>
-
-        {reportEditorEnabled && (
-          <Group gap={6} data-testid="notebook-export-edit-report">
-            <Icon icon="mdi:file-document-edit-outline" width={16} />
-            <Anchor size="sm" href={`/dashboard-report/${dashboardId}`}>
-              Edit the report…
-            </Anchor>
-            <Text size="xs" c="dimmed">
-              Cover, introduction, captions and what each tile contributes.
-            </Text>
-          </Group>
-        )}
-
-        {combinedFallback && (
-          <Alert
-            color="yellow"
-            variant="light"
-            title="Report + dashboard is not available here"
-            data-testid="export-combined-fallback"
+        {publicCopy && (
+          <Tooltip
+            label={viewRefusal ?? ''}
+            disabled={!viewRefusal}
+            multiline
+            w={300}
+            zIndex={Z_LAYERS.tooltip}
           >
-            <Stack gap="xs">
-              <Text size="sm">
-                {preflight?.combined_reason
-                  ? `Why: ${preflight.combined_reason}.`
-                  : 'This server cannot produce it.'}
-                {/* Offered only where the dashboard-only export is (its owner):
-                    a non-owner was sent to an export that then failed. */}
-                {onExportDashboardOnly &&
-                  ' The dashboard alone still exports as one offline HTML file.'}
-              </Text>
-            </Stack>
-          </Alert>
+            <div>
+              <CopyModeControl
+                value={mode}
+                onChange={setMode}
+                viewDisabled={Boolean(viewRefusal)}
+              />
+            </div>
+          </Tooltip>
         )}
+        <div data-testid="notebook-export-state">
+          <ViewPills pills={pills} applied={!inCopy} />
+        </div>
+
+        {inCopy && publicCopy ? (
+          <ReadyCopyPanel
+            dashboardId={dashboardId}
+            status={publicCopy}
+            files={readyFiles(publicCopy, format === 'report' ? 'pdf' : 'report')}
+          />
+        ) : (
+        <>
+        <Stack gap={6}>
+          <SimpleGrid cols={{ base: 1, xs: formats.length }} spacing="sm">
+            {formats.map((f) => (
+              <FormatCard
+                key={f.value}
+                title={f.title}
+                icon={f.icon}
+                hint={f.hint}
+                selected={format === f.value}
+                unavailable={unavailable[f.value]}
+                onSelect={() => setFormat(f.value)}
+                testId={`export-format-${f.value}`}
+              />
+            ))}
+          </SimpleGrid>
+          {/* The PDF is one of the outputs, not a detail of the look: it sits
+              with the formats. */}
+          {isReport && (
+          <Paper withBorder radius="md" px="sm" py={8} data-testid="notebook-export-pdf-row">
+            <Group justify="space-between" wrap="nowrap" gap="sm">
+              <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+                <Icon icon="mdi:file-pdf-box" width={18} style={{ flexShrink: 0 }} />
+                <Stack gap={0} style={{ minWidth: 0 }}>
+                  <Text size="sm" fw={500}>
+                    Also a PDF
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {pdf
+                      ? pdfStyle === 'colour'
+                        ? 'Figures as images, tables as their first rows; tab colours on headings.'
+                        : 'Figures as images, tables as their first rows; print-friendly text.'
+                      : 'Figures as images, tables as their first rows, ready to print.'}
+                  </Text>
+                </Stack>
+              </Group>
+              <Group gap="xs" wrap="nowrap">
+                {pdf && (
+                  <SegmentedControl
+                    size="xs"
+                    value={pdfStyle}
+                    onChange={(v) => setPdfStyle(v as NotebookPdfStyle)}
+                    data={[
+                      { label: 'Colour', value: 'colour' },
+                      { label: 'Mono', value: 'mono' },
+                    ]}
+                    data-testid="notebook-export-pdf-style"
+                  />
+                )}
+                <Switch
+                  checked={pdf}
+                  onChange={(e) => setPdf(e.currentTarget.checked)}
+                  aria-label="Also a PDF"
+                  data-testid="notebook-export-pdf"
+                />
+              </Group>
+            </Group>
+          </Paper>
+          )}
+          {reportEditorEnabled && (
+            <Anchor
+              size="xs"
+              href={`/dashboard-report/${dashboardId}`}
+              data-testid="notebook-export-edit-report"
+            >
+              Edit the report: cover, introduction, captions…
+            </Anchor>
+          )}
+        </Stack>
 
         {error && (
           <Alert color="red" title="Export failed" data-testid="notebook-export-error">
@@ -325,94 +572,23 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
         )}
 
         {preflight && (
-          <>
-            <Group gap="xs" data-testid="notebook-export-counts">
-              <Badge color="teal" variant="light">
-                {counts.code ?? 0} as code
-              </Badge>
-              <Badge color="blue" variant="light">
-                {counts.api ?? 0} via Depictio
-              </Badge>
-              {(counts.native ?? 0) > 0 && (
-                <Badge color="cyan" variant="light">
-                  {counts.native} drawn in the document
-                </Badge>
-              )}
-              {(counts.snapshot ?? 0) > 0 && (
-                <Badge color="grape" variant="light">
-                  {counts.snapshot} as snapshot
-                </Badge>
-              )}
-              {(counts.omitted ?? 0) > 0 && (
-                <Badge color="gray" variant="light">
-                  {counts.omitted} omitted
-                </Badge>
-              )}
-              <Badge variant="outline">
-                {counts.stages ?? 0} filter stage{(counts.stages ?? 0) === 1 ? '' : 's'}
-              </Badge>
+          <Stack gap="xs">
+            <Group justify="space-between" align="baseline" wrap="nowrap">
+              <Text size="sm" fw={600}>
+                What the document holds
+              </Text>
+              <Text size="xs" c="dimmed" data-testid="notebook-export-counts">
+                {summary}
+              </Text>
             </Group>
-            <ScrollArea.Autosize mah={280}>
-              <Table striped highlightOnHover withTableBorder fz="xs">
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Tile</Table.Th>
-                    <Table.Th>Type</Table.Th>
-                    <Table.Th>In the notebook</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {preflight.components.map((c) => {
-                    const meta = STATUS_META[c.status];
-                    return (
-                      <Table.Tr key={c.index} data-testid={`notebook-export-row-${c.status}`}>
-                        <Table.Td>
-                          <Text size="xs" fw={500}>
-                            {c.title || c.index}
-                          </Text>
-                          {c.section && (
-                            <Text size="xs" c="dimmed">
-                              {c.tab ? `${c.tab} · ` : ''}
-                              {c.section}
-                            </Text>
-                          )}
-                        </Table.Td>
-                        <Table.Td>
-                          <Text size="xs">
-                            {c.component_type}
-                            {c.kind ? ` · ${c.kind}` : ''}
-                          </Text>
-                        </Table.Td>
-                        <Table.Td>
-                          <Tooltip
-                            label={c.reason ?? ''}
-                            disabled={!c.reason}
-                            multiline
-                            w={320}
-                            zIndex={Z_LAYERS.tooltip}
-                          >
-                            <Group gap={6} wrap="nowrap">
-                              <Badge size="xs" color={meta.color} variant="light">
-                                {meta.label}
-                              </Badge>
-                              {c.output === 'snapshot' && (
-                                <Badge size="xs" color="grape" variant="outline">
-                                  snapshot
-                                </Badge>
-                              )}
-                              {c.name && (
-                                <Text size="xs" c="dimmed" ff="monospace">
-                                  {c.name}
-                                </Text>
-                              )}
-                            </Group>
-                          </Tooltip>
-                        </Table.Td>
-                      </Table.Tr>
-                    );
-                  })}
-                </Table.Tbody>
-              </Table>
+            <ScrollArea.Autosize mah={260} type="auto">
+              <TileSummary
+                groups={tileGroups}
+                statuses={TILE_STATUSES}
+                order={TILE_ORDER}
+                testId="notebook-export-tiles"
+                itemTestId="notebook-export-row"
+              />
             </ScrollArea.Autosize>
             {preflight.warnings.length > 0 && (
               <Alert color="yellow" variant="light">
@@ -425,152 +601,65 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
                 </Stack>
               </Alert>
             )}
-          </>
-        )}
-
-        {isCombined && !combinedFallback && (
-          <Stack gap={4}>
-            <Text fw={500} size="sm">
-              Opens on
-            </Text>
-            <SegmentedControl
-              value={defaultView}
-              onChange={(v) => setDefaultView(v as CombinedDefaultView)}
-              data={[
-                { label: 'Report', value: 'report' },
-                { label: 'Dashboard', value: 'dashboard' },
-              ]}
-              data-testid="export-default-view"
-            />
-            <Text size="xs" c="dimmed">
-              The view the file shows first; a reader's own choice is remembered after that, and
-              links can open either (<code>#dashboard</code>, <code>#report</code>).
-            </Text>
           </Stack>
         )}
 
-        <Accordion
-          variant="contained"
-          defaultValue={initialOutput === 'combined' ? null : 'advanced'}
-          data-testid="export-advanced-panel"
-        >
-          <Accordion.Item value="advanced">
-            <Accordion.Control data-testid="export-advanced-toggle">
+        <Accordion variant="contained" radius="md" data-testid="notebook-export-advanced">
+          <Accordion.Item value="appearance">
+            <Accordion.Control icon={<Icon icon="mdi:palette-outline" width={18} />}>
               <Text size="sm" fw={500}>
-                Advanced: separate outputs
+                Appearance
+              </Text>
+              <Text size="xs" c="dimmed">
+                {theme === 'paper' ? 'Paper' : 'Classic'}
+                {isCombined ? ` · opens on the ${defaultView}` : ''}
               </Text>
             </Accordion.Control>
             <Accordion.Panel>
-              <Stack gap="xs">
-                <SegmentedControl
-                  value={format}
-                  onChange={(v) => setFormat(v as ExportChoice)}
-                  data={[
-                    ...(combinedOffered
-                      ? [
-                          {
-                            label: 'Report + dashboard',
-                            value: 'combined',
-                            disabled: !combinedAvailable,
-                          },
-                        ]
-                      : []),
-                    { label: 'Report only', value: 'report', disabled: !renderAvailable },
-                    { label: 'Quarto source (.qmd)', value: 'qmd' },
-                  ]}
-                  data-testid="notebook-export-format"
-                />
-                <Text size="xs" c="dimmed">
-                  {FORMAT_HINT[format]}
-                  {!renderAvailable && ' Rendered reports are off on this server.'}
-                </Text>
-                {onExportDashboardOnly && (
-                  <Group gap="xs">
-                    <Button
-                      size="xs"
-                      variant="default"
-                      leftSection={<Icon icon="mdi:view-dashboard-outline" width={14} />}
-                      onClick={handleDashboardOnly}
-                      data-testid="export-dashboard-only"
-                    >
-                      Dashboard only…
-                    </Button>
-                    <Text size="xs" c="dimmed">
-                      The interactive dashboard alone, as one offline HTML file (owners).
+              <Stack gap="sm">
+                <Stack gap={4}>
+                  <Text fw={500} size="sm">
+                    Look
+                  </Text>
+                  <SegmentedControl
+                    value={theme}
+                    onChange={(v) => setTheme(v as NotebookTheme)}
+                    data={[
+                      { label: 'Paper', value: 'paper' },
+                      { label: 'Classic', value: 'classic' },
+                    ]}
+                    data-testid="notebook-export-theme"
+                  />
+                  <Text size="xs" c="dimmed">
+                    {THEME_HINT[theme]}
+                  </Text>
+                </Stack>
+                {isCombined && (
+                  <Stack gap={4}>
+                    <Text fw={500} size="sm">
+                      Opens on
                     </Text>
-                  </Group>
+                    <SegmentedControl
+                      value={defaultView}
+                      onChange={(v) => setDefaultView(v as CombinedDefaultView)}
+                      data={[
+                        { label: 'Report', value: 'report' },
+                        { label: 'Dashboard', value: 'dashboard' },
+                      ]}
+                      data-testid="export-default-view"
+                    />
+                    <Text size="xs" c="dimmed">
+                      The view the file shows first; a reader's own choice is remembered after
+                      that, and links can open either (<code>#dashboard</code>,{' '}
+                      <code>#report</code>).
+                    </Text>
+                  </Stack>
                 )}
               </Stack>
             </Accordion.Panel>
           </Accordion.Item>
         </Accordion>
-
-        <Stack gap={4}>
-          <Text fw={500} size="sm">
-            Look
-          </Text>
-          <SegmentedControl
-            value={theme}
-            onChange={(v) => setTheme(v as NotebookTheme)}
-            data={[
-              { label: 'Paper', value: 'paper' },
-              { label: 'Classic', value: 'classic' },
-            ]}
-            data-testid="notebook-export-theme"
-          />
-          <Text size="xs" c="dimmed">
-            {THEME_HINT[theme]}
-          </Text>
-        </Stack>
-
-        <Accordion variant="contained" radius="md" data-testid="notebook-export-advanced">
-          <Accordion.Item value="advanced">
-            <Accordion.Control>
-              <Text size="sm" fw={500}>
-                Advanced
-              </Text>
-            </Accordion.Control>
-            <Accordion.Panel>
-              <Checkbox
-                checked={pdf}
-                onChange={(e) => setPdf(e.currentTarget.checked)}
-                label="Also a PDF"
-                description={
-                  'Rendered beside the HTML report with Quarto (typst, no TeX): figures as ' +
-                  'images, tables as their first rows, filters and other interactive parts left out.'
-                }
-                data-testid="notebook-export-pdf"
-              />
-              <Stack gap={4} mt="sm">
-                <Text size="sm" fw={500} c={pdf ? undefined : 'dimmed'}>
-                  PDF colours
-                </Text>
-                <SegmentedControl
-                  value={pdfStyle}
-                  onChange={(v) => setPdfStyle(v as NotebookPdfStyle)}
-                  disabled={!pdf}
-                  data={[
-                    { label: 'Colour', value: 'colour' },
-                    { label: 'Monochrome', value: 'mono' },
-                  ]}
-                  data-testid="notebook-export-pdf-style"
-                />
-                <Text size="xs" c="dimmed">
-                  {pdfStyle === 'colour'
-                    ? 'Tab colours on headings and in the contents, tinted notes.'
-                    : 'Print-friendly: headings, contents and notes in the text colour. Figures keep theirs.'}
-                </Text>
-              </Stack>
-            </Accordion.Panel>
-          </Accordion.Item>
-        </Accordion>
-
-        {isReport && !job && renderAvailable && !combinedFallback && (
-          <Alert color="blue" variant="light" data-testid="notebook-export-render-hint">
-            The Quarto document, executed on the server: every tile is recomputed and every
-            rendered figure costs a browser pass, so a dashboard this size takes a few minutes.
-            You can leave this open while it builds.
-          </Alert>
+        </>
         )}
 
         {job && rendering && (
@@ -612,60 +701,65 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
           </Alert>
         )}
 
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>
-            Close
-          </Button>
-          {combinedFallback && !job ? (
-            onExportDashboardOnly ? (
-              <Button
-                leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
+        <Group justify="space-between" wrap="nowrap" gap="sm">
+          <Group gap="lg" style={{ minWidth: 0 }}>
+            {onExportDashboardOnly && !inCopy && (
+              <Anchor
+                component="button"
+                type="button"
+                size="xs"
                 onClick={handleDashboardOnly}
-                data-testid="export-dashboard-only-primary"
+                data-testid="export-dashboard-only"
               >
-                Export dashboard only
-              </Button>
-            ) : null
-          ) : isReport && job?.status !== 'ready' ? (
-            <Button
-              leftSection={<Icon icon="mdi:file-document-outline" width={16} />}
-              onClick={handleRender}
-              loading={downloading || rendering}
-              disabled={
-                !state || !preflight || (isCombined ? !combinedAvailable : !renderAvailable)
-              }
-              data-testid="notebook-export-render"
-            >
-              {job?.status === 'error'
-                ? 'Render again'
-                : isCombined
-                  ? 'Build report + dashboard'
-                  : 'Render report'}
+                The dashboard alone (offline HTML)…
+              </Anchor>
+            )}
+          </Group>
+          <Group gap="xs" wrap="nowrap">
+            <Button variant="default" onClick={onClose}>
+              Close
             </Button>
-          ) : (
-            <>
-              {isReport && job?.pdf_filename && (
-                <Button
-                  variant="default"
-                  leftSection={<Icon icon="mdi:file-pdf-box" width={16} />}
-                  onClick={() => handleDownloadReport('pdf')}
-                  loading={downloading}
-                  data-testid="notebook-export-download-pdf"
-                >
-                  Download PDF
-                </Button>
-              )}
-              <Button
-                leftSection={<Icon icon="mdi:download" width={16} />}
-                onClick={isReport ? () => handleDownloadReport('html') : handleDownload}
-                loading={downloading}
-                disabled={!state || !preflight}
-                data-testid="notebook-export-download"
+            {inCopy ? null : isReport && job?.status !== 'ready' ? (
+              <Tooltip
+                label="Rendered on the server: about a minute or more. You can leave this open."
+                disabled={!isReport || Boolean(job) || !renderAvailable}
+                zIndex={Z_LAYERS.tooltip}
               >
-                {isCombined ? 'Download file' : isReport ? 'Download report' : 'Download'}
+              <Button
+                leftSection={<Icon icon="mdi:file-document-outline" width={16} />}
+                onClick={handleRender}
+                loading={downloading || rendering}
+                disabled={primaryDisabled}
+                data-testid="notebook-export-render"
+              >
+                {job?.status === 'error' ? 'Render again' : PRIMARY_LABEL[format]}
               </Button>
-            </>
-          )}
+              </Tooltip>
+            ) : (
+              <>
+                {isReport && job?.pdf_filename && (
+                  <Button
+                    variant="default"
+                    leftSection={<Icon icon="mdi:file-pdf-box" width={16} />}
+                    onClick={() => handleDownloadReport('pdf')}
+                    loading={downloading}
+                    data-testid="notebook-export-download-pdf"
+                  >
+                    Download PDF
+                  </Button>
+                )}
+                <Button
+                  leftSection={<Icon icon="mdi:download" width={16} />}
+                  onClick={isReport ? () => handleDownloadReport('html') : handleDownload}
+                  loading={downloading}
+                  disabled={!state || !preflight}
+                  data-testid="notebook-export-download"
+                >
+                  {isCombined ? 'Download file' : isReport ? 'Download report' : PRIMARY_LABEL.qmd}
+                </Button>
+              </>
+            )}
+          </Group>
         </Group>
       </Stack>
     </Modal>

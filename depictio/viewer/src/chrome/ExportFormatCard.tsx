@@ -9,6 +9,9 @@ interface ExportFormatCardProps {
   description: React.ReactNode;
   /** The card's buttons. */
   children: React.ReactNode;
+  /** Lines under the buttons: which view a ready copy shows, why an action
+   *  is off (a tooltip on a disabled button never fires). */
+  footer?: React.ReactNode;
   testId?: string;
 }
 
@@ -18,6 +21,7 @@ const ExportFormatCard: React.FC<ExportFormatCardProps> = ({
   title,
   description,
   children,
+  footer,
   testId,
 }) => (
   <Paper withBorder radius="md" p="sm" data-testid={testId}>
@@ -35,6 +39,7 @@ const ExportFormatCard: React.FC<ExportFormatCardProps> = ({
           </Text>
         </div>
         <Group gap="xs">{children}</Group>
+        {footer}
       </Stack>
     </Group>
   </Paper>

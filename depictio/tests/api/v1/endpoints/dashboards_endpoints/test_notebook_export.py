@@ -718,6 +718,39 @@ def test_the_preflight_says_whether_the_combined_file_is_on(patched_env):
     assert pre.combined_available is True and pre.combined_reason is None
 
 
+def test_the_preflight_says_why_a_viewer_cannot_have_the_code_figures_rendered(patched_env):
+    """The render's refusal is said before the click (#1480): a viewer of a
+    dashboard with code-mode figures reads it in the preflight; an editor reads
+    nothing; and a server that does not render says nothing either."""
+    routes_mod = "depictio.api.v1.endpoints.dashboards_endpoints.routes"
+
+    def _preflight(state):  # as a signed-in reader
+        return nbx.notebook_export_preflight(
+            dashboard_id=DASHBOARD_ID,  # type: ignore[arg-type]
+            request=NotebookExportRequest(state=state),
+            current_user=_RenderUser(),  # type: ignore[arg-type]
+            access_token=None,
+        )
+
+    with (
+        patch.object(nbx.settings.notebook_export, "render_enabled", True),
+        patch.object(type(nbx.settings.auth), "is_single_user_mode", False),
+    ):
+        with patch(
+            f"{routes_mod}.check_project_permission",
+            lambda project_id, user, required="viewer": required != "editor",
+        ):
+            pre = _preflight(_state(FILTERS))
+        assert pre.render_reason and "code-mode" in pre.render_reason
+        with patch(
+            f"{routes_mod}.check_project_permission",
+            lambda project_id, user, required="viewer": True,
+        ):
+            assert _preflight(_state(FILTERS)).render_reason is None
+    with patch.object(nbx.settings.notebook_export, "render_enabled", False):
+        assert _preflight(_state(FILTERS)).render_reason is None
+
+
 def test_a_render_job_of_another_user_is_not_found(patched_env):
     class _Result:
         state = "SUCCESS"
@@ -786,6 +819,104 @@ def test_an_editor_can_render_author_written_code(patched_env):
     assert exc.value.status_code == 403
 
 
+def _authored_world(dashboard_owners: list[ObjectId]):
+    """A project with one owner and one editor, and a dashboard document owned
+    by ``dashboard_owners``: the code-authorship gate reads both."""
+    from types import SimpleNamespace
+
+    project_owner, project_editor = ObjectId(), ObjectId()
+    db = mongomock.MongoClient().authored
+    db.projects.insert_one(
+        {
+            "_id": PROJECT_ID,
+            "is_public": True,
+            "permissions": {
+                "owners": [{"_id": project_owner}],
+                "editors": [{"_id": project_editor}],
+                "viewers": [],
+            },
+        }
+    )
+    db.dashboards.insert_one(
+        {
+            "dashboard_id": ObjectId(DASHBOARD_ID),
+            "project_id": PROJECT_ID,
+            "permissions": {"owners": [{"_id": oid} for oid in dashboard_owners]},
+        }
+    )
+    plan = SimpleNamespace(
+        tabs=[
+            {
+                "dashboard_id": DASHBOARD_ID,
+                "project_id": str(PROJECT_ID),
+                "stored_metadata": [
+                    {"component_type": "figure", "mode": "code", "title": "F", "index": "c1"}
+                ],
+            }
+        ]
+    )
+    return db, plan, project_owner, project_editor
+
+
+def _as_viewer_of(db):
+    """The caller is a viewer of the project (not an editor), outside single-user mode."""
+    routes_mod = "depictio.api.v1.endpoints.dashboards_endpoints.routes"
+    return (
+        patch.object(type(nbx.settings.auth), "is_single_user_mode", False),
+        patch(f"{routes_mod}.dashboards_collection", db.dashboards),
+        patch(f"{routes_mod}.projects_collection", db.projects),
+        patch(f"{routes_mod}.get_user_group_ids", lambda user_id: []),
+        patch(
+            f"{routes_mod}.check_project_permission",
+            lambda project_id, user, required="viewer": required == "viewer",
+        ),
+    )
+
+
+def test_a_viewer_may_render_code_its_project_wrote():
+    """The render never runs the figure's Python (the API's sandbox draws it,
+    as for every visitor of the live dashboard): what matters is who could
+    have written that code. A dashboard whose owners are the project's owners
+    and editors renders for any signed-in reader (#1480)."""
+    db, plan, project_owner, project_editor = _authored_world([])
+    for owners in ([project_owner], [project_owner, project_editor]):
+        db.dashboards.update_one({}, {"$set": {"permissions.owners": [{"_id": o} for o in owners]}})
+        p1, p2, p3, p4, p5 = _as_viewer_of(db)
+        with p1, p2, p3, p4, p5:
+            nbx._require_owner_for_authored_code(plan, _RenderUser())  # type: ignore[arg-type]
+            assert nbx._render_refusal(plan, _RenderUser()) is None  # type: ignore[arg-type]
+
+
+def test_a_copy_whose_code_a_viewer_wrote_stays_refused():
+    """A viewer who duplicated a dashboard owns the copy and may have written
+    its code: rendering it stays the project's owners' and editors' call."""
+    viewer = ObjectId()
+    for owners in ([viewer], [ObjectId(), viewer], []):
+        db, plan, project_owner, _ = _authored_world(owners)
+        p1, p2, p3, p4, p5 = _as_viewer_of(db)
+        with p1, p2, p3, p4, p5:
+            with pytest.raises(HTTPException) as exc:
+                nbx._require_owner_for_authored_code(plan, _RenderUser())  # type: ignore[arg-type]
+            assert exc.value.status_code == 403
+            assert "project's owners and editors" in exc.value.detail
+            assert nbx._render_refusal(plan, _RenderUser())  # type: ignore[arg-type]
+
+
+def test_renders_by_readers_who_are_not_editors_are_limited_per_address(patched_env):
+    """Guest accounts are made at will: a render a non-editor starts also
+    counts against its address, and the limiter fails closed."""
+    from depictio.api.v1.endpoints.user_endpoints import rate_limit
+
+    calls: list[dict] = []
+    with patch.object(nbx, "enforce_rate_limit", lambda request, endpoint, **kw: calls.append(kw)):
+        nbx._limit_render_per_address(object(), _RenderUser(), editor=False)  # type: ignore[arg-type]
+        nbx._limit_render_per_address(object(), _RenderUser(), editor=True)  # type: ignore[arg-type]
+    assert len(calls) == 1
+    assert calls[0]["fail_closed"] is True
+    assert calls[0]["max_calls"] == nbx.settings.notebook_export.render_per_ip_max
+    assert rate_limit is not None
+
+
 def test_a_definition_version_exports_the_components_as_that_version_defined_them():
     live = {
         "dashboard_id": DASHBOARD_ID,
@@ -849,3 +980,10 @@ def test_report_images_are_inlined_from_the_apps_own_assets_only(monkeypatch):
     )
     assert set(logos) == {"hero"} and logos["hero"]["light"].startswith("data:image/png")
     assert ep._depictio_mark().startswith("data:image/svg+xml;base64,")
+
+
+def test_a_guest_account_is_named_nowhere_in_its_export():
+    """A guest's report names no one: its temporary address is no author."""
+    guest = types.SimpleNamespace(email="temp_user_1@depictio.temp", is_temporary=True)
+    assert nbx._who(guest) is None
+    assert nbx._who(types.SimpleNamespace(email="ada@example.org")) == "ada@example.org"

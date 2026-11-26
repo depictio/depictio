@@ -372,6 +372,28 @@ not in the hover-revealed action row, since a viewer must see it without hoverin
 **Permissions (producers A and C).** `viewer` for preflight, **`owner`** for the build itself: a
 bundle is bulk data exfiltration and should not be available to every viewer.
 
+**Public download (#1480).** The data of a public project are public already: every figure a
+visitor sees carries them. So once the instance enables it, a public project offers its
+visitors offline files by default (an instance setting), and its owner may turn that off, or
+review at any time what each file carries (the binding preflight lists each collection's
+columns and rows, and which tables ship whole). The ready copies are drawn at the default
+state, and the route that serves them does no work (no build, no enqueue). A signed-in visitor
+(a guest account too) may also export the view they have filtered: the same public build at
+their state, limited per user and per address, never of a pinned version. A public build
+names no one (`exported_by` is null). Code-mode figures keep the transpiled prologue, a closed
+list of JSON operations the runtime interprets (never runnable code), and lose their source, so
+they still follow filters offline. The ready copies embed no Python runtime; a visitor's own
+export may (the option is checked when some tile needs it): the figures it serves then carry
+their code in their job, the same code any visitor of the live dashboard already reads. Copies are rebuilt after a save
+or an ingestion, keyed on content rather than time, and deleted when the project goes private,
+the option goes off or the dashboard is deleted. The download is rate-limited per address and
+refuses (503) when the limiter cannot count, rather than letting requests through.
+Where the instance renders reports, each copy also has its report: the combined report +
+dashboard file and its PDF, rendered on a worker after the bundle and under the same key, by
+the same rules (the owner's rights without their email, the default state, the public
+manifest). The render never runs the author's Python, as an owner's render does not, and the
+document leaves code-mode figures' source out.
+
 ### 8.1 Size envelope for `single-file`
 
 Measured on the five reference families (v1.5.0, 2026-08-06):

@@ -2892,3 +2892,90 @@ def test_a_frozen_upset_compute_sends_the_dashboards_track_pins():
     assert payload["category_colors"] == {"Phylum": {"Bacillota": "#40c057"}}
     comp.pop(producer_a._FOLD_COLORS_KEY)
     assert "category_colors" not in producer_a.celery_compute_request(comp)[1]
+
+
+# ---------------------------------------------------------------------------
+# Public bundle (#1480): what a visitor of a public project downloads
+# ---------------------------------------------------------------------------
+
+_EMAIL_RE = __import__("re").compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+
+
+def test_a_public_bundle_names_no_one_and_ships_no_author_code(
+    offline_stack: dict[str, list],
+):
+    """Built as the project's owner but without their email, the public bundle
+    has no ``exported_by`` and its code figure's source is gone from the shipped
+    document. The figure itself is drawn as an owner's bundle draws it: its
+    prologue, when it has one, is the closed IR, not code."""
+    owner = export_manifest(str(DASHBOARD_OID), ExportUser(id=ObjectId(), is_admin=True))
+    result = export_manifest(
+        str(DASHBOARD_OID), ExportUser(id=ObjectId(), is_admin=True), public=True
+    )
+    manifest = result.manifest
+    assert manifest is not None and owner.manifest is not None
+    assert manifest.provenance.exported_by is None
+    shipped = manifest.model_dump_json()
+    assert _EMAIL_RE.search(shipped) is None
+    assert "px.scatter(df" not in shipped
+    assert "code_content" not in shipped
+    assert "__public_code_hidden__" not in shipped
+    # The same tiers and the same replayable prologues as the owner's bundle.
+    tiers = {r.component_id: r.tier for r in result.tier_rows}
+    assert tiers == {r.component_id: r.tier for r in owner.tier_rows}
+    assert set(manifest.prologues) == set(owner.manifest.prologues)
+    # No Python runtime: nothing in the file can run the author's code.
+    assert not (result.python or {}).get("embedded")
+
+
+def test_a_public_bundle_may_carry_python_but_never_names_anyone(
+    offline_stack: dict[str, list], tmp_path: Path
+):
+    """A visitor may ask for the Python runtime (#1480): the figures it serves
+    carry their code in their job, as for any reader of the live dashboard, and
+    nothing else gains a source. The name of who it was built as, or a check
+    stays refused."""
+    result = export_manifest(
+        str(DASHBOARD_OID),
+        ExportUser(id=ObjectId(), is_admin=True),
+        python_runtime="auto",
+        public=True,
+    )
+    assert result.manifest is not None
+    assert (result.python or {}).get("mode") == "auto"
+    shipped = result.manifest.model_dump_json()
+    assert "code_content" not in shipped
+    assert _EMAIL_RE.search(shipped) is None
+    with pytest.raises(ProducerAError):
+        export_static(
+            str(DASHBOARD_OID),
+            out_path=tmp_path / "b.html",
+            user=ExportUser(id=ObjectId(), email="owner@example.com"),
+            public=True,
+        )
+
+
+def test_an_owner_export_still_ships_the_code_figure_source(offline_stack: dict[str, list]):
+    """The public freeze is opt-in: an owner's export is unchanged."""
+    manifest = export_manifest(
+        str(DASHBOARD_OID), ExportUser(id=ObjectId(), is_admin=True)
+    ).manifest
+    assert manifest is not None
+    assert "px.scatter(df" in manifest.model_dump_json()
+
+
+def test_the_preflight_lists_exactly_what_the_file_would_hold(offline_stack: dict[str, list]):
+    """The owner's preview before visitors may download (#1480): the collections
+    a build keeps, their columns and rows. The table's collection ships whole;
+    the advanced_viz one is pruned to what its live kind reads (``tip`` is read
+    only by the frozen tree); the heatmap's collection is dropped with it."""
+    inventory = {c["dc_id"]: c for c in _preflight().collections}
+    assert set(inventory) == {str(DC_OID), str(AV_DC_OID)}
+    table = inventory[str(DC_OID)]
+    assert sorted(table["columns"]) == ["bill", "flipper", "species", "year"]
+    assert table["rows"] == 4
+    assert table["whole"] is True
+    av = inventory[str(AV_DC_OID)]
+    assert sorted(av["columns"]) == ["lfc", "q_val"]
+    assert av["rows"] == 3
+    assert av["whole"] is False

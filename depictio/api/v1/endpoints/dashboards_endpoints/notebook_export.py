@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 from bson import ObjectId
-from fastapi import Depends, HTTPException, Response
+from fastapi import Depends, HTTPException, Request, Response
 from pydantic import ValidationError
 
 from depictio.api.v1.configs.config import settings
@@ -38,6 +38,7 @@ from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
     get_user_or_anonymous,
     oauth2_scheme_optional,
 )
+from depictio.api.v1.endpoints.user_endpoints.rate_limit import enforce_rate_limit
 from depictio.api.v1.services.notebook_export.generator import (
     DCPlan,
     ExportPlan,
@@ -263,6 +264,11 @@ def _dtypes_for(family_doc: dict[str, Any], dc_id: str, wf_id: str | None) -> di
 
 
 def _who(current_user: Any) -> str | None:
+    """Who the export names as its exporter (and the cover as its author, when
+    nothing else does). A guest account is no one to credit (#1480): its file
+    names no one, as a visitor's ready copy does."""
+    if getattr(current_user, "is_temporary", False):
+        return None
     for attr in ("email", "username", "name"):
         value = getattr(current_user, attr, None)
         if value:
@@ -869,8 +875,34 @@ def _owner_refusal(
     from depictio.serverless.producer_a import export_denial
 
     if export_denial(str(dashboard_id), current_user, required="owner"):
-        return "embedding the dashboard's data is limited to its owners, as a static export is"
+        # A visitor of a project that offers its files may export the
+        # dashboard (#1480), so may have it embedded: the same public build.
+        if _visitor_embed_owner(dashboard_id, current_user) is None:
+            return "embedding the dashboard's data is limited to its owners, as a static export is"
+        if state.pins.body():
+            return "a visitor's file is drawn from the live data: leave the version first"
     return None
+
+
+def _visitor_embed_owner(dashboard_id: PyObjectId, current_user: User) -> Any:
+    """The project owner a visitor's embedded dashboard is built as, or ``None``
+    (the rule of a visitor's static export, ``_visitor_export_owner``)."""
+    from depictio.api.v1.endpoints.serverless_endpoints.routes import _visitor_export_owner
+
+    return _visitor_export_owner(str(dashboard_id), current_user)
+
+
+def _embed_identity(dashboard_id: PyObjectId, current_user: User) -> tuple[dict[str, Any], bool]:
+    """``(user payload, public)`` the worker builds the embedded manifest with:
+    the requester when they own the dashboard, else the public build (the
+    project owner without an email) a visitor's static export is (#1480)."""
+    from depictio.serverless.producer_a import export_denial
+    from depictio.serverless.report import user_payload
+
+    if export_denial(str(dashboard_id), current_user, required="owner") is None:
+        return user_payload(current_user), False
+    owner = _visitor_embed_owner(dashboard_id, current_user)
+    return {"id": str(owner), "email": "", "is_admin": False, "is_anonymous": False}, True
 
 
 def _runtime_refusal(
@@ -946,6 +978,8 @@ def notebook_export_preflight(
     reason = _combined_refusal(dashboard_id, state, current_user)
     preflight.combined_available = reason is None
     preflight.combined_reason = reason
+    if preflight.render_available:
+        preflight.render_reason = _render_refusal(plan, current_user)
     return preflight
 
 
@@ -1007,36 +1041,137 @@ def _require_render_enabled() -> None:
         )
 
 
+def _authored_code_refusal(plan: ExportPlan, current_user: User) -> str | None:
+    """Why this caller may not have ``plan`` rendered for its authored code, or
+    ``None``: the rule of :func:`_require_owner_for_authored_code`, for the
+    preflight to say before anyone clicks."""
+    try:
+        _require_owner_for_authored_code(plan, current_user)
+    except HTTPException as exc:
+        return str(exc.detail)
+    return None
+
+
+def _render_refusal(plan: ExportPlan, current_user: User) -> str | None:
+    """Why the render would refuse this caller, or ``None``."""
+    try:
+        _require_signed_in(current_user)
+    except HTTPException as exc:
+        return str(exc.detail)
+    return _authored_code_refusal(plan, current_user)
+
+
+def _code_tabs(plan: ExportPlan) -> list[dict[str, Any]]:
+    """The tabs of ``plan`` that carry a code-mode figure."""
+    return [
+        tab
+        for tab in plan.tabs
+        if any(
+            isinstance(m, dict) and m.get("component_type") == "figure" and m.get("mode") == "code"
+            for m in tab.get("stored_metadata") or []
+        )
+    ]
+
+
+def _code_written_by_project(project_id: Any, tabs: list[dict[str, Any]]) -> bool:
+    """Whether only the project's owners and editors could have written the
+    code of ``tabs`` (#1480).
+
+    Who may edit a dashboard's code: the project's editors, and the owners of
+    the dashboard *document*. A viewer owns the copies they duplicate, so a
+    tab is the project's own only when every owner of its document holds an
+    editor role on the project (an administrator counts). A document without
+    owners is not vouched for.
+    """
+    from types import SimpleNamespace
+
+    if not ObjectId.is_valid(str(project_id)):
+        return False
+    project = routes.projects_collection.find_one({"_id": ObjectId(str(project_id))})
+    if not project:
+        return False
+    for tab in tabs:
+        raw_id = tab.get("dashboard_id")
+        ids = [raw_id] + ([ObjectId(str(raw_id))] if ObjectId.is_valid(str(raw_id)) else [])
+        doc = routes.dashboards_collection.find_one(
+            {"dashboard_id": {"$in": ids}}, {"permissions": 1}
+        )
+        owners = ((doc or {}).get("permissions") or {}).get("owners") or []
+        if not owners:
+            return False
+        for owner in owners:
+            owner_id = owner.get("_id") or owner.get("id") if isinstance(owner, dict) else owner
+            if owner_id is None:
+                return False
+            who = SimpleNamespace(
+                id=owner_id,
+                is_admin=bool(isinstance(owner, dict) and owner.get("is_admin")),
+                is_anonymous=False,
+            )
+            if not routes.has_permission(
+                project, who, "editor", routes.get_user_group_ids(owner_id)
+            ):
+                return False
+    return True
+
+
+def _is_project_editor(plan: ExportPlan, current_user: User) -> bool:
+    if settings.auth.is_single_user_mode:
+        return True
+    project_id = (plan.tabs[0] if plan.tabs else {}).get("project_id")
+    return bool(project_id) and routes.check_project_permission(project_id, current_user, "editor")
+
+
 def _require_owner_for_authored_code(plan: ExportPlan, current_user: User) -> None:
-    """Only a project owner or editor may render a dashboard that carries
-    authored code (#1457).
+    """A dashboard with code-mode figures renders when its code is the
+    project's own, or for the project's owners and editors (#1457, #1480).
 
     The render never runs a code-mode figure's Python itself (``author_code``
-    is off for it: the figure is drawn through the API's sandbox, as the
-    dashboard draws it). The gate stays as a second line: it rests on the
-    *project*'s owners and editors, since anyone with viewer access can own
-    a dashboard document (by creating or duplicating one) and so write its
-    code — a mere viewer who owns such a copy stays refused.
+    is off for it: the figure is drawn through the API's sandbox, as the live
+    dashboard draws it for every visitor). What the gate guards is who could
+    have written that code: anyone with viewer access can own a dashboard
+    document (by creating or duplicating one) and write code in it, and such
+    a copy stays the project's owners' and editors' to render. A dashboard
+    whose document owners are all project editors renders for any signed-in
+    reader (:func:`_code_written_by_project`).
     """
+    tabs = _code_tabs(plan)
+    if not tabs or _is_project_editor(plan, current_user):
+        return
+    project_id = (plan.tabs[0] if plan.tabs else {}).get("project_id")
+    if project_id and _code_written_by_project(project_id, tabs):
+        return
     authored = [
         m
-        for tab in plan.tabs
+        for tab in tabs
         for m in tab.get("stored_metadata") or []
         if isinstance(m, dict) and m.get("component_type") == "figure" and m.get("mode") == "code"
     ]
-    if not authored or settings.auth.is_single_user_mode:
-        return
-    project_id = (plan.tabs[0] if plan.tabs else {}).get("project_id")
-    if project_id and routes.check_project_permission(project_id, current_user, "editor"):
-        return
     titles = ", ".join(sorted({str(m.get("title") or m.get("index")) for m in authored})[:3])
     raise HTTPException(
         status_code=403,
         detail=(
-            f"This dashboard has {len(authored)} code-mode figure(s) ({titles}). Rendering it "
-            "as a report is limited to the project's owners and editors; download the notebook "
-            "and run it yourself instead."
+            f"This copy has {len(authored)} code-mode figure(s) ({titles}) whose code may have "
+            "been written outside the project's owners and editors, so rendering it is theirs "
+            "to do; download the notebook and run it yourself instead."
         ),
+    )
+
+
+def _limit_render_per_address(http_request: Any, current_user: User, *, editor: bool) -> None:
+    """A render by a reader who is not a project editor also counts against
+    their address (#1480): guest accounts are made at will. Fail closed."""
+    if editor or http_request is None:
+        return
+    limits = settings.notebook_export
+    enforce_rate_limit(
+        http_request,
+        "notebook_render_reader",
+        max_calls=limits.render_per_ip_max,
+        window_s=limits.render_window_s,
+        fail_closed=True,
+        detail="Too many reports rendered from this address; try again later.",
+        unavailable_detail="Rendering is temporarily unavailable; please retry in a moment.",
     )
 
 
@@ -1086,6 +1221,7 @@ def notebook_export_render(
     request: NotebookExportRequest,
     current_user: User = Depends(get_user_or_anonymous),
     access_token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+    http_request: Request = None,  # type: ignore[assignment]  # injected by FastAPI
 ) -> NotebookRenderStatus:
     """Start rendering the dashboard's notebook into an HTML report.
 
@@ -1098,7 +1234,6 @@ def notebook_export_render(
     from depictio.api.celery_app import render_notebook_report
     from depictio.api.v1.services.notebook_export import jobs, store
     from depictio.serverless.combined import combined_filename
-    from depictio.serverless.report import user_payload
 
     combined = request.output == "combined"
     state = _resolved_request_state(dashboard_id, request)
@@ -1133,11 +1268,15 @@ def notebook_export_render(
         pdf_style=request.pdf_style,
     )
     _require_owner_for_authored_code(plan, current_user)
+    _limit_render_per_address(
+        http_request, current_user, editor=_is_project_editor(plan, current_user)
+    )
     # The server never executes an author's Python itself: code-mode figures
     # come from the API, which runs them in the dashboard's own sandbox.
     plan.author_code = False
     builder = NotebookBuilder(plan)
     qmd = builder.build().encode("utf-8")
+    identity, public = _embed_identity(dashboard_id, current_user) if embed_runtime else ({}, False)
 
     job_id = uuid4().hex
     filename = combined_filename(plan.stem) if combined else f"{plan.stem}.html"
@@ -1163,7 +1302,9 @@ def notebook_export_render(
                     "dashboard_id": str(dashboard_id),
                     # The resolved state: a request may leave it to the layer.
                     "state": state.model_dump(mode="json"),
-                    "user": user_payload(current_user),
+                    "user": identity,
+                    # A visitor's file embeds the public build (#1480).
+                    "public": public,
                     # The look the document's own cell would pass (its brand
                     # primary and type), so both render paths match.
                     "config": builder.runtime_config(),

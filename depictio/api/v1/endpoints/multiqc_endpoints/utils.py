@@ -271,6 +271,10 @@ async def create_multiqc_report_in_db(report: MultiQCReport) -> MultiQCReport:
                 status_code=500, detail="Failed to insert MultiQC report into database"
             )
 
+        # A new report changes the collection a public offline bundle may draw
+        # (#1480); this path invalidates no cache, so it says so itself.
+        _notify_public_bundle(report.data_collection_id)
+
         # Return the saved report
         return MultiQCReport(**report_dict)
 
@@ -278,6 +282,16 @@ async def create_multiqc_report_in_db(report: MultiQCReport) -> MultiQCReport:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create MultiQC report: {str(e)}")
+
+
+def _notify_public_bundle(dc_id: object) -> None:
+    """A report of ``dc_id`` was written or removed: queue the rebuild of any
+    public offline bundle drawn from it (#1480). Never raises."""
+    if not dc_id:
+        return
+    from depictio.serverless import public_bundle
+
+    public_bundle.notify_data_changed(str(dc_id))
 
 
 async def update_multiqc_report_by_id(
@@ -310,6 +324,7 @@ async def update_multiqc_report_by_id(
 
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="MultiQC report not found")
+        _notify_public_bundle(existing_doc.get("data_collection_id"))
 
         if result.modified_count == 0:
             logger.warning(f"MultiQC report {report_id} was matched but not modified")
@@ -469,6 +484,7 @@ async def delete_multiqc_report_by_id(report_id: str, delete_s3_file: bool = Fal
         result = multiqc_collection.delete_one({"_id": ObjectId(report_id)})
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="MultiQC report not found")
+        _notify_public_bundle(report.data_collection_id)
 
         return {
             "deleted": True,

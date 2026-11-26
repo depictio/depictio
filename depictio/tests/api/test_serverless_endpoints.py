@@ -15,9 +15,10 @@ from typing import Any
 
 import pytest
 from bson import ObjectId
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.serverless_endpoints import routes as routes_mod
 from depictio.models.models.analysis_state import AnalysisState
 from depictio.models.models.base import PyObjectId
@@ -67,6 +68,21 @@ class _FakeJobs:
 
     def find_one(self, query: dict[str, Any], projection: Any = None) -> dict[str, Any] | None:
         return self.docs.get(query.get("_id"))
+
+    def count_documents(self, query: dict[str, Any]) -> int:
+        """Match equality and ``$gte`` (the queue cap's ``created_at`` filter)."""
+        matched = 0
+        for doc in self.docs.values():
+            for key, expected in query.items():
+                value = doc.get(key)
+                if isinstance(expected, dict) and "$gte" in expected:
+                    if value is None or value < expected["$gte"]:
+                        break
+                elif value != expected:
+                    break
+            else:
+                matched += 1
+        return matched
 
     def insert_one(self, doc: dict[str, Any]) -> None:
         self.docs[doc["_id"]] = dict(doc)
@@ -184,6 +200,39 @@ def admin() -> User:
     return _user(ADMIN_OID, is_admin=True)
 
 
+class _FakeRedis:
+    """The two commands the fixed-window limiter uses: INCR and EXPIRE.
+
+    Keys never expire (the window rolls over in the key itself), which is what
+    a single test needs: counters rise across calls within one window.
+    """
+
+    def __init__(self):
+        self.store: dict[str, int] = {}
+        self.ttls: dict[str, int] = {}
+
+    def incr(self, key: str) -> int:
+        self.store[key] = self.store.get(key, 0) + 1
+        return self.store[key]
+
+    def expire(self, key: str, seconds: int) -> None:
+        self.ttls[key] = seconds
+
+
+@pytest.fixture
+def limiter(monkeypatch: pytest.MonkeyPatch) -> _FakeRedis:
+    """Point the rate limiter at a dict, so tests need no Redis.
+
+    The dispatch's per-user limit is fail-closed: without this fixture a
+    request would 503 (no Redis) instead of dispatching.
+    """
+    from depictio.api.v1.endpoints.user_endpoints import rate_limit
+
+    fake = _FakeRedis()
+    monkeypatch.setattr(rate_limit, "_get_redis_client", lambda: fake)
+    return fake
+
+
 @pytest.fixture
 def client():
     app = FastAPI()
@@ -199,8 +248,12 @@ def _as_user(client: TestClient, user: User) -> None:
 
 @pytest.fixture
 def jobs(monkeypatch: pytest.MonkeyPatch) -> _FakeJobs:
+    from depictio.serverless import public_bundle
+
     fake = _FakeJobs()
     monkeypatch.setattr(routes_mod, "static_exports_collection", fake)
+    # The queue cap also counts public rebuilds, in the real Mongo otherwise.
+    monkeypatch.setattr(public_bundle, "pending_count", lambda: 0)
     return fake
 
 
@@ -399,6 +452,7 @@ def test_preflight_happy_path(client, owner, monkeypatch: pytest.MonkeyPatch):
             "verdict": "over_soft_limit",
         },
         "python_runtime": None,
+        "collections": [],
     }
 
 
@@ -544,7 +598,7 @@ def test_preflight_over_the_size_ceiling_is_413_with_the_reason(
 
 
 def test_dispatch_creates_job_and_enqueues(
-    client, owner, jobs, dashboards, monkeypatch: pytest.MonkeyPatch
+    client, owner, jobs, dashboards, limiter, monkeypatch: pytest.MonkeyPatch
 ):
     _patch_project(monkeypatch, [OWNER_OID])
     task = _FakeTask()
@@ -657,7 +711,7 @@ def _export_state(**extra: Any) -> dict[str, Any]:
 
 
 def test_dispatch_with_a_state_carries_it_to_the_worker(
-    client, owner, jobs, dashboards, monkeypatch: pytest.MonkeyPatch
+    client, owner, jobs, dashboards, limiter, monkeypatch: pytest.MonkeyPatch
 ):
     """The body's state rides in the task payload, JSON-serializable as the
     worker rebuilds it; the job doc and response are as without one."""
@@ -684,7 +738,7 @@ def test_dispatch_with_a_state_carries_it_to_the_worker(
 
 
 def test_dispatch_with_a_pinned_grouped_state_queues_it(
-    client, owner, jobs, dashboards, monkeypatch: pytest.MonkeyPatch
+    client, owner, jobs, dashboards, limiter, monkeypatch: pytest.MonkeyPatch
 ):
     """Pins, selection groups and colour-by are all reproduced offline now: the
     state is accepted and travels to the worker whole."""
@@ -735,6 +789,291 @@ def test_dispatch_anonymous_on_a_public_project_is_404(
     assert resp.json()["detail"] == "Dashboard not found or access denied"
     assert task.calls == []
     assert jobs.docs == {}
+
+
+# ---------------------------------------------------------------------------
+# A visitor exports the view they have (#1480)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def offering(monkeypatch: pytest.MonkeyPatch, dashboards):
+    """A public project offering its copies (the instance default), both
+    switches on, owned by OWNER_OID; the stranger is a mere viewer."""
+    from depictio.api.v1 import db as db_mod
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as dashboards_routes_mod
+
+    monkeypatch.setattr(settings.static_export, "enabled", True)
+    monkeypatch.setattr(settings.static_export, "public_download_enabled", True)
+    monkeypatch.setattr(settings.static_export, "public_download_default", True)
+    project = {
+        "_id": PROJECT_OID,
+        "is_public": True,
+        "permissions": {"owners": [{"_id": OWNER_OID}], "editors": [], "viewers": []},
+    }
+    projects = _FakeCollection([project])
+    monkeypatch.setattr(dashboards_routes_mod, "projects_collection", projects)
+    monkeypatch.setattr(db_mod, "projects_collection", projects)
+    return project
+
+
+def test_a_viewer_exports_their_view_as_a_public_build(
+    client, stranger, jobs, offering, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    """Built as the owner without an email, public, without Python, at the
+    visitor's state; the job stays the visitor's to poll and download."""
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    _as_user(client, stranger)
+
+    resp = client.post(
+        f"/serverless/export-static/{DASHBOARD_OID}?python_runtime=on",
+        json={"state": _export_state()},
+    )
+
+    assert resp.status_code == 200
+    [payload] = task.calls[0]
+    assert payload["public"] is True
+    # The Python runtime is the visitor's to ask for, as an owner's.
+    assert payload["python_runtime"] == "on"
+    assert payload["user"] == {
+        "id": str(OWNER_OID),
+        "email": "",
+        "is_admin": False,
+        "is_anonymous": False,
+    }
+    assert payload["state"]["filters"][0]["value"] == [2021]
+    assert jobs.docs[resp.json()["job_id"]]["user_id"] == str(OTHER_OID)
+
+
+def test_a_viewer_export_is_404_when_the_project_does_not_offer(
+    client, stranger, jobs, offering, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    _as_user(client, stranger)
+    offering["public_offline_download"] = False
+    assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 404
+    offering.pop("public_offline_download")
+    monkeypatch.setattr(settings.static_export, "public_download_default", False)
+    assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 404
+    monkeypatch.setattr(settings.static_export, "public_download_default", True)
+    offering["is_public"] = False
+    assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 404
+    assert task.calls == []
+
+
+def test_an_anonymous_visitor_does_not_build(
+    client, jobs, offering, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    """An anonymous caller is everyone at once: the ready copies are theirs, a
+    build is not."""
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    _as_user(client, _user(ObjectId()).model_copy(update={"is_anonymous": True}))
+    assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 404
+    assert task.calls == []
+
+
+def test_a_viewer_export_of_pinned_data_is_refused(
+    client, stranger, jobs, offering, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    _as_user(client, stranger)
+    resp = client.post(
+        f"/serverless/export-static/{DASHBOARD_OID}",
+        json={"state": _export_state(pins={"as_of_version": "v-old"})},
+    )
+    assert resp.status_code == 400
+    assert "live data" in resp.json()["detail"]
+    assert task.calls == []
+
+
+def test_viewer_exports_are_limited_per_address(
+    client, stranger, jobs, offering, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    """Guest accounts are made at will: an address gets its own limit."""
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    monkeypatch.setattr(settings.static_export, "public_export_per_ip_max", 2)
+    monkeypatch.setattr(settings.static_export, "build_per_user_max", 50)
+    for n in range(3):
+        _as_user(client, _user(ObjectId()))  # a fresh guest each time
+        resp = client.post(f"/serverless/export-static/{DASHBOARD_OID}")
+        assert resp.status_code == (200 if n < 2 else 429)
+    assert len(task.calls) == 2
+
+
+def test_a_viewer_export_fails_closed_without_redis(
+    client, stranger, jobs, offering, monkeypatch: pytest.MonkeyPatch
+):
+    from depictio.api.v1.endpoints.user_endpoints import rate_limit
+
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    monkeypatch.setattr(rate_limit, "_get_redis_client", lambda: None)
+    _as_user(client, stranger)
+    assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 503
+    assert task.calls == []
+
+
+def test_a_visitor_previews_the_public_build_they_would_get(
+    client, stranger, offering, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    """A visitor who may export reads what their file would hold: the binding
+    preflight of the public build (the owner's rights, no email), so the
+    collections, the size and the Python runtime's offer are the real ones.
+    It reads data, so it counts against their address too."""
+    seen: list[dict[str, Any]] = []
+
+    def fake_export_static(
+        dashboard_id, check=False, user=None, python_runtime="off", bind=True, public=False
+    ):
+        seen.append({"user": user, "bind": bind, "public": public, "check": check})
+        return _fake_export_result()
+
+    monkeypatch.setattr(routes_mod, "export_static", fake_export_static)
+    monkeypatch.setattr(settings.static_export, "public_export_per_ip_max", 2)
+    _as_user(client, stranger)
+
+    resp = client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight?python_runtime=auto")
+    assert resp.status_code == 200
+    assert resp.json()["bound"] is True
+    [call] = seen
+    assert call["public"] is True and call["bind"] is True and call["check"] is True
+    assert str(call["user"].id) == str(OWNER_OID) and call["user"].email == ""
+    # Preflights and exports from one address share their own window.
+    assert client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight").status_code == 200
+    assert client.get(f"/serverless/export-static/{DASHBOARD_OID}/preflight").status_code == 429
+
+
+def test_can_export_tells_a_viewer_they_export_publicly(client, stranger, owner, offering):
+    _as_user(client, stranger)
+    assert client.get(f"/serverless/export-static/{DASHBOARD_OID}/can-export").json() == {
+        "can_export": True,
+        "public": True,
+    }
+    _as_user(client, owner)
+    assert client.get(f"/serverless/export-static/{DASHBOARD_OID}/can-export").json() == {
+        "can_export": True
+    }
+
+
+# ---------------------------------------------------------------------------
+# Dispatch limits
+# ---------------------------------------------------------------------------
+
+
+def test_sixth_build_by_the_same_user_is_refused(
+    client, owner, jobs, dashboards, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    """``build_per_user_max`` (5) builds per user per window: the sixth is a
+    429 that enqueues no job and starts no task."""
+    _patch_project(monkeypatch, [OWNER_OID])
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    _as_user(client, owner)
+
+    for _ in range(5):
+        assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 200
+
+    resp = client.post(f"/serverless/export-static/{DASHBOARD_OID}")
+
+    assert resp.status_code == 429
+    assert resp.json()["detail"] == "Too many exports started; try again in a few minutes."
+    assert len(task.calls) == 5
+    assert len(jobs.docs) == 5
+
+
+def test_the_build_limit_is_per_user_not_per_instance(
+    client, owner, stranger, jobs, dashboards, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    """The limit is scoped to the signed-in user, not the address or the whole
+    instance: one owner hitting it leaves another owner free to build."""
+    _patch_project(monkeypatch, [OWNER_OID, OTHER_OID])
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    _as_user(client, owner)
+    for _ in range(5):
+        assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 200
+    assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 429
+
+    _as_user(client, stranger)
+    assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 200
+    assert len(task.calls) == 6
+
+
+def test_the_build_limit_fails_closed_without_redis(
+    client, owner, jobs, dashboards, monkeypatch: pytest.MonkeyPatch
+):
+    """The dispatch never fails open: with the limiter's Redis unavailable the
+    build is refused (503), not allowed through uncounted."""
+    from depictio.api.v1.endpoints.user_endpoints import rate_limit
+
+    _patch_project(monkeypatch, [OWNER_OID])
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    monkeypatch.setattr(rate_limit, "_get_redis_client", lambda: None)
+    _as_user(client, owner)
+
+    resp = client.post(f"/serverless/export-static/{DASHBOARD_OID}")
+
+    assert resp.status_code == 503
+    assert resp.json()["detail"] == "Exports are temporarily unavailable; please retry in a moment."
+    assert task.calls == []
+    assert jobs.docs == {}
+
+
+def test_dispatch_past_the_queue_cap_is_refused(
+    client, owner, jobs, dashboards, limiter, monkeypatch: pytest.MonkeyPatch
+):
+    """``queue_max_pending`` (20) bounds the whole instance: a build arriving on
+    top of a full queue is a 429 the caller can retry, and nothing is enqueued.
+    A pending document older than the grace window is a lost build, not queue
+    pressure, so ageing enough of them out opens the queue again."""
+    from datetime import timedelta
+
+    from depictio.api.v1.configs.config import settings
+
+    cap = settings.static_export.queue_max_pending
+    _patch_project(monkeypatch, [OWNER_OID])
+    task = _FakeTask()
+    monkeypatch.setattr(routes_mod, "export_static_bundle_task", task)
+    for i in range(cap + 1):
+        jobs.insert_one(_pending_job(f"queued-{i}"))
+    _as_user(client, owner)
+
+    resp = client.post(f"/serverless/export-static/{DASHBOARD_OID}")
+
+    assert resp.status_code == 429
+    assert resp.json()["detail"] == "The export queue is full; try again in a few minutes."
+    assert resp.headers["Retry-After"] == "60"
+    assert task.calls == []
+    assert len(jobs.docs) == cap + 1
+
+    jobs.docs["queued-0"]["created_at"] = datetime.now(timezone.utc) - timedelta(minutes=20)
+    jobs.docs["queued-1"]["created_at"] = datetime.now(timezone.utc) - timedelta(minutes=20)
+    assert client.post(f"/serverless/export-static/{DASHBOARD_OID}").status_code == 200
+    assert len(task.calls) == 1
+
+
+def test_enforce_rate_limit_with_defaults_keeps_the_auth_message(limiter):
+    """The generalised limiter with no overrides answers as the auth callers
+    always saw: a 429 about authentication requests, not about exports."""
+    from depictio.api.v1.endpoints.user_endpoints import rate_limit
+
+    class _Req:
+        client = None
+        headers: dict[str, str] = {}
+
+    req = _Req()
+    for _ in range(10):
+        rate_limit.enforce_rate_limit(req, "login")
+    with pytest.raises(HTTPException) as exc:
+        rate_limit.enforce_rate_limit(req, "login")
+    assert exc.value.status_code == 429
+    assert exc.value.detail == "Too many authentication requests; please wait before retrying."
 
 
 # ---------------------------------------------------------------------------

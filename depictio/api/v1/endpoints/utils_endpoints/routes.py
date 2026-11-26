@@ -173,6 +173,14 @@ async def server_info(
             "migration": settings.migration.ui_enabled,
             "changes_since": settings.dashboard_versions.changes_since_enabled,
             "static_export": settings.static_export.enabled,
+            # Visitors' download of a pre-built bundle (#1480): both switches.
+            "static_export_public_download": (
+                settings.static_export.enabled and settings.static_export.public_download_enabled
+            ),
+            # What a public project offers until its owner decides.
+            "static_export_public_download_default": (
+                settings.static_export.public_download_default
+            ),
             "notebook_export": settings.notebook_export.enabled,
             # The report layer's editor, which only exists when export does.
             "report_editor": (
