@@ -350,7 +350,10 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
         #   - 'jbrowse'            : derived track configuration
         #   - 'multiqc'            : parsed MultiQC reports (regenerated on ingestion)
         #   - 'multiqc_prerender'  : prerender cache (regenerated on demand)
-        derived_collections = ["jbrowse", "multiqc", "multiqc_prerender"]
+        #   - 'public_bundles'     : the visitors' ready copies (#1480); each row
+        #     points at files under serverless-public/ in S3, which a backup does
+        #     not hold, and the API queues the missing copies at startup
+        derived_collections = ["jbrowse", "multiqc", "multiqc_prerender", "public_bundles"]
         # 'task_events' (14-day TTL ledger) and 'app_logs' (capped, size-bounded)
         # self-expire by design — nothing meaningful survives a restore. 'telemetry'
         # holds anonymous installation stats, not user data — no restore value.
