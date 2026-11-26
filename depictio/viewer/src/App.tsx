@@ -94,6 +94,7 @@ import {
   HighlightProvider,
   GenomeDebugPanel,
   bundleOpeningFilters,
+  useIsStaticBundle,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -1525,6 +1526,9 @@ const App: React.FC = () => {
   // that slide is over, so the grid sees one width change at a time.
   const [metadataOpen, setMetadataOpen] = useState(false);
   const [metadataWidth, setMetadataWidth] = useMetadataPanelWidth();
+  // In an offline file the Analysis panel does not work yet (lasso and table
+  // selections make no group): its button is disabled until it does.
+  const isStaticBundle = useIsStaticBundle();
   const swapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (swapTimer.current) clearTimeout(swapTimer.current);
@@ -1832,6 +1836,11 @@ const App: React.FC = () => {
           armed={analysisArmed}
           onToggle={handleAnalysisToggle}
           pushesContent={!isNarrow}
+          unavailable={
+            isStaticBundle
+              ? 'Not available in an offline file yet: groups cannot be made here.'
+              : null
+          }
         >
           {groupsSection}
         </GroupingHeaderControl>
