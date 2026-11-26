@@ -648,6 +648,8 @@ def _render_run_preview(preview) -> None:
             f"Detected runs ({len(preview.detected_runs)}): {', '.join(preview.detected_runs)}",
             "info",
         )
+    if preview.unmatched_run_layout:
+        rich_print_checked_statement(preview.unmatched_run_layout, "warning")
     if preview.dashboards:
         rich_print_checked_statement(f"Dashboards: {', '.join(preview.dashboards)}", "info")
     if preview.truncated:
