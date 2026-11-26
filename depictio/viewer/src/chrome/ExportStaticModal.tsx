@@ -37,6 +37,15 @@ import type {
 } from 'depictio-react-core';
 import CollectionInventory from '../components/export/CollectionInventory';
 import TileSummary, { type TileGroup, type TileStatus } from '../components/export/TileSummary';
+import { usePublicCopyState } from '../components/publicDownload/PublicCopy';
+import {
+  CopyModeControl,
+  ReadyCopyPanel,
+  ViewPills,
+  readyFiles,
+  statePills,
+  type CopyMode,
+} from '../components/export/ReadyCopy';
 
 /** 'live' is deliberately absent from the shared maps — the in-bundle badge
  *  only renders non-live tiers. The preflight table shows every component, so
@@ -223,6 +232,15 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
   // A visitor of a project that offers its copies (#1480): their export is a
   // public build, which never carries the Python runtime.
   const [visitor, setVisitor] = useState(false);
+  // Whether this reader may build their own file; null while it is asked.
+  const [canBuild, setCanBuild] = useState<boolean | null>(null);
+  // The ready copy a public project keeps (#1480): where there is one the
+  // modal opens on it, and "My view" builds the reader's own.
+  const copyState = usePublicCopyState(opened ? (dashboardId ?? null) : null);
+  const publicCopy = copyState.copy;
+  const [mode, setMode] = useState<CopyMode>('view');
+  const inCopy = mode === 'copy' && Boolean(publicCopy);
+  const [viewState, setViewState] = useState<AnalysisState | null>(null);
   // Set on close/unmount so in-flight promises and the poll loop go quiet
   // instead of setting state on a closed modal. The server-side build keeps
   // running — reopening and re-exporting is cheap (idempotent job dispatch).
@@ -238,10 +256,34 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
     setExporting(false);
     setPythonChoice(false);
     setVisitor(false);
-    setPreflightLoading(true);
+    setCanBuild(null);
+    setViewState(getAnalysisState ? getAnalysisState() : null);
     void getStaticExportAccess(dashboardId).then((access) => {
-      if (!cancelledRef.current) setVisitor(access.public);
+      if (cancelledRef.current) return;
+      setVisitor(access.public);
+      setCanBuild(access.allowed);
     });
+    return () => {
+      cancelledRef.current = true;
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    };
+    // The view is read once per open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opened, dashboardId]);
+
+  useEffect(() => {
+    if (opened && copyState.loaded) setMode(publicCopy ? 'copy' : 'view');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opened, copyState.loaded]);
+
+  // The preflight is for "My view" only (a visitor's counts against their
+  // address): the ready copy needs none.
+  const wantPreflight =
+    opened && Boolean(dashboardId) && copyState.loaded && mode === 'view' && canBuild === true;
+  useEffect(() => {
+    if (!wantPreflight || !dashboardId || preflight) return;
+    setPreflightLoading(true);
     preflightStaticExport(dashboardId)
       .then((pf) => {
         if (cancelledRef.current) return;
@@ -258,12 +300,8 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
       .finally(() => {
         if (!cancelledRef.current) setPreflightLoading(false);
       });
-    return () => {
-      cancelledRef.current = true;
-      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-      pollTimerRef.current = null;
-    };
-  }, [opened, dashboardId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantPreflight]);
 
   const handleExport = async () => {
     if (!dashboardId) return;
@@ -297,7 +335,7 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
       const job = await dispatchStaticExport(
         dashboardId,
         pythonChoice ? 'on' : 'off',
-        getAnalysisState ? getAnalysisState() : null,
+        viewState,
       );
       if (cancelledRef.current) return;
       if (job.status === 'failed') {
@@ -414,7 +452,30 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
       closeOnClickOutside={false}
     >
       <Stack gap="md">
-        {preflightLoading && (
+        {publicCopy && (
+          <CopyModeControl
+            value={mode}
+            onChange={setMode}
+            viewDisabled={canBuild === false}
+          />
+        )}
+        {getAnalysisState && (
+          <ViewPills pills={statePills(viewState)} applied={!inCopy} />
+        )}
+        {inCopy && publicCopy && dashboardId && (
+          <ReadyCopyPanel
+            dashboardId={dashboardId}
+            status={publicCopy}
+            files={readyFiles(publicCopy, 'dashboard')}
+          />
+        )}
+        {!inCopy && canBuild === false && copyState.loaded && (
+          <Text size="sm" c="dimmed" data-testid="export-static-refused">
+            Building a file needs owner rights on this dashboard's project, or a signed-in
+            account on a project that offers its copies.
+          </Text>
+        )}
+        {!inCopy && preflightLoading && (
           <Group justify="center" gap="xs" py="md">
             <Loader size="sm" />
             {/* Seconds, not milliseconds: the preflight loads each data
@@ -441,7 +502,7 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
           </Alert>
         )}
 
-        {preflight && (
+        {!inCopy && preflight && (
           <>
             {/* The verdict first, in the reader's words: how much of the
                 dashboard stays interactive, and what the file weighs. */}
@@ -639,7 +700,7 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
           </>
         )}
 
-        {getAnalysisState && preflight && (
+        {!inCopy && getAnalysisState && preflight && (
           <Text size="xs" c="dimmed" data-testid="export-static-state-note">
             The file opens on the filters shown now. Tiles shipped as pictures keep that view
             when a reader changes the filters.
@@ -659,8 +720,9 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
           {/* Cancel stays enabled during the build: closing only stops the
               client-side polling, the server keeps building. */}
           <Button variant="default" onClick={onClose}>
-            Cancel
+            {inCopy ? 'Close' : 'Cancel'}
           </Button>
+          {!inCopy && (
           <Button
             leftSection={<Icon icon="mdi:download" width={16} />}
             onClick={handleExport}
@@ -670,6 +732,7 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
           >
             Export
           </Button>
+          )}
         </Group>
       </Stack>
     </Modal>

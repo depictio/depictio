@@ -3,7 +3,6 @@ import {
   Accordion,
   Alert,
   Anchor,
-  Badge,
   Button,
   Center,
   Group,
@@ -28,7 +27,6 @@ import {
   fetchNotebookPreflight,
   fetchNotebookRenderStatus,
   humanizeKind,
-  publicBundleDownloadUrl,
   startNotebookRender,
   type AnalysisState,
   type CombinedDefaultView,
@@ -41,8 +39,15 @@ import {
 } from 'depictio-react-core';
 import { useReportEditorEnabled } from '../hooks/useReportEditorEnabled';
 import TileSummary, { type TileGroup, type TileStatus } from '../components/export/TileSummary';
-import { usePublicCopy } from '../components/publicDownload/PublicCopy';
-import { formatBuiltAt, formatBundleBytes } from '../components/publicDownload/format';
+import { usePublicCopyState } from '../components/publicDownload/PublicCopy';
+import {
+  CopyModeControl,
+  ReadyCopyPanel,
+  ViewPills,
+  readyFiles,
+  statePills,
+  type CopyMode,
+} from '../components/export/ReadyCopy';
 
 /**
  * Export the dashboard: preflight first (what each tile becomes, with a reason
@@ -74,6 +79,9 @@ interface NotebookExportModalProps {
   /** The reader may edit this dashboard's report: the link to the editor
    *  shows only then (the editor answers 404 to anyone else). */
   canEditReport?: boolean;
+  /** Why this reader cannot have their own view rendered (an anonymous
+   *  visitor): "My view" is then off and the ready copy is what they get. */
+  viewRefusal?: string | null;
 }
 
 /** What the notebook makes of a tile, for the tile list. */
@@ -113,38 +121,6 @@ const PRIMARY_LABEL: Record<ExportChoice, string> = {
   report: 'Render report',
   qmd: 'Download notebook',
 };
-
-/** One filter value in plain words: a range as "a to b", a list cut at three. */
-function filterValue(value: unknown, type?: string | null): string | null {
-  if (value === null || value === undefined || value === '') return null;
-  if (Array.isArray(value)) {
-    if (value.length === 0) return null;
-    if (value.length === 2 && /range|slider/i.test(type ?? '')) {
-      return `${String(value[0])} to ${String(value[1])}`;
-    }
-    const head = value.slice(0, 3).map(String).join(', ');
-    return value.length > 3 ? `${head} +${value.length - 3}` : head;
-  }
-  return String(value);
-}
-
-/** The state the export is drawn at, as pills: "Island: Biscoe", "2 groups".
- *  Empty when the reader exports the dashboard as it opens. */
-function statePills(state: AnalysisState | null): string[] {
-  if (!state) return [];
-  const label = (name: string) =>
-    name ? name.charAt(0).toUpperCase() + name.slice(1).replace(/_/g, ' ') : name;
-  const filters = state.filters
-    .map((f) => {
-      const value = filterValue(f.value, f.interactive_component_type);
-      return value ? `${label(f.column_name || f.metadata?.column_name || f.index)}: ${value}` : null;
-    })
-    .filter((f): f is string => Boolean(f));
-  const groups = state.groups.length
-    ? [`${state.groups.length} selection group${state.groups.length === 1 ? '' : 's'}`]
-    : [];
-  return [...filters, ...groups];
-}
 
 /** A format to choose: selected, or dimmed with why it is not available (the
  *  footnote is short, the whole reason is on hover). */
@@ -240,11 +216,16 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
   combinedOffered = true,
   onExportDashboardOnly,
   canEditReport = false,
+  viewRefusal = null,
 }) => {
   const reportEditorEnabled = useReportEditorEnabled() && canEditReport;
   // The visitors' ready copy (#1480): the report + dashboard file and its PDF,
-  // already rendered at the default view.
-  const publicCopy = usePublicCopy(opened ? dashboardId : null);
+  // already rendered at the default view. Where there is one, the modal opens
+  // on it; "My view" renders the reader's own.
+  const copyState = usePublicCopyState(opened ? dashboardId : null);
+  const publicCopy = copyState.copy?.report?.available ? copyState.copy : null;
+  const [mode, setMode] = useState<CopyMode>('view');
+  const inCopy = mode === 'copy' && Boolean(publicCopy);
   const [state, setState] = useState<AnalysisState | null>(null);
   const [preflight, setPreflight] = useState<NotebookPreflight | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -262,16 +243,31 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
 
   useEffect(() => {
     if (!opened) return;
-    const snapshot = getAnalysisState();
-    setState(snapshot);
+    setState(getAnalysisState());
     setPreflight(null);
     setError(null);
     setDownloaded(null);
     setJob(null);
     setStartedAt(null);
     setFormat(initialOutput);
+    // The snapshot is taken once per open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opened, dashboardId]);
+
+  // The ready copy first when there is one; the notebook is always the view.
+  useEffect(() => {
+    if (opened && copyState.loaded) {
+      setMode(publicCopy && initialOutput !== 'qmd' ? 'copy' : 'view');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opened, copyState.loaded]);
+
+  // The preflight is for "My view" only: the ready copy needs none.
+  const wantPreflight = opened && copyState.loaded && mode === 'view' && Boolean(state);
+  useEffect(() => {
+    if (!wantPreflight || !state || preflight) return;
     const controller = new AbortController();
-    fetchNotebookPreflight(dashboardId, snapshot, controller.signal)
+    fetchNotebookPreflight(dashboardId, state, controller.signal)
       .then((res) => {
         setPreflight(res);
         // An output this reader may not have: the notebook is what they can take.
@@ -288,9 +284,8 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
         }
       });
     return () => controller.abort();
-    // The snapshot is taken once per open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opened, dashboardId]);
+  }, [wantPreflight, state]);
 
   // A render is a job on a worker: ask it where it is until it stops moving.
   useEffect(() => {
@@ -437,13 +432,6 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     .filter(Boolean)
     .join(' · ');
   const pills = statePills(state);
-  // The ready copy is this very file when the reader exports the default view.
-  const readyReport = publicCopy?.report?.available ? publicCopy.report : null;
-  const readyIsThisView = Boolean(readyReport) && pills.length === 0 &&
-    !readyReport?.rebuilding &&
-    // An owner sees whether the copy still matches the dashboard and data.
-    publicCopy?.fresh !== false;
-
   const primaryDisabled =
     !state || !preflight || Boolean(unavailable[format]) || (isReport && !renderAvailable);
 
@@ -473,24 +461,35 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
       styles={{ header: { alignItems: 'flex-start' } }}
     >
       <Stack gap="md" data-testid="notebook-export-modal">
-        <Group gap={6} data-testid="notebook-export-state">
-          <Text size="xs" c="dimmed" fw={500}>
-            {pills.length ? 'Your view:' : 'Your view: the dashboard as it opens'}
-          </Text>
-          {pills.map((p) => (
-            <Badge
-              key={p}
-              size="sm"
-              variant="light"
-              color="gray"
-              radius="sm"
-              style={{ textTransform: 'none', fontWeight: 500 }}
-            >
-              {p}
-            </Badge>
-          ))}
-        </Group>
+        {publicCopy && (
+          <Tooltip
+            label={viewRefusal ?? ''}
+            disabled={!viewRefusal}
+            multiline
+            w={300}
+            zIndex={Z_LAYERS.tooltip}
+          >
+            <div>
+              <CopyModeControl
+                value={mode}
+                onChange={setMode}
+                viewDisabled={Boolean(viewRefusal)}
+              />
+            </div>
+          </Tooltip>
+        )}
+        <div data-testid="notebook-export-state">
+          <ViewPills pills={pills} applied={!inCopy} />
+        </div>
 
+        {inCopy && publicCopy ? (
+          <ReadyCopyPanel
+            dashboardId={dashboardId}
+            status={publicCopy}
+            files={readyFiles(publicCopy, format === 'report' ? 'pdf' : 'report')}
+          />
+        ) : (
+        <>
         <Stack gap={6}>
           <SimpleGrid cols={{ base: 1, xs: formats.length }} spacing="sm">
             {formats.map((f) => (
@@ -506,60 +505,9 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
               />
             ))}
           </SimpleGrid>
-          {readyReport && format !== 'qmd' && !job && (
-            <Paper withBorder radius="md" px="sm" py={8} data-testid="notebook-export-ready-copy">
-              <Stack gap={6}>
-                <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
-                  <Icon icon="mdi:lightning-bolt-outline" width={18} style={{ flexShrink: 0 }} />
-                  <Text size="xs" style={{ minWidth: 0 }}>
-                    {readyIsThisView ? (
-                      <>
-                        <b>Ready now.</b> Your view is the default one: its report + dashboard
-                        is already built, no render needed.
-                      </>
-                    ) : (
-                      <>
-                        <b>Ready copy</b> at the default view
-                        {readyReport.built_at ? `, built ${formatBuiltAt(readyReport.built_at)}` : ''}
-                        . Your filters need a render.
-                      </>
-                    )}
-                  </Text>
-                </Group>
-                <Group gap={6} wrap="wrap" pl={26}>
-                  <Button
-                    component="a"
-                    href={publicBundleDownloadUrl(dashboardId, 'report')}
-                    download
-                    size="xs"
-                    variant={readyIsThisView ? 'filled' : 'light'}
-                    leftSection={<Icon icon="mdi:download" width={14} />}
-                    data-testid="notebook-export-ready-html"
-                  >
-                    Report + dashboard{readyReport.size_bytes ? ` · ${formatBundleBytes(readyReport.size_bytes)}` : ''}
-                  </Button>
-                  {readyReport.pdf_available && (
-                    <Button
-                      component="a"
-                      href={publicBundleDownloadUrl(dashboardId, 'pdf')}
-                      download
-                      size="xs"
-                      variant="light"
-                      leftSection={<Icon icon="mdi:file-pdf-box" width={14} />}
-                      data-testid="notebook-export-ready-pdf"
-                    >
-                      PDF
-                      {readyReport.pdf_size_bytes
-                        ? ` · ${formatBundleBytes(readyReport.pdf_size_bytes)}`
-                        : ''}
-                    </Button>
-                  )}
-                </Group>
-              </Stack>
-            </Paper>
-          )}
           {/* The PDF is one of the outputs, not a detail of the look: it sits
               with the formats. */}
+          {isReport && (
           <Paper withBorder radius="md" px="sm" py={8} data-testid="notebook-export-pdf-row">
             <Group justify="space-between" wrap="nowrap" gap="sm">
               <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
@@ -599,6 +547,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
               </Group>
             </Group>
           </Paper>
+          )}
           {reportEditorEnabled && (
             <Anchor
               size="xs"
@@ -710,6 +659,8 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
             </Accordion.Panel>
           </Accordion.Item>
         </Accordion>
+        </>
+        )}
 
         {job && rendering && (
           <Alert color="blue" variant="light" data-testid="notebook-export-rendering">
@@ -752,7 +703,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
 
         <Group justify="space-between" wrap="nowrap" gap="sm">
           <Group gap="lg" style={{ minWidth: 0 }}>
-            {onExportDashboardOnly && (
+            {onExportDashboardOnly && !inCopy && (
               <Anchor
                 component="button"
                 type="button"
@@ -768,7 +719,7 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
             <Button variant="default" onClick={onClose}>
               Close
             </Button>
-            {isReport && job?.status !== 'ready' ? (
+            {inCopy ? null : isReport && job?.status !== 'ready' ? (
               <Tooltip
                 label="Rendered on the server: about a minute or more. You can leave this open."
                 disabled={!isReport || Boolean(job) || !renderAvailable}
@@ -779,7 +730,6 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
                 onClick={handleRender}
                 loading={downloading || rendering}
                 disabled={primaryDisabled}
-                variant={readyIsThisView ? 'default' : 'filled'}
                 data-testid="notebook-export-render"
               >
                 {job?.status === 'error' ? 'Render again' : PRIMARY_LABEL[format]}

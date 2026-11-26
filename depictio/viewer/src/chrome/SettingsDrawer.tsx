@@ -56,9 +56,6 @@ import { useStaticExportEnabled } from '../hooks/useStaticExportEnabled';
 import { usePublicDownloadEnabled } from '../hooks/usePublicDownloadEnabled';
 import {
   ExportNote,
-  PublicCopyButton,
-  publicCopyNote,
-  publicCopySize,
   usePublicCopy,
 } from '../components/publicDownload/PublicCopy';
 import type { PublicBundleStatus } from 'depictio-react-core';
@@ -729,17 +726,20 @@ const ExportBlock: React.FC<{
       combinedOffered={combinedOffered}
       canEditReport={showCustomise}
       onExportDashboardOnly={
-        staticExport?.allowed && !staticExport.previewing ? staticExport.onExportStatic : undefined
+        staticExport && !staticExport.previewing && (staticExport.allowed || publicCopy)
+          ? staticExport.onExportStatic
+          : undefined
       }
+      viewRefusal={signedIn ? null : SIGN_IN_HINT}
     />
   );
-  // A ready copy beside an action renames that action: it then exports the
-  // view the reader has now, the copy being the default view.
-  const currentLabel = (fallback: string) => (publicCopy ? 'Export current view' : fallback);
-  const pdfSize = publicCopySize(publicCopy, 'pdf');
-  const combinedSize = publicCopySize(publicCopy, 'report');
-  const renderRefusal = signedIn ? null : SIGN_IN_HINT;
-  const combinedRefusal = renderRefusal ?? (staticExport?.allowed === false ? OWNER_GATE_HINT : null);
+  // One button per format, opening its modal; a ready copy (#1480) is offered
+  // there first, so a card is open whenever the copy holds its file.
+  const readyReport = Boolean(publicCopy?.report?.available);
+  const renderRefusal = signedIn || readyReport ? null : SIGN_IN_HINT;
+  const combinedRefusal =
+    renderRefusal ??
+    (staticExport?.allowed === false && !readyReport ? OWNER_GATE_HINT : null);
   const reportCard = (
     <ExportFormatCard
       icon="mdi:file-document-outline"
@@ -748,9 +748,6 @@ const ExportBlock: React.FC<{
       testId="export-report-card"
       footer={renderRefusal && <ExportNote testId="export-report-reason">{renderRefusal}</ExportNote>}
     >
-      {pdfSize !== undefined && (
-        <PublicCopyButton dashboardId={dashboardId} file="pdf" sizeBytes={pdfSize} />
-      )}
       {showCustomise && (
         <Button
           component="a"
@@ -773,7 +770,7 @@ const ExportBlock: React.FC<{
         disabled={!dashboardId || Boolean(renderRefusal)}
         data-testid="export-report"
       >
-        {currentLabel('Export report')}
+        Export report…
       </Button>
     </ExportFormatCard>
   );
@@ -810,7 +807,7 @@ const ExportBlock: React.FC<{
     <Stack gap="sm" data-testid="export-section">
       <Text size="sm" c="dimmed">
         {publicCopy
-          ? 'Download a ready copy of the default view, or export the view you have now.'
+          ? 'Each format has a ready copy to download at once, or your own view to build.'
           : 'Every format uses the filters you have right now.'}
       </Text>
       {reportCard}
@@ -823,9 +820,6 @@ const ExportBlock: React.FC<{
           combinedRefusal && <ExportNote testId="export-combined-reason">{combinedRefusal}</ExportNote>
         }
       >
-        {combinedSize !== undefined && (
-          <PublicCopyButton dashboardId={dashboardId} file="report" sizeBytes={combinedSize} />
-        )}
         <Button
           variant="light"
           size="sm"
@@ -834,7 +828,7 @@ const ExportBlock: React.FC<{
           disabled={!dashboardId || Boolean(combinedRefusal)}
           data-testid="export-combined"
         >
-          {currentLabel('Export report + dashboard')}
+          Export report + dashboard…
         </Button>
       </ExportFormatCard>
       {staticExport && (
@@ -845,9 +839,6 @@ const ExportBlock: React.FC<{
           onExportStatic={staticExport.onExportStatic}
           publicCopy={publicCopy}
         />
-      )}
-      {publicCopy && (
-        <ExportNote testId="public-copy-note">{publicCopyNote(publicCopy)}</ExportNote>
       )}
       {notebookCard}
       {modal}
@@ -917,7 +908,11 @@ const ExportStaticBlock: React.FC<{
   /** The ready copies the project's owner offers visitors (#1480), or null. */
   publicCopy?: PublicBundleStatus | null;
 }> = ({ dashboardId, previewing, allowed, onExportStatic, publicCopy = null }) => {
-  const reason = previewing ? PREVIEW_HINT : allowed === false ? OWNER_GATE_HINT : null;
+  const reason = previewing
+    ? PREVIEW_HINT
+    : allowed === false && !publicCopy
+      ? OWNER_GATE_HINT
+      : null;
   return (
     <ExportFormatCard
       icon="mdi:monitor-dashboard"
@@ -926,23 +921,16 @@ const ExportStaticBlock: React.FC<{
       testId="export-static-section"
       footer={reason && <ExportNote testId="export-static-reason">{reason}</ExportNote>}
     >
-      {publicCopy && dashboardId && (
-        <PublicCopyButton
-          dashboardId={dashboardId}
-          file="dashboard"
-          sizeBytes={publicCopySize(publicCopy, 'dashboard')}
-        />
-      )}
       <Tooltip label={reason} disabled={!reason} withArrow>
         <Button
           leftSection={<Icon icon="mdi:export-variant" width={16} />}
           variant="light"
           size="sm"
           onClick={onExportStatic}
-          disabled={!dashboardId || previewing || allowed !== true}
+          disabled={!dashboardId || previewing || (allowed !== true && !publicCopy)}
           data-testid="export-static-btn"
         >
-          {publicCopy ? 'Export current view' : 'Dashboard only'}
+          Export dashboard…
         </Button>
       </Tooltip>
     </ExportFormatCard>
@@ -1425,9 +1413,6 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
                   onExportStatic={onExportStatic}
                   publicCopy={publicCopy}
                 />
-                {publicCopy && (
-                  <ExportNote testId="public-copy-note">{publicCopyNote(publicCopy)}</ExportNote>
-                )}
               </>
             )
           )}

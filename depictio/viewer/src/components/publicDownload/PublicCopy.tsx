@@ -1,83 +1,47 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Text } from '@mantine/core';
-import { Icon } from '@iconify/react';
-import {
-  getPublicBundleStatus,
-  publicBundleDownloadUrl,
-  type PublicBundleStatus,
-  type PublicCopyFile,
-} from 'depictio-react-core';
-import { formatBundleBytes, formatBuiltAt } from './format';
+import { Text } from '@mantine/core';
+import { getPublicBundleStatus, type PublicBundleStatus } from 'depictio-react-core';
 
 /**
  * The visitors' ready copies of a public dashboard (#1480): the files the
  * project's owner lets anyone download, already built at the dashboard's
- * default view. Each export format's card offers its own copy beside the
- * export of the current view; these are the pieces it uses.
+ * default view. The export modals open on them (`ReadyCopy.tsx`), and "My
+ * view" builds the reader's own.
  */
 
 /** The copies on offer, asked once per dashboard; null when there are none
  *  (either switch off, a private project, the offer off, nothing built yet)
  *  or when `dashboardId` is null (the reader builds exports themselves). */
 export function usePublicCopy(dashboardId: string | null): PublicBundleStatus | null {
-  const [status, setStatus] = useState<PublicBundleStatus | null>(null);
+  return usePublicCopyState(dashboardId).copy;
+}
+
+/** The copies on offer and whether the server has answered yet: a modal that
+ *  opens on the ready copy waits for the answer before it reads anything else
+ *  (a visitor's preview counts against their address). */
+export function usePublicCopyState(dashboardId: string | null): {
+  copy: PublicBundleStatus | null;
+  loaded: boolean;
+} {
+  const [state, setState] = useState<{ copy: PublicBundleStatus | null; loaded: boolean }>({
+    copy: null,
+    loaded: false,
+  });
   useEffect(() => {
-    setStatus(null);
-    if (!dashboardId) return;
+    if (!dashboardId) {
+      setState({ copy: null, loaded: true });
+      return;
+    }
+    setState({ copy: null, loaded: false });
     let alive = true;
     void getPublicBundleStatus(dashboardId).then((s) => {
-      if (alive) setStatus(s?.available ? s : null);
+      if (alive) setState({ copy: s?.available ? s : null, loaded: true });
     });
     return () => {
       alive = false;
     };
   }, [dashboardId]);
-  return status;
-}
-
-/** The size of one ready copy, or undefined when it is not on offer. */
-export function publicCopySize(
-  status: PublicBundleStatus | null,
-  file: PublicCopyFile,
-): number | null | undefined {
-  if (!status) return undefined;
-  if (file === 'dashboard') return status.size_bytes;
-  const report = status.report;
-  if (!report?.available) return undefined;
-  if (file === 'report') return report.size_bytes;
-  return report.pdf_available ? report.pdf_size_bytes : undefined;
-}
-
-/** "Download · 13.4 MB": a plain link, since the route needs no credentials
- *  and answers with a redirect or an attachment. */
-export const PublicCopyButton: React.FC<{
-  dashboardId: string;
-  file: PublicCopyFile;
-  sizeBytes?: number | null;
-}> = ({ dashboardId, file, sizeBytes }) => {
-  const size = formatBundleBytes(sizeBytes);
-  return (
-    <Button
-      component="a"
-      href={publicBundleDownloadUrl(dashboardId, file)}
-      download
-      variant="light"
-      size="sm"
-      leftSection={<Icon icon="mdi:download" width={16} />}
-      data-testid={`public-copy-download-${file}`}
-    >
-      {size ? `Download · ${size}` : 'Download'}
-    </Button>
-  );
-};
-
-/** Which view the ready copies show and when they were built. */
-export function publicCopyNote(status: PublicBundleStatus | null): string | null {
-  if (!status) return null;
-  const built = formatBuiltAt(status.built_at);
-  const parts = [`Download: the default view${built ? `, built ${built}` : ''}`];
-  if (status.rebuilding || status.report?.rebuilding) parts.push('a newer copy is being prepared');
-  return parts.join(' · ');
+  return state;
 }
 
 /** One dimmed line under a card's buttons. */
