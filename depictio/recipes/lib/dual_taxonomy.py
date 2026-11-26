@@ -66,6 +66,11 @@ MERGED_PHYLUM_LEVEL = 2
 SOURCE_COLUMN = "taxonomy_source"
 SOURCES = ("pr2", "silva", "fallback")
 
+#: Below this share of the SILVA ASVs found in the PR2 taxonomy, the two runs are not
+#: the same reads (another denoising, another run): every eukaryote would silently
+#: keep SILVA's ``Eukaryota;`` line, so the merge refuses.
+MIN_PR2_COVERAGE = 0.5
+
 
 def slot_ranks(phylum_rank: str) -> list[str | None]:
     """The PR2 rank read into each of :data:`SLOTS` when ``phylum_rank`` is the Phylum.
@@ -140,6 +145,13 @@ def merge_pr2(
             else pl.lit(None, pl.Float64)
         ).alias("_pr2_confidence"),
     ).unique(subset=["ID"], keep="first")
+    if asv.height:
+        found = asv.select(pl.col("ID").cast(pl.Utf8).is_in(pr2["ID"].implode()).sum()).item()
+        if found / asv.height < MIN_PR2_COVERAGE:
+            raise ValueError(
+                f"only {found} of the {asv.height} SILVA ASVs are in the PR2 taxonomy: "
+                "the two runs do not hold the same ASVs (same reads, same denoising?)"
+            )
     present = [s for s in SLOTS if s in asv.columns]
     df = asv.with_columns(
         *[_blank_to_null(s) for s in present],

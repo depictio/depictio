@@ -214,3 +214,26 @@ def test_a_partial_second_run_stops(tmp_path: Path, monkeypatch) -> None:
 
 
 SLOTS_BUT_SE = ("lfc", "p_val", "q_val", "w")
+
+
+def test_pr2_expected_but_absent_is_an_error(tmp_path: Path) -> None:
+    """With PR2_RESULTS set, a PR2 run without slices must not drop its rows silently."""
+    _write_run(tmp_path, "Bacteria", seed=1)
+    with pytest.raises(ValueError, match="none of its 5 slices"):
+        ANCOMBC.transform(_sources(tmp_path), params={**PARAMS, "expect_alt": "/data/pr2"})
+
+
+def test_an_unset_pr2_results_placeholder_expects_nothing(tmp_path: Path) -> None:
+    _write_run(tmp_path, "Bacteria", seed=1)
+    out = ANCOMBC.transform(_sources(tmp_path), params={"expect_alt": "{PR2_RESULTS}"})
+    assert out.height > 0
+
+
+def test_a_nan_on_one_side_fails_the_agreement_check() -> None:
+    pipeline = pl.DataFrame(
+        {"id": ["a", "b"], "contrast": ["c", "c"], "lfc": [1.0, 2.0], "se": [0.1, 0.1],
+         "q_val": [0.01, 0.2]}
+    )  # fmt: skip
+    fitted = pipeline.with_columns(pl.Series("lfc", [1.0, float("nan")]))
+    with pytest.raises(ValueError, match="one side only"):
+        ANCOMBC._check_agreement(fitted, pipeline, "silva")

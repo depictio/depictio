@@ -192,9 +192,24 @@ def _check_agreement(fitted: pl.DataFrame, pipeline: pl.DataFrame, label: str) -
             "The settings differ (prevalence or library-size cut?); no pair was added"
         )
     joined = pipeline.join(fitted, on=["id", "contrast"], suffix="_ours")
+    # A NaN or null on one side only is a disagreement: polars' max skips both.
+    cols = ("lfc", "se", "q_val")
+    one_sided = joined.select(
+        pl.any_horizontal(
+            pl.col(c).cast(pl.Float64).fill_nan(None).is_null()
+            != pl.col(f"{c}_ours").cast(pl.Float64).fill_nan(None).is_null()
+            for c in cols
+        ).sum()
+    ).item()
+    if one_sided:
+        raise ValueError(
+            f"ANCOM-BC ({run}): the recipe does not reproduce the pipeline: {one_sided} "
+            "estimates are missing or NaN on one side only. No pair was added"
+        )
     gap = joined.select(
         pl.max_horizontal(
-            (pl.col(c) - pl.col(f"{c}_ours")).abs().max() for c in ("lfc", "se", "q_val")
+            (pl.col(c).cast(pl.Float64) - pl.col(f"{c}_ours").cast(pl.Float64)).abs().max()
+            for c in cols
         )
     ).item()
     if gap is not None and gap > _AGREEMENT:
@@ -221,7 +236,12 @@ def _pairs(
     from depictio.recipes.lib import ancombc as lib
 
     have = pipeline["contrast"].unique().to_list()
-    if have and base:
+    if have and not base:
+        raise ValueError(
+            f"ANCOM-BC ({label or 'run'}): cannot tell the reference level of the pipeline's "
+            f"contrasts {have} among the levels of {column!r}; no pair was added"
+        )
+    if have:
         fitted = lib.fit(table, groups, base).with_columns(
             (pl.lit(column) + pl.col("level")).alias("contrast")
         )
@@ -284,6 +304,12 @@ def transform(sources: dict[str, pl.DataFrame | None], params: dict | None = Non
     alt = {name: sources.get(f"{name}_alt") for name in _SLICES}
     has_alt = all(frame is not None for frame in alt.values())
     missing_alt = [f"{name}_alt" for name, frame in alt.items() if frame is None]
+    expect_alt = str(params.get("expect_alt") or "").strip()
+    expect_alt = bool(expect_alt) and not expect_alt.startswith("{")  # an unset PR2_RESULTS
+    if not has_alt and expect_alt:
+        raise ValueError(
+            f"ANCOM-BC: the second run (PR2_RESULTS) has none of its 5 slices; missing {missing_alt}"
+        )
     if not has_alt and len(missing_alt) < len(_SLICES):
         raise ValueError(
             f"ANCOM-BC: the second run has {len(_SLICES) - len(missing_alt)} of its 5 slices; "
@@ -294,6 +320,9 @@ def transform(sources: dict[str, pl.DataFrame | None], params: dict | None = Non
         and sources.get("feature_table") is not None
         and sources.get("merged_taxonomy") is not None
     )
+    if expect_alt and _truthy(params.get("pairwise")) and not has_merged:
+        absent = [k for k in ("feature_table", "merged_taxonomy") if sources.get(k) is None]
+        raise ValueError(f"ANCOM-BC: the merged taxonomy's test needs {absent}")
 
     label = pl.col("source_path").str.extract(_LABEL, 1)
     primary = (params.get("label") or DEFAULT_LABEL) if has_alt or has_merged else _NO_LABEL

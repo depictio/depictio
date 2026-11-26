@@ -412,7 +412,8 @@ class TestSecondRunDifferentialAbundance:
             ancombc["source_overrides"]
         )
         assert ancombc["params"] == {
-            "label": "{REF_DB_NAME}", "alt_label": "pr2", "pairwise": "true", "group_col": "{GROUP_COL}",
+            "label": "{REF_DB_NAME}", "alt_label": "pr2", "expect_alt": "{PR2_RESULTS}",
+            "pairwise": "true", "group_col": "{GROUP_COL}",
         }  # fmt: skip
         assert ma["source_overrides"]["alt_barplot"]["path"] == ("/pr2/qiime2/barplot/level-4.csv")
         assert ma["params"] == {"alt_label": "pr2"}
@@ -437,3 +438,10 @@ class TestSecondRunDifferentialAbundance:
         # Pairs need no second run: the run's own barplot counts.
         assert overrides["counts"]["path"] == "qiime2/barplot/level-3.csv"
         assert ancombc["params"]["pairwise"] == "true"
+
+
+def test_a_pr2_run_of_other_reads_is_refused() -> None:
+    """Most SILVA ASVs missing from PR2: not the same reads, so no silent SILVA-only merge."""
+    pr2 = _pr2().filter(pl.col("ID") == "bac")  # 1 of the 5 SILVA ASVs
+    with pytest.raises(ValueError, match="1 of the 5 SILVA ASVs"):
+        merge_pr2(_silva(), pr2)

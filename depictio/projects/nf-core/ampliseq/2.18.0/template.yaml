@@ -603,6 +603,9 @@ workflows:
             params:
               label: "{REF_DB_NAME}"
               alt_label: "pr2"
+              # Set only with PR2_RESULTS (an unresolved placeholder is dropped):
+              # the PR2 and merged rows are then required, not silently skipped.
+              expect_alt: "{PR2_RESULTS}"
               pairwise: "true"
               group_col: "{GROUP_COL}"
             # level-3 is the Phylum for this release's default database (see

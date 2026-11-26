@@ -14,6 +14,8 @@ tables, so every taxonomy view of the project shows the merged names, and the
 views built on those (heatmaps, UpSet, PCoA, Bray-Curtis) follow.
 """
 
+import logging
+
 import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
@@ -25,6 +27,8 @@ from depictio.recipes.lib.dual_taxonomy import (
     merge_pr2,
 )
 from depictio.recipes.lib.lineage import asv_sample_columns, with_kingdom
+
+logger = logging.getLogger("depictio-cli")
 
 # INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
@@ -75,6 +79,11 @@ def transform(
     merged = merge_pr2(asv, sources["pr2_tax"], euk_rank)
     if merged.height != asv.height:  # pragma: no cover - a left join on unique ids
         raise ValueError("the PR2 join changed the ASV count")
+    split = dict(merged[SOURCE_COLUMN].value_counts().iter_rows())
+    logger.info(
+        "merged taxonomy: "
+        + ", ".join(f"{split.get(k, 0)} ASVs named by {k}" for k in ("pr2", "silva", "fallback"))
+    )
     samples = asv_sample_columns(merged)
     return merged.select(
         "ID",
