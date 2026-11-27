@@ -61,6 +61,10 @@ KEY_SCHEMA = 1
 BUILD_TASK = "depictio.serverless.build_public_bundle"
 #: The Celery task that renders one family's report and PDF after its bundle.
 REPORT_TASK = "depictio.serverless.build_public_report"
+#: Both tasks are delivered again when their worker dies (``acks_late``): a
+#: build started this many times without ending is given up instead, or a
+#: render that runs its worker out of memory would take one down every time.
+MAX_INTERRUPTED = 3
 
 
 # ---------------------------------------------------------------------------
@@ -417,6 +421,47 @@ def s3_key(main_id: str, key: str) -> str:
     return f"{PUBLIC_PREFIX}{main_id}/{key[:32]}.html"
 
 
+def _start(main_id: str, field: str, extra: dict[str, Any] | None = None) -> bool:
+    """Mark a build of ``main_id`` started (``field`` "" for the bundle,
+    "report." for the report), counting the starts that have not ended yet.
+    False, and the build marked failed, past :data:`MAX_INTERRUPTED` of them:
+    a worker died with each."""
+    coll = _db().public_bundles_collection
+    doc = (
+        coll.find_one_and_update(
+            {"_id": main_id},
+            {
+                "$inc": {f"{field}attempts": 1},
+                "$set": {
+                    f"{field}status": "building",
+                    f"{field}started_at": _now(),
+                    **(extra or {}),
+                },
+            },
+            return_document=ReturnDocument.AFTER,
+        )
+        or {}
+    )
+    node = (doc.get("report") or {}) if field else doc
+    if node.get("attempts", 0) <= MAX_INTERRUPTED:
+        return True
+    error = (
+        f"Stopped after {MAX_INTERRUPTED} attempts that ended their worker "
+        "(interrupted, most likely out of memory)."
+    )
+    logger.error(f"public bundle: {field or 'bundle '}build of {main_id} given up: {error}")
+    _end(main_id, field, {"status": "failed", "error": error})
+    return False
+
+
+def _end(main_id: str, field: str, values: dict[str, Any]) -> None:
+    """Close a build: its outcome, and no start left unaccounted for."""
+    _db().public_bundles_collection.update_one(
+        {"_id": main_id},
+        {"$set": {f"{field}{k}": v for k, v in {**values, "attempts": 0}.items()}},
+    )
+
+
 def build(main_id: str) -> dict[str, Any]:
     """Build ``main_id``'s public bundle if its content key moved (the task body)."""
     from depictio.serverless.producer_a import ExportUser
@@ -439,10 +484,8 @@ def build(main_id: str) -> dict[str, Any]:
         schedule_report(main_id, key)
         return {"status": "unchanged"}
 
-    coll.update_one(
-        {"_id": main_id},
-        {"$set": {"status": "building", "started_at": _now(), "project_id": str(project["_id"])}},
-    )
+    if not _start(main_id, "", {"project_id": str(project["_id"])}):
+        return {"status": "failed"}
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             out = Path(tmpdir) / "bundle.html"
@@ -464,7 +507,7 @@ def build(main_id: str) -> dict[str, Any]:
         )
     except Exception as exc:
         logger.error(f"public bundle: build of {main_id} failed: {exc}")
-        coll.update_one({"_id": main_id}, {"$set": {"status": "failed", "error": str(exc)[:500]}})
+        _end(main_id, "", {"status": "failed", "error": str(exc)[:500]})
         raise
 
     entry = {
@@ -474,10 +517,8 @@ def build(main_id: str) -> dict[str, Any]:
         "built_at": _now().isoformat(),
     }
     old = doc.get("current")
-    coll.update_one(
-        {"_id": main_id},
-        {"$set": {"status": "ready", "error": None, "current": entry, "previous": old}},
-    )
+    coll.update_one({"_id": main_id}, {"$set": {"current": entry, "previous": old}})
+    _end(main_id, "", {"status": "ready", "error": None})
     _delete_others(main_id)
     # A change that landed while this build ran is in neither bundle.
     if content_key(main_id, project) != key:
@@ -553,9 +594,8 @@ def build_report(main_id: str) -> dict[str, Any]:
         schedule(main_id, project["_id"], delay=0)
         return {"status": "waiting for the bundle"}
 
-    coll.update_one(
-        {"_id": main_id}, {"$set": {"report.status": "building", "report.started_at": _now()}}
-    )
+    if not _start(main_id, "report."):
+        return {"status": "failed"}
     try:
         html, pdf, stem = _render_report(main_id, owner_id)
         html_key = report_s3_key(main_id, key, "html")
@@ -573,10 +613,7 @@ def build_report(main_id: str) -> dict[str, Any]:
             )
     except Exception as exc:
         logger.error(f"public bundle: report of {main_id} failed: {exc}")
-        coll.update_one(
-            {"_id": main_id},
-            {"$set": {"report.status": "failed", "report.error": str(exc)[:500]}},
-        )
+        _end(main_id, "report.", {"status": "failed", "error": str(exc)[:500]})
         raise
 
     entry = {
@@ -590,15 +627,9 @@ def build_report(main_id: str) -> dict[str, Any]:
     }
     coll.update_one(
         {"_id": main_id},
-        {
-            "$set": {
-                "report.status": "ready",
-                "report.error": None,
-                "report.current": entry,
-                "report.previous": report.get("current"),
-            }
-        },
+        {"$set": {"report.current": entry, "report.previous": report.get("current")}},
     )
+    _end(main_id, "report.", {"status": "ready", "error": None})
     _delete_others(main_id)
     if content_key(main_id, project) != key:
         schedule(main_id, project["_id"])
@@ -697,7 +728,8 @@ def served_report(doc: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 def report_rebuilding(doc: dict[str, Any]) -> bool:
-    """A newer report is on its way: the bundle or the report is being made."""
+    """A newer report is on its way: the bundle or the report is being made.
+    A report that failed is not on its way until something queues it again."""
     report = (doc or {}).get("report") or {}
     current = report.get("current") or {}
     bundle = (doc or {}).get("current") or {}
@@ -705,5 +737,9 @@ def report_rebuilding(doc: dict[str, Any]) -> bool:
         rebuilding(doc)
         or report.get("scheduled")
         or report.get("status") == "building"
-        or (bundle.get("key") and current.get("key") != bundle.get("key"))
+        or (
+            bundle.get("key")
+            and current.get("key") != bundle.get("key")
+            and report.get("status") != "failed"
+        )
     )

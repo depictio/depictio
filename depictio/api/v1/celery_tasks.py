@@ -3701,10 +3701,18 @@ def export_static_bundle(payload: dict) -> dict:
     }
 
 
+# The public builds are acknowledged when they end: a worker killed mid-build
+# (out of memory, a rollout) hands the task back instead of leaving its copy
+# "building" for good. Both builds are idempotent, `public_bundle` gives up
+# one that keeps killing its worker, and both time limits stay under the
+# Redis broker's visibility timeout (one hour), past which a task still
+# running would be delivered twice.
 @celery_app.task(
     name="depictio.serverless.build_public_bundle",
     soft_time_limit=600,
     time_limit=900,
+    acks_late=True,
+    reject_on_worker_lost=True,
 )
 def build_public_bundle(main_id: str) -> dict:
     """Build the offline bundle a public project's visitors download (#1480).
@@ -3729,6 +3737,8 @@ _PUBLIC_REPORT_SLOT_RETRY_S = 60
     soft_time_limit=600 + 2 * settings.notebook_export.render_timeout_s + 60,
     time_limit=600 + 2 * settings.notebook_export.render_timeout_s + 120,
     max_retries=None,
+    acks_late=True,
+    reject_on_worker_lost=True,
 )
 def build_public_report(self, main_id: str) -> dict:
     """Render the report + dashboard file and the PDF of a public project's

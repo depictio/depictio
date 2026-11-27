@@ -220,8 +220,9 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
 }) => {
   const reportEditorEnabled = useReportEditorEnabled() && canEditReport;
   // The visitors' ready copy (#1480): the report + dashboard file and its PDF,
-  // already rendered at the default view. Where there is one, the modal opens
-  // on it; "My view" renders the reader's own.
+  // already rendered at the default view. The Export section offers it first;
+  // this modal is reached from "Your own view", so it opens on "My view"
+  // unless the reader cannot build their own.
   const copyState = usePublicCopyState(opened ? dashboardId : null);
   const publicCopy = copyState.copy?.report?.available ? copyState.copy : null;
   const [mode, setMode] = useState<CopyMode>('view');
@@ -254,10 +255,11 @@ const NotebookExportModal: React.FC<NotebookExportModalProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened, dashboardId]);
 
-  // The ready copy first when there is one; the notebook is always the view.
+  // The ready copy only for a reader who cannot render their own view; the
+  // notebook is always the view.
   useEffect(() => {
     if (opened && copyState.loaded) {
-      setMode(publicCopy && initialOutput !== 'qmd' ? 'copy' : 'view');
+      setMode(publicCopy && initialOutput !== 'qmd' && viewRefusal ? 'copy' : 'view');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened, copyState.loaded]);

@@ -234,8 +234,9 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
   const [visitor, setVisitor] = useState(false);
   // Whether this reader may build their own file; null while it is asked.
   const [canBuild, setCanBuild] = useState<boolean | null>(null);
-  // The ready copy a public project keeps (#1480): where there is one the
-  // modal opens on it, and "My view" builds the reader's own.
+  // The ready copy a public project keeps (#1480): the Export section offers
+  // it first, so the modal opens on "My view" unless the reader cannot build
+  // their own.
   const copyState = usePublicCopyState(opened ? (dashboardId ?? null) : null);
   const publicCopy = copyState.copy;
   const [mode, setMode] = useState<CopyMode>('view');
@@ -273,9 +274,11 @@ const ExportStaticModal: React.FC<ExportStaticModalProps> = ({
   }, [opened, dashboardId]);
 
   useEffect(() => {
-    if (opened && copyState.loaded) setMode(publicCopy ? 'copy' : 'view');
+    if (opened && copyState.loaded && canBuild !== null) {
+      setMode(publicCopy && !canBuild ? 'copy' : 'view');
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opened, copyState.loaded]);
+  }, [opened, copyState.loaded, canBuild]);
 
   // The preflight is for "My view" only (a visitor's counts against their
   // address): the ready copy needs none.

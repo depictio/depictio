@@ -576,6 +576,54 @@ def test_the_previous_report_is_served_while_the_next_one_renders(
     assert len([k for k in s3.objects if k.startswith(f"serverless-public/{MAIN_OID}/")]) == 6
 
 
+def _interrupted(mongo, field: str, times: int) -> None:
+    """``times`` starts of a build that never ended: its worker died with it."""
+    mongo["public_bundles_collection"].update_one(
+        {"_id": str(MAIN_OID)},
+        {"$set": {f"{field}status": "building", f"{field}attempts": times}},
+        upsert=True,
+    )
+
+
+def test_a_report_whose_worker_died_renders_on_its_redelivery(reports, mongo):
+    public_bundle.build(str(MAIN_OID))
+    _interrupted(mongo, "report.", 1)
+    assert public_bundle.build_report(str(MAIN_OID))["status"] == "built"
+    report = mongo["public_bundles_collection"].find_one({"_id": str(MAIN_OID)})["report"]
+    assert report["status"] == "ready" and report["attempts"] == 0
+
+
+def test_a_report_that_keeps_killing_its_worker_is_given_up(client, reports, redis, mongo):
+    public_bundle.build(str(MAIN_OID))
+    _interrupted(mongo, "report.", public_bundle.MAX_INTERRUPTED)
+    assert public_bundle.build_report(str(MAIN_OID))["status"] == "failed"
+    assert reports["renders"] == []
+    _as(client, _owner())
+    status = client.get(f"/serverless/public-bundle/{MAIN_OID}").json()["report"]
+    assert status["status"] == "failed" and "interrupted" in status["error"]
+    assert status["rebuilding"] is False
+    # A later change is tried afresh.
+    mongo["dashboards_collection"].update_one(
+        {"dashboard_id": MAIN_OID}, {"$set": {"title": "Edited"}}
+    )
+    public_bundle.build(str(MAIN_OID))
+    assert public_bundle.build_report(str(MAIN_OID))["status"] == "built"
+
+
+def test_a_bundle_that_keeps_killing_its_worker_is_given_up(built, mongo):
+    _interrupted(mongo, "", public_bundle.MAX_INTERRUPTED)
+    assert public_bundle.build(str(MAIN_OID))["status"] == "failed"
+    assert built == []
+    assert public_bundle.build(str(MAIN_OID))["status"] == "built"
+
+
+def test_the_public_builds_survive_a_dead_worker():
+    from depictio.api.v1 import celery_tasks
+
+    for task in (celery_tasks.build_public_bundle, celery_tasks.build_public_report):
+        assert task.acks_late is True and task.reject_on_worker_lost is True
+
+
 def test_turning_the_render_off_withdraws_the_report(client, reports, redis, monkeypatch):
     public_bundle.build(str(MAIN_OID))
     public_bundle.build_report(str(MAIN_OID))

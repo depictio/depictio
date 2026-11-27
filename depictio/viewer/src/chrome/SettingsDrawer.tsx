@@ -3,16 +3,20 @@ import {
   Accordion,
   Anchor,
   Button,
+  Collapse,
   Divider,
   Drawer,
   FileButton,
   Group,
+  Paper,
   SegmentedControl,
   Stack,
   Switch,
   Text,
   Textarea,
+  ThemeIcon,
   Tooltip,
+  UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
@@ -58,6 +62,7 @@ import {
   ExportNote,
   usePublicCopy,
 } from '../components/publicDownload/PublicCopy';
+import { ReadyCopyCard } from '../components/export/ReadyCopy';
 import type { PublicBundleStatus } from 'depictio-react-core';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 
@@ -697,6 +702,7 @@ const ExportBlock: React.FC<{
   signedIn = true,
 }) => {
   const [opened, setOpened] = useState<ExportChoice | null>(null);
+  const [ownViewOpen, setOwnViewOpen] = useState(false);
   const reportEditorEnabled = useReportEditorEnabled();
   const dashboardId = String(dashboard?.dashboard_id ?? dashboard?._id ?? '');
   const showCustomise = reportEditorEnabled && Boolean(canEditReport) && Boolean(dashboardId);
@@ -733,13 +739,11 @@ const ExportBlock: React.FC<{
       viewRefusal={signedIn ? null : SIGN_IN_HINT}
     />
   );
-  // One button per format, opening its modal; a ready copy (#1480) is offered
-  // there first, so a card is open whenever the copy holds its file.
-  const readyReport = Boolean(publicCopy?.report?.available);
-  const renderRefusal = signedIn || readyReport ? null : SIGN_IN_HINT;
+  // The ready copy (#1480) is its own card, first; the format cards below
+  // build the reader's own view, which needs an account.
+  const renderRefusal = signedIn ? null : SIGN_IN_HINT;
   const combinedRefusal =
-    renderRefusal ??
-    (staticExport?.allowed === false && !readyReport ? OWNER_GATE_HINT : null);
+    renderRefusal ?? (staticExport?.allowed === false ? OWNER_GATE_HINT : null);
   const reportCard = (
     <ExportFormatCard
       icon="mdi:file-document-outline"
@@ -803,11 +807,11 @@ const ExportBlock: React.FC<{
       </Stack>
     );
   }
-  return (
-    <Stack gap="sm" data-testid="export-section">
+  const ownView = (
+    <>
       <Text size="sm" c="dimmed">
         {publicCopy
-          ? 'Each format has a ready copy to download at once, or your own view to build.'
+          ? 'Built from the filters you have right now.'
           : 'Every format uses the filters you have right now.'}
       </Text>
       {reportCard}
@@ -838,9 +842,53 @@ const ExportBlock: React.FC<{
           allowed={staticExport.allowed}
           onExportStatic={staticExport.onExportStatic}
           publicCopy={publicCopy}
+          signedIn={signedIn}
         />
       )}
       {notebookCard}
+    </>
+  );
+  // Where the project keeps a ready copy (#1480), it is the Export section:
+  // its files download at once. Building one's own view (other filters, a
+  // fresh render) is the secondary path, folded under it.
+  if (publicCopy && dashboardId) {
+    return (
+      <Stack gap="sm" data-testid="export-section">
+        <ReadyCopyCard dashboardId={dashboardId} status={publicCopy} />
+        <UnstyledButton
+          onClick={() => setOwnViewOpen((o) => !o)}
+          aria-expanded={ownViewOpen}
+          data-testid="export-own-view-toggle"
+        >
+          <Paper withBorder radius="md" p="sm">
+            <Group align="center" wrap="nowrap" gap="sm">
+              <ThemeIcon variant="light" color="gray" size="lg" radius="md">
+                <Icon icon="mdi:tune-variant" width={20} />
+              </ThemeIcon>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Text fw={600} size="sm">
+                  Your own view
+                </Text>
+                <Text size="xs" c="dimmed" lh={1.4}>
+                  Other filters or another look: rendered for you, in a few minutes.
+                </Text>
+              </div>
+              <Icon icon={ownViewOpen ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={18} />
+            </Group>
+          </Paper>
+        </UnstyledButton>
+        <Collapse in={ownViewOpen}>
+          <Stack gap="sm" data-testid="export-own-view">
+            {ownView}
+          </Stack>
+        </Collapse>
+        {modal}
+      </Stack>
+    );
+  }
+  return (
+    <Stack gap="sm" data-testid="export-section">
+      {ownView}
       {modal}
     </Stack>
   );
@@ -858,7 +906,7 @@ const OWNER_GATE_HINT =
   "Exporting needs owner rights on this dashboard's project: a bundle carries the " +
   "project's data. Ask a project owner to export it.";
 const SIGN_IN_HINT =
-  'Rendering a report needs a signed-in account: sign in to export the view you have now.';
+  'Exporting your own view needs a signed-in account: sign in to export the filters you have now.';
 const PREVIEW_HINT =
   'A static export draws the live dashboard and its current data, not this past ' +
   'version. Leave the version preview to export.';
@@ -905,13 +953,17 @@ const ExportStaticBlock: React.FC<{
   /** The server's answer (`useCanExportStatic`); null while it is asked. */
   allowed: boolean | null;
   onExportStatic: () => void;
-  /** The ready copies the project's owner offers visitors (#1480), or null. */
+  /** The ready copies the project's owner offers visitors (#1480), or null:
+   *  shown above, so this card only builds the reader's own view. */
   publicCopy?: PublicBundleStatus | null;
-}> = ({ dashboardId, previewing, allowed, onExportStatic, publicCopy = null }) => {
+  signedIn?: boolean;
+}> = ({ dashboardId, previewing, allowed, onExportStatic, publicCopy = null, signedIn = true }) => {
   const reason = previewing
     ? PREVIEW_HINT
-    : allowed === false && !publicCopy
-      ? OWNER_GATE_HINT
+    : allowed === false
+      ? publicCopy && !signedIn
+        ? SIGN_IN_HINT
+        : OWNER_GATE_HINT
       : null;
   return (
     <ExportFormatCard
@@ -927,7 +979,7 @@ const ExportStaticBlock: React.FC<{
           variant="light"
           size="sm"
           onClick={onExportStatic}
-          disabled={!dashboardId || previewing || (allowed !== true && !publicCopy)}
+          disabled={!dashboardId || previewing || allowed !== true}
           data-testid="export-static-btn"
         >
           Export dashboard…
@@ -1222,15 +1274,11 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
     onExportStatic && !isStaticBundle && staticExportEnabled ? (dashboardId ?? null) : null,
   );
   const staticExportAllowed = staticExportAccess ? staticExportAccess.allowed : null;
-  // A reader who is not an owner gets the copies the project offers (#1480);
-  // a signed-in visitor may also export their own view as a public build.
+  // The copies a public project offers (#1480), first in the Export section
+  // for every reader, owners included (they see what visitors get); a
+  // signed-in reader may also export their own view.
   const publicCopy = usePublicCopy(
-    publicDownloadEnabled &&
-      staticExportAccess &&
-      (staticExportAccess.public || !staticExportAccess.allowed) &&
-      dashboardId
-      ? dashboardId
-      : null,
+    publicDownloadEnabled && staticExportAccess && dashboardId ? dashboardId : null,
   );
   // Unknown while the auth status loads: nothing is disabled on a guess.
   const { user: currentUser, isSingleUserMode, loading: userLoading } = useCurrentUser();
@@ -1406,12 +1454,16 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
             showStaticExport &&
             onExportStatic && (
               <>
+                {publicCopy && dashboardId && (
+                  <ReadyCopyCard dashboardId={dashboardId} status={publicCopy} />
+                )}
                 <ExportStaticBlock
                   dashboardId={dashboardId}
                   previewing={previewing}
                   allowed={staticExportAllowed}
                   onExportStatic={onExportStatic}
                   publicCopy={publicCopy}
+                  signedIn={signedIn}
                 />
               </>
             )

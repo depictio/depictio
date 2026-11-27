@@ -1,7 +1,18 @@
-import React from 'react';
-import { Badge, Button, Group, Paper, SegmentedControl, Stack, Text } from '@mantine/core';
+import React, { useEffect, useState } from 'react';
+import {
+  Badge,
+  Button,
+  Group,
+  Loader,
+  Paper,
+  SegmentedControl,
+  Stack,
+  Text,
+  ThemeIcon,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
 import {
+  getPublicBundleStatus,
   publicBundleDownloadUrl,
   type AnalysisState,
   type PublicBundleStatus,
@@ -135,7 +146,10 @@ export const ReadyCopyPanel: React.FC<{
   const built = formatBuiltAt(
     files[0]?.file === 'dashboard' ? status.built_at : (status.report?.built_at ?? status.built_at),
   );
-  const rebuilding = status.rebuilding || status.report?.rebuilding;
+  // A report still on its first render is not "a newer copy": the card says
+  // it is on its way (`ReadyCopyCard`).
+  const rebuilding =
+    status.rebuilding || (status.report?.available && status.report.rebuilding);
   return (
     <Stack gap="xs" data-testid="export-ready-copy">
       <Text size="xs" c="dimmed">
@@ -172,6 +186,75 @@ export const ReadyCopyPanel: React.FC<{
         })}
       </Stack>
     </Stack>
+  );
+};
+
+/** How often the card asks again while a copy is being prepared. */
+const PREPARING_POLL_MS = 30_000;
+
+/**
+ * The first thing the Export section offers where a public project keeps a
+ * ready copy (#1480): its files as plain download links, nothing rendered for
+ * the reader. While the report (or a newer copy) is being prepared the card
+ * says so and asks again until it is there. Owners also read why a build
+ * failed (the server sends `error` to them only).
+ */
+export const ReadyCopyCard: React.FC<{
+  dashboardId: string;
+  status: PublicBundleStatus;
+}> = ({ dashboardId, status: initial }) => {
+  const [status, setStatus] = useState(initial);
+  useEffect(() => setStatus(initial), [initial]);
+  const report = status.report;
+  const preparing = Boolean(status.rebuilding || report?.rebuilding);
+  useEffect(() => {
+    if (!preparing) return;
+    let alive = true;
+    const timer = setTimeout(() => {
+      void getPublicBundleStatus(dashboardId).then((s) => {
+        if (alive && s?.available) setStatus(s);
+      });
+    }, PREPARING_POLL_MS);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [dashboardId, status, preparing]);
+
+  const reportPending = Boolean(report && !report.available && report.rebuilding);
+  const reportError = report && !report.available && !report.rebuilding ? report.error : null;
+  return (
+    <Paper withBorder radius="md" p="sm" data-testid="export-ready-card">
+      <Group align="flex-start" wrap="nowrap" gap="sm">
+        <ThemeIcon variant="light" size="lg" radius="md">
+          <Icon icon="tabler:bolt" width={20} />
+        </ThemeIcon>
+        <Stack gap="xs" style={{ flex: 1, minWidth: 0 }}>
+          <Text fw={600} size="sm">
+            Ready to download
+          </Text>
+          <ReadyCopyPanel
+            dashboardId={dashboardId}
+            status={status}
+            files={readyFiles(status, 'report')}
+          />
+          {reportPending && (
+            <Group gap={8} wrap="nowrap" data-testid="export-ready-preparing">
+              <Loader size={12} />
+              <Text size="xs" c="dimmed" lh={1.35}>
+                The report + dashboard file and its PDF are being prepared. They appear here
+                when ready.
+              </Text>
+            </Group>
+          )}
+          {reportError && (
+            <Text size="xs" c="red" lh={1.35} data-testid="export-ready-error">
+              The report could not be built: {reportError}
+            </Text>
+          )}
+        </Stack>
+      </Group>
+    </Paper>
   );
 };
 
