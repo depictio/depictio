@@ -345,3 +345,26 @@ DEPICTIO_EVENTS_REDIS_DB: {{ .Values.backend.env.DEPICTIO_EVENTS_REDIS_DB | defa
 DEPICTIO_EVENTS_MONGODB_CHANGE_STREAMS_ENABLED: {{ .Values.backend.env.DEPICTIO_EVENTS_MONGODB_CHANGE_STREAMS_ENABLED | default "true" | quote }}
 {{- end }}
 {{- end }}
+
+{{/*
+Redis maxmemory: redis.maxmemory when set, else 75% of the container's memory
+limit (Mi or Gi), leaving room for the fork that rewrites the AOF. Empty when
+neither is known: Redis then runs uncapped, as before.
+*/}}
+{{- define "depictio.redisMaxmemory" -}}
+{{- $set := toString (.Values.redis.maxmemory | default "") -}}
+{{- if $set -}}
+{{- $set -}}
+{{- else -}}
+{{- $limit := toString (((.Values.redis.resources | default dict).limits | default dict).memory | default "") -}}
+{{- $mib := 0 -}}
+{{- if regexMatch "^[0-9]+Gi$" $limit -}}
+{{- $mib = mul (trimSuffix "Gi" $limit | atoi) 1024 -}}
+{{- else if regexMatch "^[0-9]+Mi$" $limit -}}
+{{- $mib = trimSuffix "Mi" $limit | atoi -}}
+{{- end -}}
+{{- if gt (int $mib) 0 -}}
+{{- printf "%dmb" (div (mul $mib 3) 4) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

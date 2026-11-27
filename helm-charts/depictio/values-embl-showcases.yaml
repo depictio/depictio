@@ -197,7 +197,9 @@ redis:
       memory: "256Mi"
       cpu: "100m"
     limits:
-      memory: "512Mi"
+      # 1Gi as deployed: the DataFrame cache of 50 dashboards and their
+      # public bundles; maxmemory follows (768mb, cache evicted first).
+      memory: "1Gi"
       cpu: "500m"
   securityContext:
     runAsNonRoot: true

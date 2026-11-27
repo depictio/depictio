@@ -149,6 +149,13 @@ spec:
             - "yes"
             - --save
             - "60 1"
+            {{- $maxmemory := include "depictio.redisMaxmemory" . }}
+            {{- if $maxmemory }}
+            - --maxmemory
+            - {{ $maxmemory | quote }}
+            - --maxmemory-policy
+            - {{ .Values.redis.maxmemoryPolicy | default "volatile-lru" | quote }}
+            {{- end }}
           ports:
             - containerPort: {{ .Values.redis.service.port }}
               name: redis
