@@ -84,8 +84,9 @@ export const SettingsRailNote: React.FC<{ icon: string; children: React.ReactNod
 
 interface SettingsNavLayoutProps {
   sections: SettingsNavSection[];
-  /** localStorage key under which the last opened section is remembered. */
-  storageKey: string;
+  /** localStorage key under which the last opened section is remembered.
+   *  Without one, the dialog always opens on `defaultSection`. */
+  storageKey?: string;
   /** The section to open on before the reader has picked one. */
   defaultSection?: string;
   /** Open on this section rather than the remembered one. Read once: the
@@ -114,7 +115,7 @@ const SettingsNavLayout: React.FC<SettingsNavLayoutProps> = ({
   testIdPrefix,
 }) => {
   const [stored, setStored] = React.useState<string | null>(
-    () => initialSection ?? readActive(storageKey),
+    () => initialSection ?? (storageKey ? readActive(storageKey) : null),
   );
   /** Sections left for another one since the dialog opened (keepVisitedMounted). */
   const [visited, setVisited] = React.useState<string[]>([]);
@@ -131,7 +132,7 @@ const SettingsNavLayout: React.FC<SettingsNavLayoutProps> = ({
       setVisited((prev) => [...prev, active.key]);
     }
     setStored(key);
-    writeActive(storageKey, key);
+    if (storageKey) writeActive(storageKey, key);
   };
 
   const renderPage = (section: SettingsNavSection) => (

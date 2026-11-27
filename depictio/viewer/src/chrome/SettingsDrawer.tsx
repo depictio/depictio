@@ -1517,7 +1517,10 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       onClose={onClose}
       title={title}
       sections={sections}
-      storageKey={`depictio-settings-active:${surface}`}
+      // A reader's dialog always opens on About (what the dashboard is), not
+      // on the section they last left, such as Export; an author's keeps
+      // their place among the settings they edit.
+      storageKey={surface === 'editor' ? 'depictio-settings-active:editor' : undefined}
       defaultSection={DEFAULT_ACTIVE[surface]}
       initialSection={initialSection}
       footer={
