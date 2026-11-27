@@ -530,6 +530,35 @@ def test_a_visitor_downloads_the_report_and_its_pdf_and_nothing_is_queued(
     assert dispatched == [] and reports["queued"] == []
 
 
+def test_a_failed_render_logs_the_end_of_its_log(reports, monkeypatch: pytest.MonkeyPatch):
+    """The render's own log is the only place its cause is written (a cell's
+    traceback): the server logs its end, the stored error stays a sentence."""
+    from depictio.api.v1.services.notebook_export.render import RenderUnavailable
+
+    def failing_render(main_id, owner_id):
+        raise RenderUnavailable(
+            "quarto render failed", log="Cell 14\nDepictioClientError: 413 row limit"
+        )
+
+    errors: list[str] = []
+
+    class _Logger:
+        def error(self, msg, *a, **k):
+            errors.append(msg)
+
+        def __getattr__(self, level):
+            return lambda *a, **k: None
+
+    monkeypatch.setattr(public_bundle, "_render_report", failing_render)
+    monkeypatch.setattr(public_bundle, "logger", _Logger())
+    public_bundle.build(str(MAIN_OID))
+    with pytest.raises(RenderUnavailable):
+        public_bundle.build_report(str(MAIN_OID))
+    assert any("DepictioClientError: 413 row limit" in e for e in errors)
+    doc = public_bundle._db().public_bundles_collection.find_one({"_id": str(MAIN_OID)})
+    assert doc["report"]["error"] == "quarto render failed"
+
+
 def test_a_failed_pdf_leaves_the_report(client, reports, redis):
     reports["pdf"] = None
     public_bundle.build(str(MAIN_OID))
