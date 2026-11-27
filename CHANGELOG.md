@@ -3,6 +3,42 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.24.1
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.24.1</summary>
+
+### Changes 📜
+
+#### Documentation Updates 📚
+
+* docs: add CITATION.cff (GitHub cite button + Zenodo DOI) ([#1484](https://github.com/depictio/depictio/pull/1484)) [91758e031]
+
+#### Other Changes 📝
+
+* Bump version: 1.24.0 → 1.24.1 [a17a1c60f]
+* test(e2e): the builder's template call carries the data root [f246a8049]
+* fix(cli,project-builder): the project file reads a bucket; no // from a root's trailing slash [aac1973a4]
+* fix(project-builder): no legacy project_type in the YAML, icons on the switch [b8121be79]
+* fix(project-builder): download the project file, the template one click away [242de4abb]
+* feat(static-export): offline files for a public dashboard's visitors, ready copies and their own view ([#1480](https://github.com/depictio/depictio/pull/1480)) ([#1487](https://github.com/depictio/depictio/pull/1487)) [355c5f01b]
+* Update CHANGELOG.md for v1.24.0 [87a0e9ed6]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.24.0
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
