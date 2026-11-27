@@ -17,7 +17,7 @@ authors:
 repository-code: "https://github.com/depictio/depictio"
 url: "https://depictio.github.io/depictio-docs/latest/"
 license: MIT
-version: 1.24.0
+version: 1.24.1
 keywords:
   - bioinformatics
   - data visualization
