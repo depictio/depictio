@@ -1455,8 +1455,13 @@ def _introspect_pipeline_params(
             logger.info(f"METADATA_FILE auto-detected from params + input/: {metadata_file}")
 
 
-def _read_header_line(location: str, root: DataRoot | None) -> str | None:
-    """First line of ``location``, read through the data root when it lives there.
+# Rows read to judge whether a metadata column can group samples. A metadata
+# sheet is one row per sample; past this many the first rows are a fair sample.
+_METADATA_SNIFF_ROWS = 5000
+
+
+def _read_head_lines(location: str, root: DataRoot | None, max_lines: int) -> list[str] | None:
+    """The first ``max_lines`` lines of ``location``, read through the data root when it lives there.
 
     A METADATA_FILE may legitimately sit outside the root (an absolute path
     passed with ``--var``), and a manifest-driven template has no root at all,
@@ -1471,7 +1476,8 @@ def _read_header_line(location: str, root: DataRoot | None) -> str | None:
             except (OSError, ValueError) as exc:
                 logger.warning(f"Could not read metadata file for column detection: {exc}")
                 return None
-            return raw.split(b"\n", 1)[0].decode("utf-8", errors="replace").strip()
+            text = raw.decode("utf-8", errors="replace")
+            return [line.rstrip("\r") for line in text.split("\n", max_lines)[:max_lines]]
 
     if "://" in location:
         # A URL outside the root: we cannot read it from here. Falling through
@@ -1484,34 +1490,76 @@ def _read_header_line(location: str, root: DataRoot | None) -> str | None:
     if not path.is_file():
         return None
     try:
+        lines: list[str] = []
         with open(path) as fh:
-            return fh.readline().strip()
+            for line in fh:
+                lines.append(line.rstrip("\r\n"))
+                if len(lines) >= max_lines:
+                    break
+        return lines
     except OSError as exc:
         logger.warning(f"Could not read metadata file for column detection: {exc}")
         return None
 
 
+def _pick_group_column(cols: list[str], rows: list[list[str]], default: str | None) -> str | None:
+    """The metadata column ``GROUP_COL`` should name, or None when there is none.
+
+    A template's declared default wins when the metadata has that column. Else
+    the first annotation column that actually groups samples: at least two
+    distinct values, and fewer than there are samples (a column unique per
+    sample, like a free-text name, is a "group" of one sample each, which
+    nothing can be compared on). Columns equal to the ID column count as unique.
+    Without rows to judge from, or when no column qualifies, the first
+    annotation column, as before.
+    """
+    annotation_cols = [c for c in cols[1:] if c]
+    if not annotation_cols:
+        return None
+    if default and default in annotation_cols:
+        return default
+    if rows:
+        ids = [row[0] if row else "" for row in rows]
+        for col in annotation_cols:
+            i = cols.index(col)
+            values = [row[i].strip() if i < len(row) else "" for row in rows]
+            values = [v for v in values if v]
+            distinct = set(values)
+            if values == ids or not 2 <= len(distinct) < len(values):
+                continue
+            return col
+    return annotation_cols[0]
+
+
 def _auto_detect_metadata_columns(
-    metadata_location: str, variables: dict[str, str], root: DataRoot | None = None
+    metadata_location: str,
+    variables: dict[str, str],
+    root: DataRoot | None = None,
+    defaults: dict[str, str] | None = None,
 ) -> None:
-    """Read metadata file headers and auto-populate GROUP_COL and ANNOTATION_COLS.
+    """Read the metadata file and auto-populate GROUP_COL and ANNOTATION_COLS.
 
     The first column is assumed to be the sample ID.  All subsequent columns are
-    treated as annotation columns.  If GROUP_COL was not explicitly provided by
-    the user, it defaults to the first annotation column.
+    treated as annotation columns.  When GROUP_COL was not provided (``--var``,
+    params rules), it becomes the template's declared default if the metadata
+    has that column, else the first annotation column that groups samples
+    (``_pick_group_column``).
 
     Args:
         metadata_location: Path or URL of the metadata file (TSV or CSV).
         variables: Variables dict to update in place.
         root: Data root the location is read through when it lives under it.
+        defaults: The template's declared variable defaults.
     """
-    header_line = _read_header_line(metadata_location, root)
+    lines = _read_head_lines(metadata_location, root, _METADATA_SNIFF_ROWS + 1)
+    header_line = lines[0].strip() if lines else ""
     if not header_line:
         return
     sep = "\t" if "\t" in header_line else ","
     cols = [c.strip() for c in header_line.split(sep)]
     if len(cols) < 2:
         return
+    rows = [line.split(sep) for line in (lines or [])[1:] if line.strip()]
     # First column is always the sample ID; the rest are annotations.
     # The ID column name is pipeline/user dependent (nf-core test data uses
     # "ID", the megatest metadata uses "sample"), so expose it as a variable
@@ -1519,7 +1567,10 @@ def _auto_detect_metadata_columns(
     variables.setdefault("METADATA_ID_COL", cols[0])
     annotation_cols = [c for c in cols[1:] if c]
     if annotation_cols:
-        variables.setdefault("GROUP_COL", annotation_cols[0])
+        if "GROUP_COL" not in variables:
+            group_col = _pick_group_column(cols, rows, (defaults or {}).get("GROUP_COL"))
+            if group_col:
+                variables["GROUP_COL"] = group_col
         variables.setdefault("GROUP_COL_DISPLAY", variables["GROUP_COL"].replace("_", " ").title())
         variables["ANNOTATION_COLS"] = ",".join(annotation_cols)
         logger.info(
@@ -1667,9 +1718,14 @@ def resolve_template_config(
     # 3b. Auto-detect metadata annotation columns when METADATA_FILE is provided.
     # A relative METADATA_FILE resolves against the root first, then the CWD;
     # an absolute one outside the root is read where it is (CLI only, see
-    # ``_read_header_line``).
+    # ``_read_head_lines``).
     if "METADATA_FILE" in variables:
-        _auto_detect_metadata_columns(variables["METADATA_FILE"], variables, root)
+        _auto_detect_metadata_columns(
+            variables["METADATA_FILE"],
+            variables,
+            root,
+            defaults=template_metadata.get_variable_defaults(),
+        )
 
     # 3c. Auto-resolve SAMPLESHEET_FILE from the run's input/ directory when not
     # supplied, so the caller does not have to pass an explicit path.
