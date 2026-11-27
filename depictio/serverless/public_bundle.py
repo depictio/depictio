@@ -613,6 +613,15 @@ def build_report(main_id: str) -> dict[str, Any]:
             )
     except Exception as exc:
         logger.error(f"public bundle: report of {main_id} failed: {exc}")
+        # The cause (a cell's traceback) is only in the render's own log. It
+        # stays the server's: it can hold paths and what the document printed,
+        # so the stored error, which owners read, remains the sentence.
+        render_log = getattr(exc, "log", None)
+        if render_log:
+            logger.error(
+                f"public bundle: report of {main_id}, end of the render's log:\n"
+                f"{render_log[-2000:]}"
+            )
         _end(main_id, "report.", {"status": "failed", "error": str(exc)[:500]})
         raise
 
