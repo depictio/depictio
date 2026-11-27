@@ -1,0 +1,17 @@
+{
+  // Codespace for Day 2 of the Depictio hands-on workshop (Depictio from the command
+  // line): a terminal with the Depictio CLI already installed, for learners who cannot
+  // install it on their own computer. It runs no server: the CLI talks to the workshop
+  // server, with the CLI.yaml the learner downloads from their account.
+  //
+  // Open with:
+  // https://codespaces.new/depictio/depictio?devcontainer_path=.devcontainer/workshop-cli/devcontainer.json&quickstart=1
+  "name": "Depictio workshop: command line",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
+  "hostRequirements": { "cpus": 2 },
+  // Runs once, when the codespace is created.
+  "onCreateCommand": "bash .devcontainer/workshop-cli/setup.sh",
+  "customizations": {
+    "codespaces": { "openFiles": [".devcontainer/workshop-cli/README.md"] }
+  }
+}
