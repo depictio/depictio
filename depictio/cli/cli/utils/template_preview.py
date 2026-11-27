@@ -13,7 +13,8 @@ one :class:`DataRoot`, so previewing a remote prefix costs a single listing.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from collections.abc import Sequence
+from dataclasses import dataclass, field, replace
 from fnmatch import translate
 from pathlib import Path
 from typing import Any, Literal
@@ -26,7 +27,7 @@ from depictio.cli.cli.utils.data_root import (
     as_data_root,
     relative_to_root,
 )
-from depictio.cli.cli.utils.scan_utils import construct_full_regex
+from depictio.cli.cli.utils.scan_utils import construct_full_regex, describe_unmatched_run_scan
 from depictio.cli.cli.utils.templates import (
     OPTIONAL_SOURCE_MISSING_REASON,
     _local_fallback_allowed,
@@ -168,6 +169,9 @@ class RunPreview:
     pruned_optional_dcs: list[str] = field(default_factory=list)
     dashboards: list[str] = field(default_factory=list)
     truncated: bool = False  # the listing hit its key cap, so the view is partial
+    # A sequencing-runs workflow whose root holds no run folder: what the scan
+    # will say at ingest (``describe_unmatched_run_scan``), said here first.
+    unmatched_run_layout: str | None = None
 
 
 def _scan_match_regex(mode: str, parameters: dict) -> str:
@@ -449,8 +453,14 @@ def _preview_recipe_dc(
     optional: bool,
     settled_tags: frozenset[str] = frozenset(),
     pipeline_version: str | None = None,
+    runs: Sequence[str] = (),
 ) -> DataCollectionPreview:
     """One row for a ``source: transformed`` DC, resolved through its recipe's SOURCES.
+
+    ``runs`` are the run folders of a ``sequencing-runs`` workflow. Ingestion
+    runs the recipe once per run, against that run's folder
+    (``run_roots.iter_run_roots``), so a file source is looked up in each run
+    folder and its matches are summed. Without runs, the root is the one run.
 
     The recipe is loaded the way ingestion loads it, with the version of the
     pipeline its workflow names (``pipeline_version``), so a recipe kept in a
@@ -495,6 +505,8 @@ def _preview_recipe_dc(
 
     recipe = RecipePreview(name=recipe_name, summary=_docstring_summary(module))
     row.recipe = recipe
+    # Where ingestion runs the recipe: each run folder, or the root as one run.
+    run_roots = [root.scoped(run) for run in runs] or [root]
     overrides = transform.get("source_overrides") or {}
     # A URL outside the root is read as it is at ingest, so it cannot be
     # counted from here, and must not be reported missing either.
@@ -527,17 +539,27 @@ def _preview_recipe_dc(
         samples: list[str] = []
         found_in: str | None = None
         if glob_pattern:
-            globbed = root.glob(glob_pattern)
-            hits = len(globbed)
-            samples = [root.url(rel) for rel in globbed[:PREVIEW_SAMPLES]]
-            found_in = _common_folder(globbed)
+            hits = 0
+            found_rels: list[str] = []
+            for run_root in run_roots:
+                globbed = run_root.glob(glob_pattern)
+                hits += len(globbed)
+                found_rels.extend(globbed)
+                samples.extend(run_root.url(rel) for rel in globbed)
+            samples = samples[:PREVIEW_SAMPLES]
+            found_in = _common_folder(found_rels)
         elif path:
             # The recipe layer's own rule (``resolve_sources``): a location
             # under the root is looked up in it, one outside it as it is.
             relative = relative_to_root(root, path)
             if relative is not None:
-                hits = 1 if root.exists(relative) else 0
-                samples = [root.url(relative)] if hits else []
+                hits = 0
+                for run_root in run_roots:
+                    run_relative = relative_to_root(run_root, path)
+                    if run_relative is not None and run_root.exists(run_relative):
+                        hits += 1
+                        samples.append(run_root.url(run_relative))
+                samples = samples[:PREVIEW_SAMPLES]
                 found_in = _common_folder([relative]) if hits else None
             elif "://" in path:
                 uncounted = True
@@ -576,6 +598,37 @@ def _preview_recipe_dc(
     else:
         row.status = "empty"
     return row
+
+
+def _multiqc_finds_it_anyway(dc_config: dict, root: DataRoot) -> bool:
+    """Whether ingestion reads this MultiQC collection without a run folder.
+
+    When its scan finds nothing, ``multiqc_processor.process_multiqc_data_collection``
+    globs ``<location>/*/multiqc_data/multiqc.parquet`` (and two variants) on
+    the local disk, run layout or not. A local root keeps its count for that
+    reason; an s3:// root has no such fallback.
+    """
+    return str(dc_config.get("type") or "").lower() == "multiqc" and isinstance(root, LocalDataRoot)
+
+
+def _unmatched_run_layout(config: dict, root: DataRoot) -> str | None:
+    """The ingest scan's message for a run layout this root does not have.
+
+    For the first ``sequencing-runs`` workflow whose root holds no folder
+    matching ``runs_regex``: the data root is then usually one level too deep
+    (a run folder itself) or too high. None when every such workflow has runs.
+    """
+    for workflow in config.get("workflows") or []:
+        data_location = workflow.get("data_location") or {}
+        runs_regex = data_location.get("runs_regex")
+        if data_location.get("structure") != "sequencing-runs" or not runs_regex:
+            continue
+        workflow_root = _workflow_root(workflow, root)
+        if workflow_root.runs(runs_regex):
+            continue
+        subdirectories = sorted(entry.name for entry in workflow_root.children("") if entry.is_dir)
+        return describe_unmatched_run_scan(workflow_root.location, runs_regex, subdirectories)
+    return None
 
 
 def _workflow_root(workflow: dict, root: DataRoot) -> DataRoot:
@@ -639,14 +692,17 @@ def preview_data_collections(
     """
     rows: list[DataCollectionPreview] = []
     detected_runs: list[str] = []
-    recipe_slots: list[tuple[int, str, dict, bool, DataRoot, str | None]] = []
+    recipe_slots: list[tuple[int, str, dict, bool, DataRoot, str | None, list[str]]] = []
     for workflow in config.get("workflows") or []:
         workflow_root = _workflow_root(workflow, root)
         # Ingestion loads a recipe with its workflow's version: so does the preview.
         version = workflow.get("version") or None
         data_location = workflow.get("data_location") or {}
         runs: list[str] = []
-        if data_location.get("structure") == "sequencing-runs" and data_location.get("runs_regex"):
+        expects_runs = bool(
+            data_location.get("structure") == "sequencing-runs" and data_location.get("runs_regex")
+        )
+        if expects_runs:
             # One run directory per scan pass, the same way the walk scopes it.
             runs = workflow_root.runs(data_location["runs_regex"])
             detected_runs.extend(run for run in runs if run not in detected_runs)
@@ -658,15 +714,34 @@ def preview_data_collections(
             # A materialized recipe DC has a scan block over its seed, so it is
             # previewed as what it now is: a file scan.
             if dc_config.get("source") == "transformed" and not dc_config.get("scan"):
-                recipe_slots.append((len(rows), tag, dc_config, optional, workflow_root, version))
+                recipe_slots.append(
+                    (len(rows), tag, dc_config, optional, workflow_root, version, runs)
+                )
                 rows.append(
                     _preview_recipe_dc(
-                        tag, dc_config, workflow_root, optional, pipeline_version=version
+                        tag,
+                        dc_config,
+                        workflow_root,
+                        optional,
+                        pipeline_version=version,
+                        runs=runs,
                     )
                 )
             else:
                 scan_root = _scan_root(dc_config, workflow_root, root)
-                rows.append(_preview_scan_dc(tag, dc_config, scan_root, runs, optional))
+                row = _preview_scan_dc(tag, dc_config, scan_root, runs, optional)
+                if (
+                    expects_runs
+                    and not runs
+                    and row.mode in ("recursive", "s3_prefix")
+                    and not _multiqc_finds_it_anyway(dc_config, scan_root)
+                ):
+                    # Ingestion walks run folders only, and finds none here
+                    # (``scan.describe_unmatched_run_scan``): the root's own
+                    # files are not read. Recipes still read the root as one
+                    # run (``run_roots.iter_run_roots``), so only scans change.
+                    row = replace(row, matched=0, samples=[], status="empty")
+                rows.append(row)
 
     # Recipes chain through dc_ref (a canonical reads the table another recipe
     # writes), so recipe rows are re-evaluated until no further collection
@@ -674,9 +749,15 @@ def preview_data_collections(
     # ends within the depth of the longest chain.
     settled = frozenset(row.tag for row in rows if row.status == "ok")
     while True:
-        for index, tag, dc_config, optional, workflow_root, version in recipe_slots:
+        for index, tag, dc_config, optional, workflow_root, version, runs in recipe_slots:
             rows[index] = _preview_recipe_dc(
-                tag, dc_config, workflow_root, optional, settled, pipeline_version=version
+                tag,
+                dc_config,
+                workflow_root,
+                optional,
+                settled,
+                pipeline_version=version,
+                runs=runs,
             )
         now_settled = frozenset(row.tag for row in rows if row.status == "ok")
         if now_settled == settled:
@@ -728,6 +809,7 @@ def preview_data_root(
     config, template_metadata, template_origin, dashboard_paths, resolved = resolution
 
     rows, detected_runs = preview_data_collections(config, root)
+    unmatched_run_layout = _unmatched_run_layout(config, root)
 
     pruned = [
         entry.data_collection_tag
@@ -755,4 +837,5 @@ def preview_data_root(
         pruned_optional_dcs=pruned,
         dashboards=[path.name for path in dashboard_paths],
         truncated=root.truncated,
+        unmatched_run_layout=unmatched_run_layout,
     )
