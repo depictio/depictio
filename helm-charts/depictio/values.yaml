@@ -256,6 +256,16 @@ redis:
     limits:
       memory: "1Gi"    # Doubled to prevent cache evictions under load
       cpu: "500m"
+  # Redis holds the DataFrame cache (db0, every key with a TTL), the Celery
+  # broker (db1, queue keys without one) and task results (db2, TTL). Without
+  # a cap the cache grows until the container is OOM-killed, and the AOF file
+  # that persists it fills the volume. Empty = 75% of resources.limits.memory
+  # (Mi or Gi; no limit, or another unit = no cap). Redis units: "768mb".
+  # "0" = no cap.
+  maxmemory: ""
+  # volatile-lru evicts only keys with a TTL: cache entries and task results,
+  # never a queued task.
+  maxmemoryPolicy: volatile-lru
   service:
     type: ClusterIP
     port: 6379
