@@ -3,6 +3,36 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.24.3
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.24.3</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.24.2 → 1.24.3 [681f54a56]
+* fix(viewer): the dashboard settings always open on About for a reader [905707f4b]
+* fix(api): a filter aimed at another table is skipped quietly [73962470e]
+* fix(serverless): a failed public report logs the end of its render's log [a10200645]
+* Update CHANGELOG.md for v1.24.2 [f070f96a5]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.24.2
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
