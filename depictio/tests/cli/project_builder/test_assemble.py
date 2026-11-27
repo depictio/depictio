@@ -479,7 +479,8 @@ class TestBuildTemplate:
             ],
         }
         assert template["name"] == "My Run"
-        assert template["project_type"] == "advanced"
+        # Legacy, decides nothing: left out.
+        assert "project_type" not in template
         assert template["is_public"] is False
         assert "description" not in template
         assert "realtime" not in template

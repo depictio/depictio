@@ -612,7 +612,7 @@ def build_template(
             ],
         },
         "name": draft.name,
-        "project_type": "advanced",
+        # No project_type: legacy, it decides nothing any more (models/projects.py).
         "is_public": draft.is_public,
     }
     if draft.description:

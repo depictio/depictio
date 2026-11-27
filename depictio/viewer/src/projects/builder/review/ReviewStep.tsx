@@ -291,8 +291,24 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                 value={yamlView}
                 onChange={(value) => setYamlView(value as 'project' | 'template')}
                 data={[
-                  { value: 'project', label: 'Project file' },
-                  { value: 'template', label: 'Template (any folder)' },
+                  {
+                    value: 'project',
+                    label: (
+                      <Group gap={6} wrap="nowrap" justify="center">
+                        <Icon icon="mdi:folder-outline" width={14} />
+                        Project file
+                      </Group>
+                    ),
+                  },
+                  {
+                    value: 'template',
+                    label: (
+                      <Group gap={6} wrap="nowrap" justify="center">
+                        <Icon icon="mdi:folder-multiple-outline" width={14} />
+                        Template (any folder)
+                      </Group>
+                    ),
+                  },
                 ]}
                 data-testid="builder-yaml-view"
               />

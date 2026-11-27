@@ -377,7 +377,6 @@ const TEMPLATE = {
     ],
   },
   name: PROJECT_NAME,
-  project_type: "advanced",
   is_public: false,
   workflows: [
     {
@@ -422,7 +421,6 @@ const TEMPLATE_YAML = [
   "    description: The folder or s3:// prefix the collections are read from",
   "    required: true",
   `name: ${PROJECT_NAME}`,
-  "project_type: advanced",
   "is_public: false",
   "workflows:",
   "- name: main",
