@@ -3,6 +3,36 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.24.2
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.24.2</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.24.1 → 1.24.2 [580dca406]
+* fix(advanced-viz): an unset control falls back to its default [afa41cbf8]
+* fix(serverless): a public build whose worker dies is delivered again [00ebb959b]
+* fix(viewer): the Export section offers the ready copy first [50cfc31ba]
+* Update CHANGELOG.md for v1.24.1 [e9ec563a3]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.24.1
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
