@@ -20,6 +20,7 @@ synthetic - a stubbed key listing, no network.
 """
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -858,6 +859,21 @@ class TestLocalResolutionIsUnchanged:
 
         remote = resolve_template("nf-core/ampliseq/2.16.0", S3_ROOT, CLI_config=s3_cli_config())[0]
         assert sorted(_scans_by_tag(remote)) == sorted(_scans_by_tag(local))
+
+
+def test_a_remote_root_with_a_trailing_slash_resolves_as_without(monkeypatch):
+    """`s3://b/run/` must not give `s3://b/run//input/...`: object stores refuse
+    an empty path segment, so the ingest failed where the dry run passed."""
+    install_megatest_listing(monkeypatch)
+    from depictio.cli.cli.utils.templates import resolve_template
+
+    plain = resolve_template("nf-core/ampliseq/2.16.0", S3_ROOT, CLI_config=s3_cli_config())
+    slashed = resolve_template("nf-core/ampliseq/2.16.0", S3_ROOT + "/", CLI_config=s3_cli_config())
+
+    assert slashed[4]["DATA_ROOT"] == S3_ROOT
+    # No empty segment anywhere but the scheme's own `://`.
+    assert not re.search(r"[^:]//", json.dumps(slashed[0]["workflows"]))
+    assert _scans_by_tag(slashed[0]) == _scans_by_tag(plain[0])
 
 
 class TestResolveTemplateConfig:

@@ -330,7 +330,11 @@ class TestOnALocalFolder:
         assert "template" not in project
         assert project["name"] == "Lab QC"
         assert "{DATA_ROOT}" not in body["project_yaml"]
-        assert "s3://lab-bucket/runs/samplesheet.csv" in body["project_yaml"]
+        sheet = project["workflows"][0]["data_collections"][0]
+        assert sheet["config"]["scan"] == {
+            "mode": "url",
+            "scan_parameters": {"url": "s3://lab-bucket/runs/samplesheet.csv"},
+        }
         assert "--project-config-path" in body["project_yaml"]
 
     def test_an_edited_shipped_template_has_no_project_file(self, client):

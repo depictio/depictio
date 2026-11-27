@@ -1641,7 +1641,9 @@ def resolve_template_config(
     data_root_abs: str | None = root.location if root is not None else None
     variables: dict[str, str] = {}
     if data_root_abs is not None:
-        variables["DATA_ROOT"] = data_root_abs
+        # Without its trailing slash: `{DATA_ROOT}/input` on `s3://b/run/` would
+        # read `s3://b/run//input`, an empty segment object stores refuse.
+        variables["DATA_ROOT"] = data_root_abs.rstrip("/") or data_root_abs
     if extra_vars:
         variables.update(extra_vars)
 

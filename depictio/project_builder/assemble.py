@@ -658,12 +658,31 @@ def build_project(template: dict[str, Any], data_root: str) -> dict[str, Any]:
 
     The ``template`` block is left out and every ``{DATA_ROOT}`` is the root
     itself, so the file reads as the project it is, with real locations.
+
+    On an ``s3://`` root, each scan is rewritten to its remote counterpart
+    (``single`` -> ``url``, ``recursive`` -> ``s3_prefix``), as resolving a
+    template on a remote root does (``bindings.apply_remote_data_root``): a
+    project file is ingested as written, and a ``single`` or ``recursive`` scan
+    only reads the local disk.
     """
+    from depictio.cli.cli.utils.bindings import apply_remote_data_root
     from depictio.cli.cli.utils.templates import substitute_template_variables
 
     root = data_root.rstrip("/") or data_root
     body = {key: value for key, value in template.items() if key != "template"}
-    return substitute_template_variables(body, {"DATA_ROOT": root})
+    project = substitute_template_variables(body, {"DATA_ROOT": root})
+    if root.lower().startswith("s3://"):
+        apply_remote_data_root(project, _RootLocation(root))  # type: ignore[arg-type]
+    return project
+
+
+class _RootLocation:
+    """A remote root by its location alone: all the scan rewrite reads, with no listing."""
+
+    is_remote = True
+
+    def __init__(self, location: str) -> None:
+        self.location = location
 
 
 def project_yaml(project: dict[str, Any]) -> str:
