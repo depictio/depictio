@@ -20,16 +20,18 @@ export type TemplateState =
   | { status: 'ready'; result: BuilderTemplateResult }
   | { status: 'error'; error: string; code: string | null };
 
-/** `base`: the shipped template the draft edits, and the edits. */
+/** `base`: the shipped template the draft edits, and the edits.
+ *  `dataRoot`: the root the draft reads, for the project file. */
 export function useBuilderTemplate(
   draft: BuilderProjectDraft | null,
   remote: boolean,
   base: BuilderTemplateBaseEdits | null = null,
+  dataRoot: string | null = null,
 ): TemplateState {
   const [state, setState] = useState<TemplateState>({ status: 'idle' });
   const key = useMemo(
-    () => (draft ? JSON.stringify([draft, remote, base]) : null),
-    [draft, remote, base],
+    () => (draft ? JSON.stringify([draft, remote, base, dataRoot]) : null),
+    [draft, remote, base, dataRoot],
   );
   useEffect(() => {
     if (!draft) {
@@ -39,7 +41,7 @@ export function useBuilderTemplate(
     const controller = new AbortController();
     setState({ status: 'loading' });
     const timer = window.setTimeout(() => {
-      builderTemplate(draft, remote, { signal: controller.signal }, base)
+      builderTemplate(draft, remote, { signal: controller.signal }, base, dataRoot)
         .then((result) => {
           if (!controller.signal.aborted) setState({ status: 'ready', result });
         })

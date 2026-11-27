@@ -19,6 +19,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
 from bson import ObjectId
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -298,13 +299,55 @@ class TestOnALocalFolder:
         response = _post(client, "template", draft=_draft(SHEET, QUANT_DC), remote=False)
         assert response.status_code == 200
         body = response.json()
-        assert set(body) == {"template", "yaml", "template_id", "warnings", "removed"}
+        assert set(body) == {
+            "template",
+            "yaml",
+            "template_id",
+            "warnings",
+            "removed",
+            "project_yaml",
+        }
         assert body["removed"] == {}
+        # Without the root, no project file: its locations would be unknown.
+        assert body["project_yaml"] is None
         assert body["template_id"] == "custom/lab-qc"
         assert body["template"]["template"]["template_id"] == "custom/lab-qc"
         assert body["yaml"].startswith("# Defined with the Depictio Project Builder.")
         assert "{DATA_ROOT}/samplesheet.csv" in body["yaml"]
         assert body["warnings"] == []
+
+    def test_template_with_its_root_also_gives_the_project_file(self, client):
+        body = _post(
+            client,
+            "template",
+            draft=_draft(SHEET, QUANT_DC),
+            remote=True,
+            data_root="s3://lab-bucket/runs/",
+        ).json()
+        assert body["yaml"].startswith("# Defined with the Depictio Project Builder.")
+        project = yaml.safe_load(body["project_yaml"])
+        # The project at the top level, on the root it was built from.
+        assert "template" not in project
+        assert project["name"] == "Lab QC"
+        assert "{DATA_ROOT}" not in body["project_yaml"]
+        sheet = project["workflows"][0]["data_collections"][0]
+        assert sheet["config"]["scan"] == {
+            "mode": "url",
+            "scan_parameters": {"url": "s3://lab-bucket/runs/samplesheet.csv"},
+        }
+        assert "--project-config-path" in body["project_yaml"]
+
+    def test_an_edited_shipped_template_has_no_project_file(self, client):
+        base = {"template_id": "nf-core/ampliseq/2.18.0", "remove": ["taxonomy_composition"]}
+        body = _post(
+            client,
+            "template",
+            draft=_draft(SHEET),
+            remote=False,
+            base=base,
+            data_root="/data/run42",
+        ).json()
+        assert body["project_yaml"] is None
 
     def test_a_shipped_template_is_described_whole(self, client):
         response = _post(client, "from_template", template_id="nf-core/ampliseq/2.18.0")

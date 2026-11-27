@@ -3,7 +3,7 @@
  * what still needs fixing, the links between collections, the generated
  * template (copy, download), and the create panel of the mode.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ActionIcon,
   Alert,
@@ -15,6 +15,7 @@ import {
   Loader,
   Paper,
   ScrollArea,
+  SegmentedControl,
   Stack,
   Text,
   Tooltip,
@@ -112,6 +113,14 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
   const realtime = isRealtime(state, capabilities.realtime.events_enabled);
   const { project } = state;
   const result = template.status === 'ready' ? template.result : null;
+  // The project file first (on a server); the template, to reuse on another
+  // folder, one click away.
+  const [yamlView, setYamlView] = useState<'project' | 'template'>('project');
+  const projectYaml = result?.project_yaml ?? null;
+  const showsProject = Boolean(projectYaml) && yamlView === 'project';
+  const shownYaml = (showsProject ? projectYaml : result?.yaml) ?? '';
+  const fileName = templateFileName(result?.template_id);
+  const shownFileName = projectYaml && !showsProject ? fileName.replace(/\.yaml$/, '.template.yaml') : fileName;
   const kept = baseKept(state.base);
   const removedCount = baseRemoved(state.base).size;
   const count = state.workflows.reduce((n, w) => n + w.data_collections.length, 0) + kept.length;
@@ -239,15 +248,15 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
             <Group justify="space-between" wrap="nowrap">
               <Group gap={6} wrap="nowrap">
                 <Icon icon="mdi:file-code-outline" width={16} color={`var(--mantine-color-${accent.secondary}-6)`} />
-                {/* What the project is made from, as YAML. It can serve as a
-                    template for the next runs, but here it is this project's. */}
+                {/* What the project is made from, as YAML: the project file,
+                    or the template that reads any folder of the same layout. */}
                 <Text size="xs" fw={700} tt="uppercase" c="dimmed">
                   Project definition
                 </Text>
                 {template.status === 'loading' && <Loader size={12} />}
               </Group>
               <Group gap={4} wrap="nowrap">
-                <CopyButton value={result?.yaml ?? ''} timeout={1500}>
+                <CopyButton value={shownYaml} timeout={1500}>
                   {({ copied, copy }) => (
                     <Tooltip label={copied ? 'Copied' : 'Copy the YAML'} withArrow>
                       <ActionIcon
@@ -268,13 +277,42 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                   color={accent.secondary}
                   leftSection={<Icon icon="mdi:download" width={15} />}
                   disabled={!result}
-                  onClick={() => result && downloadText(result.yaml, templateFileName(result.template_id), 'text/yaml')}
+                  onClick={() => result && downloadText(shownYaml, shownFileName, 'text/yaml')}
                   data-testid="builder-download-template"
                 >
                   Download YAML
                 </Button>
               </Group>
             </Group>
+            {projectYaml && (
+              <SegmentedControl
+                size="xs"
+                fullWidth
+                value={yamlView}
+                onChange={(value) => setYamlView(value as 'project' | 'template')}
+                data={[
+                  {
+                    value: 'project',
+                    label: (
+                      <Group gap={6} wrap="nowrap" justify="center">
+                        <Icon icon="mdi:folder-outline" width={14} />
+                        Project file
+                      </Group>
+                    ),
+                  },
+                  {
+                    value: 'template',
+                    label: (
+                      <Group gap={6} wrap="nowrap" justify="center">
+                        <Icon icon="mdi:folder-multiple-outline" width={14} />
+                        Template (any folder)
+                      </Group>
+                    ),
+                  },
+                ]}
+                data-testid="builder-yaml-view"
+              />
+            )}
             {template.status === 'idle' && (
               <Text size="sm" c="dimmed">
                 The template shows here once the draft has no errors left.
@@ -308,7 +346,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
               // A fixed height, not Autosize: Autosize's inner box takes the
               // width of the longest line and pushes its vertical bar off screen.
               <ScrollArea h="calc(100vh - 300px)" mih={240} type="always" scrollbars="xy" offsetScrollbars>
-                <YamlBlock code={result.yaml} testId="builder-review-yaml" />
+                <YamlBlock code={shownYaml} testId="builder-review-yaml" />
               </ScrollArea>
             )}
             {realtime && (

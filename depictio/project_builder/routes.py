@@ -100,6 +100,9 @@ class TemplateBody(BaseModel):
     remote: bool = False
     # The draft edits a shipped template: its collections are the additions.
     base: overlay.TemplateBase | None = None
+    # The folder or s3:// prefix the draft reads: with it, the answer also
+    # holds the project file (``project_yaml``), its locations resolved.
+    data_root: str | None = Field(default=None, max_length=2000)
 
 
 class FromTemplateBody(BaseModel):
@@ -125,7 +128,10 @@ def _has_additions(draft: assemble.ProjectDraft) -> bool:
 
 
 def template_for(
-    draft: assemble.ProjectDraft, remote: bool, base: overlay.TemplateBase | None = None
+    draft: assemble.ProjectDraft,
+    remote: bool,
+    base: overlay.TemplateBase | None = None,
+    data_root: str | None = None,
 ) -> dict[str, Any]:
     """The template a draft becomes, validated as ``from_run`` will validate it.
 
@@ -133,6 +139,11 @@ def template_for(
     the draft's own collections and links (None when it adds none), ``yaml``
     the shipped template with every edit applied, and ``removed`` what the
     edits take out, with why.
+
+    With ``data_root``, a draft of its own also comes as a project file
+    (``project_yaml``): the same project, the ``template`` block left out and
+    its locations on that root, for ``depictio ingest --project-config-path``.
+    An edit of a shipped template stays a template (``project_yaml`` None).
     """
     if base is not None:
         additions = (
@@ -151,6 +162,7 @@ def template_for(
             "template_id": resolved_id,
             "warnings": warnings,
             "removed": removed,
+            "project_yaml": None,
         }
     template = assemble.build_template(draft, remote=remote)
     warnings = validate_inline_template(template, remote=remote)
@@ -160,6 +172,11 @@ def template_for(
         "template_id": template["template"]["template_id"],
         "warnings": warnings,
         "removed": {},
+        "project_yaml": (
+            assemble.project_yaml(assemble.build_project(template, data_root))
+            if data_root
+            else None
+        ),
     }
 
 
@@ -264,7 +281,7 @@ def build_builder_router(
     @router.post("/template")
     async def post_template(body: TemplateBody, _opener: RootOpener = Depends(opener_dependency)):
         """The ad-hoc template a draft becomes, validated; nothing is read or stored."""
-        return await run_refusable(template_for, body.draft, body.remote, body.base)
+        return await run_refusable(template_for, body.draft, body.remote, body.base, body.data_root)
 
     @router.post("/from_template")
     async def post_from_template(

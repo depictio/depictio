@@ -612,7 +612,7 @@ def build_template(
             ],
         },
         "name": draft.name,
-        "project_type": "advanced",
+        # No project_type: legacy, it decides nothing any more (models/projects.py).
         "is_public": draft.is_public,
     }
     if draft.description:
@@ -644,3 +644,48 @@ YAML_HEADER = """\
 
 def template_yaml(template: dict[str, Any]) -> str:
     return YAML_HEADER + yaml.safe_dump(template, sort_keys=False, allow_unicode=True, width=100)
+
+
+PROJECT_YAML_HEADER = """\
+# Defined with the Depictio Project Builder.
+# This project, on the folder it was built from. Edit it, then:
+#   depictio ingest --project-config-path <this file>
+"""
+
+
+def build_project(template: dict[str, Any], data_root: str) -> dict[str, Any]:
+    """The project ``template`` stands for on ``data_root``: a project file.
+
+    The ``template`` block is left out and every ``{DATA_ROOT}`` is the root
+    itself, so the file reads as the project it is, with real locations.
+
+    On an ``s3://`` root, each scan is rewritten to its remote counterpart
+    (``single`` -> ``url``, ``recursive`` -> ``s3_prefix``), as resolving a
+    template on a remote root does (``bindings.apply_remote_data_root``): a
+    project file is ingested as written, and a ``single`` or ``recursive`` scan
+    only reads the local disk.
+    """
+    from depictio.cli.cli.utils.bindings import apply_remote_data_root
+    from depictio.cli.cli.utils.templates import substitute_template_variables
+
+    root = data_root.rstrip("/") or data_root
+    body = {key: value for key, value in template.items() if key != "template"}
+    project = substitute_template_variables(body, {"DATA_ROOT": root})
+    if root.lower().startswith("s3://"):
+        apply_remote_data_root(project, _RootLocation(root))  # type: ignore[arg-type]
+    return project
+
+
+class _RootLocation:
+    """A remote root by its location alone: all the scan rewrite reads, with no listing."""
+
+    is_remote = True
+
+    def __init__(self, location: str) -> None:
+        self.location = location
+
+
+def project_yaml(project: dict[str, Any]) -> str:
+    return PROJECT_YAML_HEADER + yaml.safe_dump(
+        project, sort_keys=False, allow_unicode=True, width=100
+    )

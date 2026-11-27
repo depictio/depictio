@@ -105,7 +105,10 @@ export const BuilderSteps: React.FC<BuilderStepsProps> = ({
     [step, blocking.length, state, remote, capabilities],
   );
   const baseEdits = useMemo(() => toBaseEdits(state), [state]);
-  const template = useBuilderTemplate(draftForTemplate, remote, baseEdits);
+  // On a server, the review shows the project file, its locations on this
+  // root; the standalone builder writes a template, so it asks for none.
+  const projectRoot = mode === 'server' ? (rootSpec?.data_root ?? null) : null;
+  const template = useBuilderTemplate(draftForTemplate, remote, baseEdits, projectRoot);
   const templateResult = template.status === 'ready' ? template.result : null;
   let templateBlocker: string | null = null;
   if (blocking.length) {

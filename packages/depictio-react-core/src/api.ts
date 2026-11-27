@@ -6760,6 +6760,11 @@ export interface BuilderTemplateResult {
   warnings: string[];
   /** Collections the edits take out, with why (a dependant of one removed). */
   removed?: Record<string, string>;
+  /** The same project as a project file, for `depictio ingest
+   *  --project-config-path`: no `template` block, every location on the data
+   *  root. Only when the root was sent, and null for an edit of a shipped
+   *  template (that stays a template). */
+  project_yaml?: string | null;
 }
 
 /** How a collection of a shipped template is read: one file, a folder scan,
@@ -7086,16 +7091,19 @@ export function builderMatch(
 }
 
 /** Turn the draft into a template. `remote` is true for an `s3://` root. A
- *  draft breaking a rule is a 422 with code `inline_template_invalid`. */
+ *  draft breaking a rule is a 422 with code `inline_template_invalid`.
+ *  `dataRoot`: the root the draft reads; with it, the answer also holds the
+ *  project file (`project_yaml`). */
 export function builderTemplate(
   draft: BuilderProjectDraft,
   remote: boolean,
   options: BuilderRequestOptions = {},
   base: BuilderTemplateBaseEdits | null = null,
+  dataRoot: string | null = null,
 ): Promise<BuilderTemplateResult> {
   return postBuilder(
     'template',
-    { draft, remote, ...(base ? { base } : {}) },
+    { draft, remote, ...(base ? { base } : {}), ...(dataRoot ? { data_root: dataRoot } : {}) },
     'Failed to build the template',
     options,
   );

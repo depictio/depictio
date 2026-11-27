@@ -820,6 +820,9 @@ describe('builder calls', () => {
 
     await builderTemplate({ name: 'P', workflows: [] }, true);
     expect(body(2)).toEqual({ draft: { name: 'P', workflows: [] }, remote: true });
+
+    await builderTemplate({ name: 'P', workflows: [] }, true, {}, null, 's3://b/p');
+    expect(body(3)).toEqual({ draft: { name: 'P', workflows: [] }, remote: true, data_root: 's3://b/p' });
   });
 
   it('sends an inline template to from_run instead of a template id', async () => {
