@@ -152,7 +152,10 @@ def build(
         extra: dict[str, Any] = (
             {"category_colors": category_colors or {}} if kind in _WANTS_CATEGORY_COLORS else {}
         )
-        spec = builder(rows=rows, config=config, controls=controls or {}, theme=theme, **extra)
+        # A stored control left unset is null: absent to every builder, which
+        # read their defaults with `controls.get(key, default)`.
+        set_controls = {k: v for k, v in (controls or {}).items() if v is not None}
+        spec = builder(rows=rows, config=config, controls=set_controls, theme=theme, **extra)
     except HTTPException:
         raise
     except Exception as exc:

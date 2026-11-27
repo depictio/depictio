@@ -73,7 +73,7 @@ def build(
     sample_col = config.get("sample_id_col")
     color_col = controls.get("color_by") or _default_color_column(config)
 
-    point_size = float(controls.get("point_size", config.get("point_size", 6)))
+    point_size = float(controls.get("point_size") or config.get("point_size") or 6)
 
     xs = [_as_float(v) for v in (rows.get(dim1_key) or [])]
     ys = [_as_float(v) for v in (rows.get(dim2_key) or [])]

@@ -623,6 +623,20 @@ def test_embedding_prefers_cluster_col_over_color_col() -> None:
     assert spec["layout"]["showlegend"] is True
 
 
+@pytest.mark.parametrize(
+    "config, controls",
+    [
+        ({**EMBEDDING_CONFIG, "point_size": None}, None),
+        (EMBEDDING_CONFIG, {"point_size": None, "color_by": None}),
+    ],
+)
+def test_an_unset_point_size_falls_back_to_the_default(config, controls) -> None:
+    """A stored `point_size: null` (an unset control or config key) used to
+    fail the whole figure on `float(None)`."""
+    spec = build("embedding", config=config, rows=EMBEDDING_ROWS, theme="light", controls=controls)
+    assert {t["marker"]["size"] for t in spec["data"]} == {6.0}
+
+
 def test_embedding_splits_categories_into_separate_traces() -> None:
     spec = build("embedding", config=EMBEDDING_CONFIG, rows=EMBEDDING_ROWS, theme="light")
     by_name = {t["name"]: t for t in spec["data"]}
