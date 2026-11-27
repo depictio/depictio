@@ -1050,7 +1050,8 @@ test.describe("Project Builder", () => {
     // Review: the template the draft makes.
     await byTestId(page, "builder-next").click();
     await expectTemplateShown(page);
-    expect(calls.template.at(-1)).toEqual({ draft: EXPECTED_DRAFT, remote: false });
+    // The root rides along so the answer also holds the project file.
+    expect(calls.template.at(-1)).toEqual({ draft: EXPECTED_DRAFT, remote: false, data_root: DATA_ROOT });
 
     // The dry run carries the inline template, never a template id.
     await expect(byTestId(page, "builder-plan")).toBeEnabled();
@@ -1363,6 +1364,7 @@ test.describe("Project Builder, capabilities", () => {
         ],
       },
       remote: false,
+      data_root: DATA_ROOT,
     });
   });
 
@@ -1405,7 +1407,11 @@ test.describe("Project Builder, capabilities", () => {
     await expect
       .poll(() => (calls.template.at(-1)?.draft as Json | undefined)?.links)
       .toEqual([link]);
-    expect(calls.template.at(-1)).toEqual({ draft: { ...EXPECTED_DRAFT, links: [link] }, remote: false });
+    expect(calls.template.at(-1)).toEqual({
+      draft: { ...EXPECTED_DRAFT, links: [link] },
+      remote: false,
+      data_root: DATA_ROOT,
+    });
 
     // Removed again: the draft goes back to no links.
     await byTestId(page, "builder-link-remove").click();
