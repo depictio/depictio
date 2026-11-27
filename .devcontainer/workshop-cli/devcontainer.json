@@ -9,6 +9,8 @@
   "name": "Depictio workshop: command line",
   "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
   "hostRequirements": { "cpus": 2 },
+  // SSH, so that a helper can open the same terminal with `gh codespace ssh`.
+  "features": { "ghcr.io/devcontainers/features/sshd:1": {} },
   // Runs once, when the codespace is created.
   "onCreateCommand": "bash .devcontainer/workshop-cli/setup.sh",
   "customizations": {
