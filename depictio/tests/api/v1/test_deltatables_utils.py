@@ -835,6 +835,28 @@ class TestCachingFixes:
         actual_values = sorted(filtered_df["value"].to_list())
         assert actual_values == expected_values
 
+    def test_a_filter_on_another_table_is_skipped_quietly(self, monkeypatch):
+        """A tab's filter reaches every figure of the tab; on a table without
+        its column it is skipped by design. That is no warning: a select with a
+        default value would log one per figure on every render."""
+        from depictio.api.v1 import deltatables_utils
+
+        calls: list[str] = []
+
+        class _Recorder:
+            def __getattr__(self, level):
+                return lambda msg, *a, **k: calls.append(level)
+
+        monkeypatch.setattr(deltatables_utils, "logger", _Recorder())
+        metadata = [
+            {"interactive_component_type": "Select", "column_name": "section", "value": ["x"]},
+            {"interactive_component_type": "Select", "column_name": "category", "value": ["A"]},
+        ]
+        filtered = deltatables_utils.apply_runtime_filters(self.test_df, metadata)
+        assert filtered.height == 5
+        assert "warning" not in calls and "error" not in calls
+        assert calls.count("debug") == 1
+
     def test_row_limit_applied_after_filters(self):
         """Test that row limits are applied AFTER filters, not before."""
         from depictio.api.v1.deltatables_utils import apply_runtime_filters

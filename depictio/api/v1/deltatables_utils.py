@@ -2366,16 +2366,15 @@ def apply_runtime_filters(df: pl.DataFrame, metadata: list[dict] | None) -> pl.D
             valid_metadata.append(component)
 
     if skipped_filters:
-        logger.warning(
-            f"⚠️ FILTER MISMATCH: Skipping {len(skipped_filters)} filter(s) - columns not present in DataFrame"
+        # Expected, not a fault: a tab's filters reach every figure of the tab,
+        # and one on a column this table lacks targets another table. A select
+        # with a default value would otherwise log on every render of every
+        # figure beside it.
+        logger.debug(
+            "filters skipped, their columns are not in this table: "
+            + ", ".join(f"{s['column']}={s['value']}" for s in skipped_filters)
+            + f" (table columns: {sorted(df_columns)})"
         )
-        for skip in skipped_filters:
-            logger.warning(
-                f"  ❌ Column '{skip['column']}' (type={skip['type']}, value={skip['value']}) not in DataFrame"
-            )
-        logger.warning(f"  📋 Available columns in DataFrame: {sorted(df_columns)}")
-        if valid_metadata:
-            logger.info(f"  ✅ Continuing with {len(valid_metadata)} valid filter(s)")
 
     # The frame is materialised, so its schema is free — and passing it keeps
     # this path's categorical semantics identical to the lazy scan path, which
